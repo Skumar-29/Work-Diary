@@ -1,0 +1,94 @@
+:root{
+  --green:#69bd42;
+  --teal:#55bda2;
+  --teal-dark:#2c6d5e;
+  --blue:#3f72c7;
+  --stationary:#265ea6;
+  --red:#fb0808;
+  --grid:#898989;
+  --soft:#f5f5f5;
+  --text:#111;
+  --tab:#101010;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#000;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.app{max-width:430px;margin:0 auto;background:#fff;min-height:100vh;padding-bottom:92px;position:relative;overflow:hidden}
+.topbar{background:var(--teal);color:white;position:sticky;top:0;z-index:5;padding-top:env(safe-area-inset-top);box-shadow:0 1px 0 rgba(0,0,0,.2)}
+.iosline{height:32px;padding:8px 26px 0;font-weight:700;font-size:18px;letter-spacing:.5px}
+.iosline .right{float:right;font-size:15px}
+.titleRow{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px}
+h1{font-size:23px;margin:0;font-weight:700}
+.dateNav{display:flex;background:var(--teal-dark);border-radius:24px;overflow:hidden;align-items:center}
+.dateNav button{background:transparent;color:white;border:0;font-size:42px;line-height:1;padding:0 18px;height:42px}
+.dateNav button:nth-child(2){font-size:22px;border-left:1px solid rgba(255,255,255,.18);border-right:1px solid rgba(255,255,255,.18)}
+.dateRow{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:8px 0 12px;font-size:28px}
+.dateText{font:inherit;color:white;background:transparent;border:0;text-align:left;padding:0 0 0 0}
+#datePicker{position:absolute;left:-9999px;opacity:0}
+.dateRow span{font-size:28px}
+.dateRow strong{font-size:28px;padding-right:50px}
+main{min-height:calc(100vh - 160px)}
+.screen{display:none}
+.screen.active{display:block}
+.alerts{padding:8px 0 0;background:#fff}
+.alert{margin:8px 10px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:700}
+.alert.ok{background:#e9f9ed;color:#166424}
+.alert.warn{background:#fff3cd;color:#6c4e00}
+.alert.bad{background:#ffe4e4;color:#8a0000}
+.legend{display:flex;gap:9px;flex-wrap:wrap;padding:8px 10px;font-size:12px;align-items:center}
+.sw{display:inline-block;width:14px;height:14px;border:1px solid #777;vertical-align:-2px;margin-right:3px}
+.sw.work{background:var(--green)} .sw.rest{background:var(--blue)} .sw.stationary{background:var(--stationary)} .sw.bad{background:var(--red)}
+.diaryGrid{width:100%;background:#fff;overflow:hidden}
+.block{display:grid;grid-template-columns:44px repeat(24,1fr);border-top:1px solid var(--grid)}
+.hourLabel{height:18px;line-height:18px;font-size:21px;background:#fff;border-right:2px solid var(--grid);border-bottom:1px solid var(--grid);padding-left:1px;white-space:nowrap}
+.hourLabel.blank{grid-column:1/2;border-right:1px solid var(--grid)}
+.rowLabel{grid-column:1/2;height:74px;display:flex;align-items:center;font-size:20px;background:#fff;border-bottom:1px solid var(--grid);border-right:1px solid var(--grid)}
+.slot{height:74px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);background:#fff}
+.slot.rest{background:var(--blue)}
+.slot.stationary{background:var(--stationary)}
+.slot.work{background:var(--green)}
+.slot.bad{background:var(--red)}
+.slot.future{background:#d9d9d9}
+.slot.empty{background:#fff}
+.slot.thick{border-right:3px solid var(--grid)}
+.slot.selected{outline:3px solid #111;outline-offset:-3px}
+.totals{display:grid;grid-template-columns:1fr 1fr;background:var(--teal);color:white;font-size:21px;padding:5px 0}
+.totals>div:first-child{padding-left:0}
+.totals>div{white-space:nowrap}
+.card{margin:12px 10px;background:#fff;border-radius:16px;padding:14px;box-shadow:0 1px 12px rgba(0,0,0,.15);border:1px solid #eee}
+.card h2{font-size:20px;margin:0 0 12px}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+label{display:flex;flex-direction:column;font-size:13px;font-weight:700;gap:5px;margin:8px 0}
+input,select{font-size:16px;padding:10px;border-radius:10px;border:1px solid #bbb;background:#fff;color:#111;width:100%}
+.checkLabel{flex-direction:row;align-items:center;font-weight:500;gap:8px}
+.checkLabel input{width:auto}
+.actions{display:flex;gap:9px;margin-top:12px}
+.actions.vertical{flex-direction:column}
+button{font-family:inherit}
+.primary,.secondary,.danger{border:0;border-radius:12px;padding:12px 13px;font-size:16px;font-weight:800}
+.primary{background:var(--teal-dark);color:white}
+.secondary{background:#eee;color:#111}
+.danger{background:#d53636;color:white}
+.hint{font-size:13px;color:#555;line-height:1.35}
+.ruleCards{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.rule{border-radius:12px;padding:10px;border:1px solid #ddd;background:#f8f8f8}
+.rule h3{margin:0 0 6px;font-size:14px}
+.rule .bar{height:9px;background:#ddd;border-radius:99px;overflow:hidden}
+.rule .fill{height:100%;background:var(--teal-dark);width:0%}
+.rule.bad{background:#ffe4e4;border-color:#f3b4b4}
+.rule.bad .fill{background:var(--red)}
+.rule p{margin:6px 0 0;font-size:12px}
+.nextBreak{margin-top:10px;padding:10px;border-radius:12px;background:#eef7ff;font-weight:700;font-size:14px}
+.dashboardCard{text-align:center}
+.bigStatus{font-size:28px;font-weight:900;margin:10px 0}
+#todayAdvice p{margin:8px 0;padding:8px 10px;background:#f5f5f5;border-radius:10px}
+.tabbar{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);max-width:390px;width:90%;height:74px;border-radius:40px;background:#0d0d0d;display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:6px;z-index:10;border:1px solid #333;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.tabbar button{background:transparent;color:#eee;border:0;border-radius:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;font-weight:700}
+.tabbar button span{font-size:12px;margin-top:4px}
+.tabbar button.active{background:#333;color:#25a5ff}
+ol{padding-left:20px}
+@media (max-width:360px){
+  .dateRow{font-size:23px}.dateRow span,.dateRow strong{font-size:23px}.dateRow strong{padding-right:20px}
+  .rowLabel{font-size:18px;width:40px}.block{grid-template-columns:40px repeat(24,1fr)}
+  .slot,.rowLabel{height:66px}.hourLabel{font-size:18px}
+  .totals{font-size:17px}
+}

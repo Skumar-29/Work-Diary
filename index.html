@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#55bda2">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Truck Work Diary</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="iosline">
+      <span id="fakeTime">1:40</span>
+      <span class="right">▥ ))) 🔋</span>
+    </div>
+    <div class="titleRow">
+      <h1 id="screenTitle">Work Diary</h1>
+      <div class="dateNav">
+        <button id="prevDay" aria-label="Previous day">‹</button>
+        <button id="todayBtn" aria-label="Today">📅</button>
+        <button id="nextDay" aria-label="Next day">›</button>
+      </div>
+    </div>
+    <div class="dateRow">
+      <button id="dateText" class="dateText">Wed, 17 Jun 2026</button>
+      <input id="datePicker" type="date">
+      <span>Scheme:</span>
+      <strong id="schemeName">BFM</strong>
+    </div>
+  </header>
+
+  <main>
+    <section id="diaryScreen" class="screen active">
+      <div id="alerts" class="alerts"></div>
+
+      <div class="legend">
+        <span><i class="sw work"></i> Work / Drive</span>
+        <span><i class="sw rest"></i> Rest</span>
+        <span><i class="sw stationary"></i> Stationary Rest</span>
+        <span><i class="sw bad"></i> Possible breach</span>
+      </div>
+
+      <div id="diaryGrid" class="diaryGrid"></div>
+
+      <div class="totals">
+        <div>Total Work: <strong id="totalWork">0 Hours</strong></div>
+        <div>Total Rest: <strong id="totalRest">24 Hours</strong></div>
+      </div>
+
+      <section class="card">
+        <h2>Add paper diary line</h2>
+        <div class="formGrid">
+          <label>Start date <input id="startDate" type="date"></label>
+          <label>Start time <input id="startTime" type="time" step="900" value="18:00"></label>
+          <label>End date <input id="endDate" type="date"></label>
+          <label>End time <input id="endTime" type="time" step="900" value="00:00"></label>
+          <label>Activity
+            <select id="activity">
+              <option value="work">Work / Driving</option>
+              <option value="rest">Other Rest</option>
+              <option value="stationary">Stationary Rest</option>
+            </select>
+          </label>
+          <label>Note / location <input id="note" placeholder="e.g. Dubbo, page 45"></label>
+        </div>
+        <div class="actions">
+          <button id="addEntry" class="primary">Add to diary</button>
+          <button id="quickBFM" class="secondary">Load BFM 6pm sample</button>
+        </div>
+        <p class="hint">Tip: use 24-hour time. Midnight is <strong>00:00</strong> on the next date.</p>
+      </section>
+
+      <section class="card">
+        <h2>BFM checker</h2>
+        <div id="ruleCards" class="ruleCards"></div>
+        <div class="nextBreak" id="nextBreak"></div>
+      </section>
+    </section>
+
+    <section id="drivingScreen" class="screen">
+      <section class="card dashboardCard">
+        <h2>Driving / Live timer</h2>
+        <p class="bigStatus" id="liveStatus">No active timer</p>
+        <p id="liveSince" class="hint"></p>
+        <div class="actions vertical">
+          <button id="startWorkBtn" class="primary">Start Work / Driving now</button>
+          <button id="startRestBtn" class="secondary">Start Rest now</button>
+          <button id="stopTimerBtn" class="danger">Stop active timer</button>
+        </div>
+        <p class="hint">This saves to your phone browser only. Keep writing your official paper diary.</p>
+      </section>
+      <section class="card">
+        <h2>Today advice</h2>
+        <div id="todayAdvice"></div>
+      </section>
+    </section>
+
+    <section id="settingsScreen" class="screen">
+      <section class="card">
+        <h2>Settings</h2>
+        <label>Scheme
+          <select id="schemeSelect">
+            <option value="BFM">BFM Solo</option>
+            <option value="Standard">Standard Hours Solo</option>
+          </select>
+        </label>
+        <label class="checkLabel">
+          <input id="restAsStationary" type="checkbox" checked>
+          Count all rest as stationary rest for major-rest warning
+        </label>
+        <div class="actions vertical">
+          <button id="exportCsv" class="secondary">Export CSV</button>
+          <button id="clearDay" class="secondary">Clear selected day</button>
+          <button id="clearAll" class="danger">Clear all saved data</button>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Important</h2>
+        <p>This is a personal helper for checking your paper diary. It is not an NHVR-approved Electronic Work Diary.</p>
+      </section>
+    </section>
+
+    <section id="helpScreen" class="screen">
+      <section class="card">
+        <h2>How to use</h2>
+        <ol>
+          <li>Select the correct date.</li>
+          <li>Add each work/rest line from your paper diary.</li>
+          <li>Green means work, blue means rest, dark blue means stationary rest.</li>
+          <li>Red means the app found a possible BFM/Standard rule problem.</li>
+          <li>Use the rule cards and next-break advice before you continue driving.</li>
+        </ol>
+      </section>
+      <section class="card">
+        <h2>Rules checked in this prototype</h2>
+        <p><strong>BFM Solo:</strong> 6h in 6¼h, 8½h in 9h, 11h in 12h, 14h in 24h, and 7h continuous stationary rest warning.</p>
+        <p><strong>Standard Solo:</strong> 5¼h in 5½h, 7½h in 8h, 10h in 11h, 12h in 24h, and 7h continuous stationary rest warning.</p>
+        <p class="hint">Long/night and 7/14-day rules need complete diary history. This prototype highlights daily and rolling-window problems but does not replace legal advice or an approved EWD.</p>
+      </section>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-tab="drivingScreen">↗<span>Driving</span></button>
+    <button data-tab="diaryScreen" class="active">👥<span>Work Diary</span></button>
+    <button data-tab="settingsScreen">▣<span>Settings</span></button>
+    <button data-tab="helpScreen">ⓘ<span>Help</span></button>
+  </nav>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
