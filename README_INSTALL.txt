@@ -19,3 +19,10 @@ What is included:
 Important:
 This is a personal checking tool, not an NHVR-approved Electronic Work Diary.
 Keep using your official paper diary or an NHVR-approved EWD.
+
+
+Swipe / slide update:
+- Choose Swipe mode: Work, Rest, Stationary, or Clear.
+- Put your finger on a 15-minute block and slide across the blocks.
+- The app fills every 15-minute block you slide over.
+- On iPhone, swipe inside the diary grid paints blocks. Scroll outside the grid to move the page.

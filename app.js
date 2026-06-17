@@ -31,7 +31,8 @@ let state = {
   restAsStationary: true,
   slots: {},     // yyyy-mm-dd -> array of "work"|"rest"|"stationary"|undefined
   entries: [],
-  activeTimer: null
+  activeTimer: null,
+  paintMode: "work"
 };
 
 const $ = id => document.getElementById(id);
@@ -163,7 +164,8 @@ function renderGrid(){
       else cell.classList.add("empty");
       if((i+1)%4===0) cell.classList.add("thick");
       cell.title = `${fmtHM(slotIndex*15)} Work`;
-      cell.onclick = () => quickSetSlot(slotIndex, "work");
+      cell.dataset.slot = slotIndex;
+      cell.dataset.row = "work";
       block.appendChild(cell);
     }
     const restLabel = document.createElement("div");
@@ -180,18 +182,110 @@ function renderGrid(){
       else cell.classList.add("rest");
       if((i+1)%4===0) cell.classList.add("thick");
       cell.title = `${fmtHM(slotIndex*15)} Rest`;
-      cell.onclick = () => quickSetSlot(slotIndex, cell.classList.contains("stationary") ? "rest" : "stationary");
+      cell.dataset.slot = slotIndex;
+      cell.dataset.row = "rest";
       block.appendChild(cell);
     }
     grid.appendChild(block);
   }
 }
 
+function currentPaintValue(){
+  if(state.paintMode === "clear") return undefined;
+  return state.paintMode || "work";
+}
 function quickSetSlot(idx, val){
   setSlot(state.selectedDate, idx, val);
-  addEntryRecord(state.selectedDate, idx*SLOT, state.selectedDate, (idx+1)*SLOT, val, "Tapped grid");
+  addEntryRecord(state.selectedDate, idx*SLOT, state.selectedDate, (idx+1)*SLOT, val || "clear", "Tapped grid");
   save();
   renderAll();
+}
+function paintSlotByElement(el){
+  const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
+  if(!cell) return false;
+  const idx = Number(cell.dataset.slot);
+  if(Number.isNaN(idx)) return false;
+  const val = currentPaintValue();
+  const arr = getDaySlots(state.selectedDate);
+  if(arr[idx] !== val){
+    arr[idx] = val;
+    cell.classList.add("dragPreview");
+    return true;
+  }
+  return false;
+}
+function setupSwipePainting(){
+  const grid = $("diaryGrid");
+  let drawing = false;
+  let changed = false;
+  let startSlot = null;
+  let lastSlot = null;
+
+  function start(e){
+    const target = e.target.closest ? e.target.closest(".slot[data-slot]") : null;
+    if(!target) return;
+    drawing = true;
+    changed = false;
+    startSlot = Number(target.dataset.slot);
+    lastSlot = startSlot;
+    grid.classList.add("painting");
+    paintSlotByElement(target);
+    changed = true;
+    e.preventDefault();
+  }
+
+  function move(e){
+    if(!drawing) return;
+    const point = e.touches ? e.touches[0] : e;
+    const el = document.elementFromPoint(point.clientX, point.clientY);
+    const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
+    if(!cell) return;
+    const idx = Number(cell.dataset.slot);
+    if(Number.isNaN(idx) || idx === lastSlot) return;
+
+    const from = Math.min(lastSlot, idx);
+    const to = Math.max(lastSlot, idx);
+    for(let i = from; i <= to; i++){
+      const slotEl = grid.querySelector(`.slot[data-slot="${i}"]`);
+      paintSlotByElement(slotEl);
+    }
+    lastSlot = idx;
+    changed = true;
+    e.preventDefault();
+  }
+
+  function end(){
+    if(!drawing) return;
+    drawing = false;
+    grid.classList.remove("painting");
+    document.querySelectorAll(".slot.dragPreview").forEach(x => x.classList.remove("dragPreview"));
+    if(changed){
+      const activity = currentPaintValue() || "clear";
+      if(startSlot !== null && lastSlot !== null){
+        const a = Math.min(startSlot, lastSlot);
+        const b = Math.max(startSlot, lastSlot);
+        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, activity, "Swipe fill");
+      }
+      save();
+      renderAll();
+    }
+    startSlot = null;
+    lastSlot = null;
+  }
+
+  grid.addEventListener("touchstart", start, {passive:false});
+  grid.addEventListener("touchmove", move, {passive:false});
+  grid.addEventListener("touchend", end);
+  grid.addEventListener("touchcancel", end);
+
+  grid.addEventListener("mousedown", start);
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", end);
+}
+function renderPaintButtons(){
+  document.querySelectorAll(".paintBtn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.paint === (state.paintMode || "work"));
+  });
 }
 
 function addEntryRecord(startKey, startMins, endKey, endMins, activity, note){
@@ -345,7 +439,7 @@ function renderTimer(){
   since.textContent = `Started ${start.toLocaleString("en-AU")} — ${Math.floor(mins/60)}h ${mins%60}m so far`;
 }
 function renderAll(){
-  renderDate(); renderAlerts(); renderGrid(); renderTotals(); renderRuleCards(); renderNextBreak(); renderTodayAdvice(); renderTimer();
+  renderDate(); renderAlerts(); renderGrid(); renderTotals(); renderRuleCards(); renderNextBreak(); renderTodayAdvice(); renderTimer(); renderPaintButtons();
 }
 
 function loadBFMSample(){
@@ -442,6 +536,14 @@ function setup(){
       $("screenTitle").textContent = btn.querySelector("span").textContent;
     };
   });
+  document.querySelectorAll(".paintBtn").forEach(btn=>{
+    btn.onclick=()=>{
+      state.paintMode = btn.dataset.paint;
+      save();
+      renderPaintButtons();
+    };
+  });
+  setupSwipePainting();
   setInterval(renderTimer, 30000);
   setInterval(()=>{ $("fakeTime").textContent=new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}); }, 30000);
   renderAll();

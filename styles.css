@@ -92,3 +92,15 @@ ol{padding-left:20px}
   .slot,.rowLabel{height:66px}.hourLabel{font-size:18px}
   .totals{font-size:17px}
 }
+
+.paintBar{display:flex;gap:6px;align-items:center;padding:4px 8px 8px;background:#fff;position:sticky;top:126px;z-index:4;border-bottom:1px solid #ddd;overflow-x:auto}
+.paintBar span{font-size:13px;font-weight:800;white-space:nowrap;color:#333}
+.paintBtn{border:1px solid #bbb;background:#f4f4f4;color:#111;border-radius:999px;padding:7px 10px;font-size:13px;font-weight:900;white-space:nowrap}
+.paintBtn.active{background:var(--teal-dark);color:white;border-color:var(--teal-dark)}
+#paintWork.active{background:var(--green);border-color:var(--green);color:white}
+#paintRest.active{background:var(--blue);border-color:var(--blue);color:white}
+#paintStationary.active{background:var(--stationary);border-color:var(--stationary);color:white}
+#paintClear.active{background:#555;border-color:#555;color:white}
+.diaryGrid.painting,.diaryGrid.painting *{touch-action:none;user-select:none;-webkit-user-select:none}
+.slot{touch-action:none;-webkit-tap-highlight-color:transparent}
+.slot.dragPreview{outline:3px solid #111;outline-offset:-3px}

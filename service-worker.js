@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v1";
+const CACHE = "truck-work-diary-v2-swipe";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
