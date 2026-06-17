@@ -22,3 +22,11 @@ Changes in this version:
 
 Important:
 This is a personal checking helper only. It is not an NHVR-approved Electronic Work Diary and does not replace your official paper diary/EWD.
+
+
+Driving + PDF close update:
+- Added Driving screen back.
+- Driving screen has Start Work / Driving now, Start Rest now, and Stop active timer.
+- Stop active timer writes the rounded 15-minute blocks into the selected diary.
+- PDF report page now has Close / Back to app button.
+- Other two-row diary and graph features are kept.

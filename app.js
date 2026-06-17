@@ -480,6 +480,27 @@ function renderNextBreak(){
     : `<strong>Take 15 minutes rest now before more work.</strong>`;
 }
 
+
+function renderTodayAdvice(){
+  const el = $("todayAdvice");
+  if(!el) return;
+  const warns = checkDayWarnings();
+  el.innerHTML = warns.map(w => `<p>${w.text}</p>`).join("");
+}
+function renderTimer(){
+  const s=$("liveStatus"), since=$("liveSince");
+  if(!s || !since) return;
+  if(!state.activeTimer){
+    s.textContent="No active timer";
+    since.textContent="";
+    return;
+  }
+  const start=new Date(state.activeTimer.startISO);
+  const mins=Math.max(0, Math.floor((Date.now()-start.getTime())/60000));
+  s.textContent = state.activeTimer.activity==="work" ? "Working / Driving" : "Resting";
+  since.textContent = `Started ${start.toLocaleString("en-AU")} — ${Math.floor(mins/60)}h ${mins%60}m so far`;
+}
+
 function renderGraphPage(){
   ensureProfile();
   $("graphDate").textContent = fmtDateLong(state.selectedDate);
@@ -569,6 +590,8 @@ function renderAll(){
   renderTotals();
   renderRuleCards();
   renderNextBreak();
+  renderTodayAdvice();
+  renderTimer();
   renderGraphPage();
   renderDriverSettings();
 }
@@ -640,9 +663,9 @@ function exportPdf(){
     .warn{background:#fff3cd;border:1px solid #e3bd4f;border-radius:10px;padding:10px;margin-top:12px}
     .small{font-size:12px;color:#555;margin-top:20px}
     .graph{border:1px solid #ccc;border-radius:10px;padding:10px;margin-top:14px}
-    @media print{button{display:none} body{margin:12mm}}
+    .pdfBtns{display:flex;gap:8px;margin-bottom:12px}.pdfBtns button{padding:10px 12px;border:0;border-radius:10px;background:#2c6d5e;color:white;font-weight:800}.pdfBtns button+button{background:#eee;color:#111}@media print{button,.pdfBtns{display:none} body{margin:12mm}}
   </style></head><body>
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <div class="pdfBtns"><button onclick="window.print()">Print / Save as PDF</button><button onclick="if(window.opener){window.close()}else{history.back()}">Close / Back to app</button></div>
     <h1>Truck Work Diary Report</h1>
     <div class="meta">
       <div class="box"><strong>Date:</strong><br>${escapeHtml(fmtDateLong(state.selectedDate))}</div>
@@ -680,6 +703,40 @@ function saveDriverSettings(){
   alert("Driver details saved.");
 }
 
+
+function startTimer(activity){
+  if(state.activeTimer && !confirm("Stop current timer and start a new one?")) return;
+  state.activeTimer={activity, startISO:new Date().toISOString()};
+  save();
+  renderAll();
+}
+function stopTimer(){
+  if(!state.activeTimer){
+    alert("No active timer.");
+    return;
+  }
+  const start=new Date(state.activeTimer.startISO);
+  const end=new Date();
+  const roundedStart = new Date(Math.floor(start.getTime()/(SLOT*60000))*(SLOT*60000));
+  const roundedEnd = new Date(Math.ceil(end.getTime()/(SLOT*60000))*(SLOT*60000));
+  for(let t=roundedStart.getTime(); t<roundedEnd.getTime(); t+=SLOT*60000){
+    const {key,slot}=absToKeySlot(t);
+    setSlot(key,slot,state.activeTimer.activity);
+  }
+  addEntryRecord(
+    toKey(roundedStart),
+    roundedStart.getHours()*60+roundedStart.getMinutes(),
+    toKey(roundedEnd),
+    roundedEnd.getHours()*60+roundedEnd.getMinutes(),
+    state.activeTimer.activity,
+    "Live timer"
+  );
+  state.selectedDate=toKey(roundedStart);
+  state.activeTimer=null;
+  save();
+  renderAll();
+}
+
 function setup(){
   load();
   $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);save();renderAll();}
@@ -696,6 +753,9 @@ function setup(){
   $("saveDriverSettings").onclick=saveDriverSettings;
   $("clearDay").onclick=clearSelectedDay;
   $("clearAll").onclick=clearAll;
+  $("startWorkBtn").onclick=()=>startTimer("work");
+  $("startRestBtn").onclick=()=>startTimer("rest");
+  $("stopTimerBtn").onclick=stopTimer;
 
   document.querySelectorAll(".tabbar button").forEach(btn=>{
     btn.onclick=()=>{
@@ -707,10 +767,12 @@ function setup(){
       if(btn.dataset.tab === "graphScreen"){
         renderGraphPage();
       }
+      renderTimer();
     };
   });
 
   setupSwipePainting();
+  setInterval(renderTimer, 30000);
   setInterval(()=>{ $("fakeTime").textContent=new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}); }, 30000);
   renderAll();
 }

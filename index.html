@@ -35,6 +35,25 @@
   </header>
 
   <main>
+
+    <section id="drivingScreen" class="screen">
+      <section class="card dashboardCard">
+        <h2>Driving / Live timer</h2>
+        <p class="bigStatus" id="liveStatus">No active timer</p>
+        <p id="liveSince" class="hint"></p>
+        <div class="actions vertical">
+          <button id="startWorkBtn" class="primary">Start Work / Driving now</button>
+          <button id="startRestBtn" class="secondary">Start Rest now</button>
+          <button id="stopTimerBtn" class="danger">Stop active timer</button>
+        </div>
+        <p class="hint">This saves to your phone browser only. Keep writing your official paper diary.</p>
+      </section>
+      <section class="card">
+        <h2>Today advice</h2>
+        <div id="todayAdvice"></div>
+      </section>
+    </section>
+
     <section id="diaryScreen" class="screen active">
       <div id="alerts" class="alerts"></div>
 
@@ -172,6 +191,7 @@
   </main>
 
   <nav class="tabbar">
+    <button data-tab="drivingScreen">↗<span>Driving</span></button>
     <button data-tab="diaryScreen" class="active">👥<span>Work Diary</span></button>
     <button data-tab="graphScreen">📈<span>Graph</span></button>
     <button data-tab="settingsScreen">▣<span>Settings</span></button>
