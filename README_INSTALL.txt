@@ -30,3 +30,17 @@ Driving + PDF close update:
 - Stop active timer writes the rounded 15-minute blocks into the selected diary.
 - PDF report page now has Close / Back to app button.
 - Other two-row diary and graph features are kept.
+
+
+JSON backup update:
+- Added Export Backup JSON.
+- Added Import Backup JSON.
+- Backup restores slots, entries, driver details, licence number, base time, scheme, and settings.
+- Keep JSON backup files private because they can contain diary history and driver details.
+
+
+Backup reminder update:
+- Added Backup reminder setting: Off, Daily, Weekly.
+- Reminder shows when the app opens and JSON backup is due.
+- iPhone/Safari cannot save JSON automatically without user action, so the reminder asks you to export manually.
+- Last JSON backup date is shown in Settings.

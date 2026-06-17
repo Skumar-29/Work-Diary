@@ -157,6 +157,19 @@
         <div class="actions vertical">
           <button id="exportCsv" class="secondary">Export CSV / Excel</button>
           <button id="exportPdf" class="secondary">Export PDF report</button>
+          <button id="exportJsonBackup" class="secondary">Export Backup JSON</button>
+          <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
+          <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">
+
+          <label>Backup reminder
+            <select id="backupReminderFrequency">
+              <option value="off">Off</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          <p id="backupReminderStatus" class="hint">Backup reminder: Off</p>
+
           <button id="clearDay" class="secondary">Clear selected day</button>
           <button id="clearAll" class="danger">Clear all saved data</button>
         </div>

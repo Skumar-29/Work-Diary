@@ -36,6 +36,11 @@ let state = {
     driverName: "",
     licenceNumber: "",
     baseTimeZone: "Local phone time"
+  },
+  backupReminder: {
+    frequency: "off",
+    lastBackupAt: "",
+    lastPromptDate: ""
   }
 };
 
@@ -88,6 +93,7 @@ function ensureProfile(){
 }
 function save(){
   ensureProfile();
+  ensureBackupReminder();
   localStorage.setItem("truckDiaryPWA", JSON.stringify(state));
 }
 function load(){
@@ -96,6 +102,7 @@ function load(){
     try{ state = {...state, ...JSON.parse(raw)}; }catch(e){}
   }
   ensureProfile();
+  ensureBackupReminder();
 }
 function isWork(key, idx){ return getSlot(key, idx) === "work"; }
 function isRestType(type){ return type === "rest"; }
@@ -594,6 +601,7 @@ function renderAll(){
   renderTimer();
   renderGraphPage();
   renderDriverSettings();
+  renderBackupReminderSettings();
 }
 
 function loadBFMSample(){
@@ -620,6 +628,7 @@ function clearAll(){
     localStorage.removeItem("truckDiaryPWA");
     state.slots={}; state.entries=[]; state.activeTimer=null;
     state.profile={driverName:"", licenceNumber:"", baseTimeZone:"Local phone time"};
+    state.backupReminder={frequency:"off", lastBackupAt:"", lastPromptDate:""};
     save(); renderAll();
   }
 }
@@ -693,6 +702,129 @@ function exportPdf(){
   w.document.write(html);
   w.document.close();
 }
+
+
+function ensureBackupReminder(){
+  if(!state.backupReminder) state.backupReminder = {};
+  if(!state.backupReminder.frequency) state.backupReminder.frequency = "off";
+  if(!state.backupReminder.lastBackupAt) state.backupReminder.lastBackupAt = "";
+  if(!state.backupReminder.lastPromptDate) state.backupReminder.lastPromptDate = "";
+}
+function daysSinceBackup(){
+  ensureBackupReminder();
+  if(!state.backupReminder.lastBackupAt) return 9999;
+  const last = new Date(state.backupReminder.lastBackupAt);
+  if(isNaN(last)) return 9999;
+  return Math.floor((Date.now() - last.getTime()) / DAY_MS);
+}
+function backupReminderDue(){
+  ensureBackupReminder();
+  const freq = state.backupReminder.frequency;
+  if(freq === "off") return false;
+  const days = daysSinceBackup();
+  if(freq === "daily") return days >= 1;
+  if(freq === "weekly") return days >= 7;
+  return false;
+}
+function renderBackupReminderSettings(){
+  ensureBackupReminder();
+  const select = $("backupReminderFrequency");
+  const status = $("backupReminderStatus");
+  if(!select || !status) return;
+  select.value = state.backupReminder.frequency || "off";
+  if(state.backupReminder.frequency === "off"){
+    status.textContent = "Backup reminder: Off";
+  } else if(state.backupReminder.lastBackupAt){
+    const last = new Date(state.backupReminder.lastBackupAt).toLocaleString("en-AU");
+    status.textContent = `Backup reminder: ${state.backupReminder.frequency}. Last JSON backup: ${last}`;
+  } else {
+    status.textContent = `Backup reminder: ${state.backupReminder.frequency}. No JSON backup recorded yet.`;
+  }
+}
+function saveBackupReminderSetting(){
+  ensureBackupReminder();
+  state.backupReminder.frequency = $("backupReminderFrequency").value;
+  save();
+  renderBackupReminderSettings();
+}
+function maybeShowBackupReminder(){
+  ensureBackupReminder();
+  if(!backupReminderDue()) return;
+  const today = toKey(new Date());
+  if(state.backupReminder.lastPromptDate === today) return;
+  state.backupReminder.lastPromptDate = today;
+  save();
+  setTimeout(()=>{
+    if(confirm("Backup reminder: your JSON backup is due. Export Backup JSON now?")){
+      exportJsonBackup();
+    }
+  }, 700);
+}
+
+function exportJsonBackup(){
+  ensureProfile();
+  const backup = {
+    app: "Truck Work Diary Checker",
+    backupVersion: 1,
+    exportedAt: new Date().toISOString(),
+    selectedDate: state.selectedDate,
+    scheme: state.scheme,
+    restAsStationary: state.restAsStationary,
+    slots: state.slots || {},
+    entries: state.entries || [],
+    profile: state.profile || {},
+    backupReminder: state.backupReminder || {},
+    note: "Personal backup file for restoring this app data. Keep this file private."
+  };
+  state.backupReminder.lastBackupAt = new Date().toISOString();
+  backup.backupReminder = state.backupReminder;
+  save();
+  renderBackupReminderSettings();
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `truck-work-diary-backup-${state.selectedDate}.json`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function importJsonBackupFromFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const backup = JSON.parse(reader.result);
+      if(!backup || backup.app !== "Truck Work Diary Checker"){
+        alert("This does not look like a valid Truck Work Diary backup file.");
+        return;
+      }
+      if(!confirm("Import this backup? This will replace the app data currently saved on this phone.")){
+        return;
+      }
+      state.selectedDate = backup.selectedDate || toKey(new Date());
+      state.scheme = backup.scheme || "BFM";
+      state.restAsStationary = backup.restAsStationary !== undefined ? !!backup.restAsStationary : true;
+      state.slots = backup.slots || {};
+      state.entries = Array.isArray(backup.entries) ? backup.entries : [];
+      state.activeTimer = null;
+      state.profile = backup.profile || {driverName:"", licenceNumber:"", baseTimeZone:"Local phone time"};
+      state.backupReminder = backup.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
+      ensureProfile();
+      ensureBackupReminder();
+      save();
+      renderAll();
+      alert("Backup imported successfully.");
+    }catch(e){
+      alert("Could not import backup. Please select a valid JSON backup file.");
+    }finally{
+      const input = $("jsonImportFile");
+      if(input) input.value = "";
+    }
+  };
+  reader.readAsText(file);
+}
+
 function saveDriverSettings(){
   ensureProfile();
   state.profile.driverName = $("driverName").value.trim();
@@ -750,6 +882,10 @@ function setup(){
   $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;save();renderAll();}
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
+  $("exportJsonBackup").onclick=exportJsonBackup;
+  $("importJsonBackup").onclick=()=>$("jsonImportFile").click();
+  $("jsonImportFile").onchange=e=>importJsonBackupFromFile(e.target.files[0]);
+  $("backupReminderFrequency").onchange=saveBackupReminderSetting;
   $("saveDriverSettings").onclick=saveDriverSettings;
   $("clearDay").onclick=clearSelectedDay;
   $("clearAll").onclick=clearAll;
@@ -775,6 +911,7 @@ function setup(){
   setInterval(renderTimer, 30000);
   setInterval(()=>{ $("fakeTime").textContent=new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}); }, 30000);
   renderAll();
+  maybeShowBackupReminder();
 }
 
 if("serviceWorker" in navigator){
