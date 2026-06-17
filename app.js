@@ -755,15 +755,17 @@ function maybeShowBackupReminder(){
   state.backupReminder.lastPromptDate = today;
   save();
   setTimeout(()=>{
-    if(confirm("Backup reminder: your JSON backup is due. Export Backup JSON now?")){
-      exportJsonBackup();
+    if(confirm("Backup reminder: your JSON backup is due. Share / Save Backup JSON now?")){
+      shareJsonBackup();
     }
   }, 700);
 }
 
-function exportJsonBackup(){
+
+function buildJsonBackup(){
   ensureProfile();
-  const backup = {
+  ensureBackupReminder();
+  return {
     app: "Truck Work Diary Checker",
     backupVersion: 1,
     exportedAt: new Date().toISOString(),
@@ -776,19 +778,58 @@ function exportJsonBackup(){
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
+}
+function backupFilename(){
+  return `truck-work-diary-backup-${state.selectedDate}.json`;
+}
+function markJsonBackupDone(){
+  ensureBackupReminder();
   state.backupReminder.lastBackupAt = new Date().toISOString();
-  backup.backupReminder = state.backupReminder;
   save();
   renderBackupReminderSettings();
+}
+async function shareJsonBackup(){
+  const backup = buildJsonBackup();
+  backup.backupReminder.lastBackupAt = new Date().toISOString();
+  const json = JSON.stringify(backup, null, 2);
+  const file = new File([json], backupFilename(), {type:"application/json"});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({
+        files:[file],
+        title:"Truck Work Diary Backup",
+        text:"Save this JSON backup somewhere safe."
+      });
+      state.backupReminder.lastBackupAt = backup.backupReminder.lastBackupAt;
+      save();
+      renderBackupReminderSettings();
+    } else {
+      alert("Share / Save is not supported on this browser. The normal download backup will start instead.");
+      exportJsonBackup();
+    }
+  }catch(e){
+    if(e && (e.name === "AbortError" || e.name === "NotAllowedError")){
+      return;
+    }
+    alert("Share / Save failed. The normal download backup will start instead.");
+    exportJsonBackup();
+  }
+}
+
+function exportJsonBackup(){
+  const backup = buildJsonBackup();
+  markJsonBackupDone();
+  backup.backupReminder = state.backupReminder;
   const json = JSON.stringify(backup, null, 2);
   const blob = new Blob([json], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `truck-work-diary-backup-${state.selectedDate}.json`;
+  a.download = backupFilename();
   a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
+
 function importJsonBackupFromFile(file){
   if(!file) return;
   const reader = new FileReader();
@@ -883,6 +924,7 @@ function setup(){
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
   $("exportJsonBackup").onclick=exportJsonBackup;
+  $("shareJsonBackup").onclick=shareJsonBackup;
   $("importJsonBackup").onclick=()=>$("jsonImportFile").click();
   $("jsonImportFile").onchange=e=>importJsonBackupFromFile(e.target.files[0]);
   $("backupReminderFrequency").onchange=saveBackupReminderSetting;

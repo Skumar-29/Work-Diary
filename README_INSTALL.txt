@@ -44,3 +44,10 @@ Backup reminder update:
 - Reminder shows when the app opens and JSON backup is due.
 - iPhone/Safari cannot save JSON automatically without user action, so the reminder asks you to export manually.
 - Last JSON backup date is shown in Settings.
+
+
+Share / Save Backup update:
+- Added Share / Save Backup JSON button.
+- On iPhone this should open the share sheet so you can tap Save to Files and choose the folder.
+- Normal Export Backup JSON remains available as direct download.
+- Backup reminder now uses Share / Save Backup JSON when supported.
