@@ -3,12 +3,9 @@
   --teal:#55bda2;
   --teal-dark:#2c6d5e;
   --blue:#3f72c7;
-  --stationary:#265ea6;
   --red:#fb0808;
   --grid:#898989;
-  --soft:#f5f5f5;
   --text:#111;
-  --tab:#101010;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#000;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
@@ -22,7 +19,7 @@ h1{font-size:23px;margin:0;font-weight:700}
 .dateNav button{background:transparent;color:white;border:0;font-size:42px;line-height:1;padding:0 18px;height:42px}
 .dateNav button:nth-child(2){font-size:22px;border-left:1px solid rgba(255,255,255,.18);border-right:1px solid rgba(255,255,255,.18)}
 .dateRow{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:8px 0 12px;font-size:28px}
-.dateText{font:inherit;color:white;background:transparent;border:0;text-align:left;padding:0 0 0 0}
+.dateText{font:inherit;color:white;background:transparent;border:0;text-align:left;padding:0}
 #datePicker{position:absolute;left:-9999px;opacity:0}
 .dateRow span{font-size:28px}
 .dateRow strong{font-size:28px;padding-right:50px}
@@ -36,23 +33,22 @@ main{min-height:calc(100vh - 160px)}
 .alert.bad{background:#ffe4e4;color:#8a0000}
 .legend{display:flex;gap:9px;flex-wrap:wrap;padding:8px 10px;font-size:12px;align-items:center}
 .sw{display:inline-block;width:14px;height:14px;border:1px solid #777;vertical-align:-2px;margin-right:3px}
-.sw.work{background:var(--green)} .sw.rest{background:var(--blue)} .sw.stationary{background:var(--stationary)} .sw.bad{background:var(--red)}
+.sw.work{background:var(--green)} .sw.rest{background:var(--blue)} .sw.bad{background:var(--red)}
+.gridHint{margin:6px 10px 8px;font-size:13px;line-height:1.35;color:#333;background:#eef7ff;border:1px solid #cfe8ff;padding:8px 10px;border-radius:10px}
 .diaryGrid{width:100%;background:#fff;overflow:hidden}
 .block{display:grid;grid-template-columns:44px repeat(24,1fr);border-top:1px solid var(--grid)}
 .hourLabel{height:18px;line-height:18px;font-size:21px;background:#fff;border-right:2px solid var(--grid);border-bottom:1px solid var(--grid);padding-left:1px;white-space:nowrap}
 .hourLabel.blank{grid-column:1/2;border-right:1px solid var(--grid)}
-.rowLabel{grid-column:1/2;height:74px;display:flex;align-items:center;font-size:20px;background:#fff;border-bottom:1px solid var(--grid);border-right:1px solid var(--grid)}
-.slot{height:74px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);background:#fff}
+.rowLabel{grid-column:1/2;height:72px;display:flex;align-items:center;font-size:18px;background:#fff;border-bottom:1px solid var(--grid);border-right:1px solid var(--grid)}
+.slot{height:72px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);background:#fff;touch-action:auto;-webkit-tap-highlight-color:transparent}
 .slot.rest{background:var(--blue)}
-.slot.stationary{background:var(--stationary)}
 .slot.work{background:var(--green)}
 .slot.bad{background:var(--red)}
-.slot.future{background:#d9d9d9}
 .slot.empty{background:#fff}
 .slot.thick{border-right:3px solid var(--grid)}
-.slot.selected{outline:3px solid #111;outline-offset:-3px}
+.slot.dragPreview{outline:3px solid #111;outline-offset:-3px}
+.diaryGrid.painting,.diaryGrid.painting *{touch-action:none;user-select:none;-webkit-user-select:none}
 .totals{display:grid;grid-template-columns:1fr 1fr;background:var(--teal);color:white;font-size:21px;padding:5px 0}
-.totals>div:first-child{padding-left:0}
 .totals>div{white-space:nowrap}
 .card{margin:12px 10px;background:#fff;border-radius:16px;padding:14px;box-shadow:0 1px 12px rgba(0,0,0,.15);border:1px solid #eee}
 .card h2{font-size:20px;margin:0 0 12px}
@@ -68,6 +64,7 @@ button{font-family:inherit}
 .primary{background:var(--teal-dark);color:white}
 .secondary{background:#eee;color:#111}
 .danger{background:#d53636;color:white}
+.full{width:100%;margin-top:8px}
 .hint{font-size:13px;color:#555;line-height:1.35}
 .ruleCards{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .rule{border-radius:12px;padding:10px;border:1px solid #ddd;background:#f8f8f8}
@@ -78,9 +75,15 @@ button{font-family:inherit}
 .rule.bad .fill{background:var(--red)}
 .rule p{margin:6px 0 0;font-size:12px}
 .nextBreak{margin-top:10px;padding:10px;border-radius:12px;background:#eef7ff;font-weight:700;font-size:14px}
-.dashboardCard{text-align:center}
-.bigStatus{font-size:28px;font-weight:900;margin:10px 0}
-#todayAdvice p{margin:8px 0;padding:8px 10px;background:#f5f5f5;border-radius:10px}
+.graphMeta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+.graphMeta div{padding:10px;border:1px solid #ddd;border-radius:12px;background:#f9fafb}
+.graphMeta strong{display:block;font-size:14px}
+.graphMeta span{display:block;color:#666;font-size:12px;margin-top:4px}
+.graphWrap{overflow:auto;background:#fafafa;border:1px solid #ddd;border-radius:12px;padding:10px}
+#graphSvgHolder{min-width:760px}
+.graphTable{width:100%;border-collapse:collapse;font-size:13px}
+.graphTable th,.graphTable td{border:1px solid #ccc;padding:8px;text-align:left}
+.graphTable th{background:#f1f1f1}
 .tabbar{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);max-width:390px;width:90%;height:74px;border-radius:40px;background:#0d0d0d;display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:6px;z-index:10;border:1px solid #333;box-shadow:0 4px 20px rgba(0,0,0,.4)}
 .tabbar button{background:transparent;color:#eee;border:0;border-radius:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 .tabbar button span{font-size:12px;margin-top:4px}
@@ -88,19 +91,7 @@ button{font-family:inherit}
 ol{padding-left:20px}
 @media (max-width:360px){
   .dateRow{font-size:23px}.dateRow span,.dateRow strong{font-size:23px}.dateRow strong{padding-right:20px}
-  .rowLabel{font-size:18px;width:40px}.block{grid-template-columns:40px repeat(24,1fr)}
-  .slot,.rowLabel{height:66px}.hourLabel{font-size:18px}
+  .rowLabel{font-size:16px;width:40px}.block{grid-template-columns:40px repeat(24,1fr)}
+  .slot,.rowLabel{height:64px}.hourLabel{font-size:18px}
   .totals{font-size:17px}
 }
-
-.paintBar{display:flex;gap:6px;align-items:center;padding:4px 8px 8px;background:#fff;position:sticky;top:126px;z-index:4;border-bottom:1px solid #ddd;overflow-x:auto}
-.paintBar span{font-size:13px;font-weight:800;white-space:nowrap;color:#333}
-.paintBtn{border:1px solid #bbb;background:#f4f4f4;color:#111;border-radius:999px;padding:7px 10px;font-size:13px;font-weight:900;white-space:nowrap}
-.paintBtn.active{background:var(--teal-dark);color:white;border-color:var(--teal-dark)}
-#paintWork.active{background:var(--green);border-color:var(--green);color:white}
-#paintRest.active{background:var(--blue);border-color:var(--blue);color:white}
-#paintStationary.active{background:var(--stationary);border-color:var(--stationary);color:white}
-#paintClear.active{background:#555;border-color:#555;color:white}
-.diaryGrid.painting,.diaryGrid.painting *{touch-action:none;user-select:none;-webkit-user-select:none}
-.slot{touch-action:auto;-webkit-tap-highlight-color:transparent}
-.slot.dragPreview{outline:3px solid #111;outline-offset:-3px}

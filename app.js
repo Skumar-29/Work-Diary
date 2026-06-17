@@ -29,10 +29,14 @@ let state = {
   selectedDate: toKey(new Date()),
   scheme: "BFM",
   restAsStationary: true,
-  slots: {},     // yyyy-mm-dd -> array of "work"|"rest"|"stationary"|undefined
+  slots: {},
   entries: [],
   activeTimer: null,
-  paintMode: "work"
+  profile: {
+    driverName: "",
+    licenceNumber: "",
+    baseTimeZone: "Local phone time"
+  }
 };
 
 const $ = id => document.getElementById(id);
@@ -56,7 +60,6 @@ function minsToHoursText(mins){
   const h = mins/60;
   return `${Number.isInteger(h) ? h : h.toFixed(2).replace(/\.00$/,"")} Hours`;
 }
-function normaliseToQuarter(mins){ return Math.floor(mins / 15) * 15; }
 function getDaySlots(key){
   if(!state.slots[key]) state.slots[key] = Array(SLOTS_PER_DAY).fill(undefined);
   return state.slots[key];
@@ -77,8 +80,14 @@ function absToKeySlot(abs){
   const mins = d.getHours()*60 + d.getMinutes();
   return {key, slot: Math.floor(mins / SLOT)};
 }
-
+function ensureProfile(){
+  if(!state.profile) state.profile = {};
+  if(!state.profile.driverName) state.profile.driverName = "";
+  if(!state.profile.licenceNumber) state.profile.licenceNumber = "";
+  if(!state.profile.baseTimeZone) state.profile.baseTimeZone = "Local phone time";
+}
 function save(){
+  ensureProfile();
   localStorage.setItem("truckDiaryPWA", JSON.stringify(state));
 }
 function load(){
@@ -86,30 +95,20 @@ function load(){
   if(raw){
     try{ state = {...state, ...JSON.parse(raw)}; }catch(e){}
   }
+  ensureProfile();
 }
-
 function isWork(key, idx){ return getSlot(key, idx) === "work"; }
-function isRestType(type){ return type === "rest" || type === "stationary"; }
+function isRestType(type){ return type === "rest"; }
 function isStationary(key, idx){
   const t = getSlot(key, idx);
-  return t === "stationary" || (state.restAsStationary && t === "rest");
+  return t === "rest";
 }
-
 function countWorkBetween(endAbs, windowMins){
   let count = 0;
   const startAbs = endAbs - windowMins*60000;
   for(let t=startAbs; t<endAbs; t+=SLOT*60000){
     const {key, slot} = absToKeySlot(t);
     if(isWork(key, slot)) count += SLOT;
-  }
-  return count;
-}
-function countStationaryBetween(endAbs, windowMins){
-  let count = 0;
-  const startAbs = endAbs - windowMins*60000;
-  for(let t=startAbs; t<endAbs; t+=SLOT*60000){
-    const {key, slot} = absToKeySlot(t);
-    if(isStationary(key, slot)) count += SLOT;
   }
   return count;
 }
@@ -128,6 +127,30 @@ function slotBreaches(key, idx){
   const endAbs = minuteAbs(key, idx+1);
   return RULES[state.scheme].windows.some(r => countWorkBetween(endAbs, r.minutes) > r.maxWork);
 }
+function activityLabel(a){
+  if(a === "work") return "Work / Driving";
+  return "Rest";
+}
+function escapeHtml(s){
+  return String(s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+function segmentsForDay(key){
+  const segs = [];
+  let cur = getSlot(key,0);
+  let start = 0;
+  for(let i=1;i<=SLOTS_PER_DAY;i++){
+    const val = i<SLOTS_PER_DAY ? getSlot(key,i) : null;
+    if(val !== cur){
+      segs.push({startMins:start*SLOT, endMins:i*SLOT, activity:cur});
+      cur = val;
+      start = i;
+    }
+  }
+  return segs;
+}
+function warningsText(){
+  return checkDayWarnings().map(w => w.text).join(" | ");
+}
 
 function renderGrid(){
   const grid = $("diaryGrid");
@@ -138,6 +161,11 @@ function renderGrid(){
     {start:12, labels:["noon","1pm","2pm","3pm","4pm","5pm"]},
     {start:18, labels:["6pm","7pm","8pm","9pm","10pm","11pm"]}
   ];
+  const rows = [
+    {label:"Work", action:"work"},
+    {label:"Rest", action:"rest"}
+  ];
+
   for(const sec of sections){
     const block = document.createElement("div");
     block.className = "block";
@@ -151,61 +179,60 @@ function renderGrid(){
       el.textContent = l;
       block.appendChild(el);
     });
-    const workLabel = document.createElement("div");
-    workLabel.className = "rowLabel";
-    workLabel.textContent = "Work";
-    block.appendChild(workLabel);
-    for(let i=0;i<24;i++){
-      const slotIndex = sec.start*4 + i;
-      const cell = document.createElement("button");
-      cell.className = "slot";
-      const t = getSlot(state.selectedDate, slotIndex);
-      if(t === "work") cell.classList.add(slotBreaches(state.selectedDate, slotIndex) ? "bad" : "work");
-      else cell.classList.add("empty");
-      if((i+1)%4===0) cell.classList.add("thick");
-      cell.title = `${fmtHM(slotIndex*15)} Work`;
-      cell.dataset.slot = slotIndex;
-      cell.dataset.row = "work";
-      block.appendChild(cell);
-    }
-    const restLabel = document.createElement("div");
-    restLabel.className = "rowLabel";
-    restLabel.textContent = "Rest";
-    block.appendChild(restLabel);
-    for(let i=0;i<24;i++){
-      const slotIndex = sec.start*4 + i;
-      const cell = document.createElement("button");
-      cell.className = "slot";
-      const t = getSlot(state.selectedDate, slotIndex);
-      if(t === "work") cell.classList.add("empty");
-      else if(t === "stationary") cell.classList.add("stationary");
-      else cell.classList.add("rest");
-      if((i+1)%4===0) cell.classList.add("thick");
-      cell.title = `${fmtHM(slotIndex*15)} Rest`;
-      cell.dataset.slot = slotIndex;
-      cell.dataset.row = "rest";
-      block.appendChild(cell);
-    }
+
+    rows.forEach(row=>{
+      const label = document.createElement("div");
+      label.className = "rowLabel";
+      label.textContent = row.label;
+      block.appendChild(label);
+
+      for(let i=0;i<24;i++){
+        const slotIndex = sec.start*4 + i;
+        const cell = document.createElement("button");
+        cell.className = "slot";
+        const t = getSlot(state.selectedDate, slotIndex);
+
+        if(row.action === "work"){
+          if(t === "work") cell.classList.add(slotBreaches(state.selectedDate, slotIndex) ? "bad" : "work");
+          else cell.classList.add("empty");
+        } else {
+          if(t === "rest") cell.classList.add("rest");
+          else cell.classList.add("empty");
+        }
+
+        if((i+1)%4===0) cell.classList.add("thick");
+        cell.title = `${fmtHM(slotIndex*15)} ${row.label}`;
+        cell.dataset.slot = slotIndex;
+        cell.dataset.row = row.action;
+        block.appendChild(cell);
+      }
+    });
     grid.appendChild(block);
   }
 }
 
-function currentPaintValue(){
-  if(state.paintMode === "clear") return undefined;
-  return state.paintMode || "work";
+function addEntryRecord(startKey, startMins, endKey, endMins, activity, note){
+  state.entries.push({
+    id: Date.now()+"-"+Math.random().toString(16).slice(2),
+    start: `${startKey} ${fmtHM(startMins)}`,
+    end: `${endKey} ${fmtHM(endMins)}`,
+    activity,
+    note: note || ""
+  });
+  if(state.entries.length > 1000) state.entries = state.entries.slice(-1000);
 }
-function quickSetSlot(idx, val){
-  setSlot(state.selectedDate, idx, val);
-  addEntryRecord(state.selectedDate, idx*SLOT, state.selectedDate, (idx+1)*SLOT, val || "clear", "Tapped grid");
-  save();
-  renderAll();
+
+function actionFromCell(el){
+  const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
+  if(!cell) return null;
+  return cell.dataset.row || "rest";
 }
-function paintSlotByElement(el){
+function paintSlotByElement(el, forcedAction=null){
   const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
   if(!cell) return false;
   const idx = Number(cell.dataset.slot);
   if(Number.isNaN(idx)) return false;
-  const val = currentPaintValue();
+  const val = forcedAction || actionFromCell(cell) || "rest";
   const arr = getDaySlots(state.selectedDate);
   if(arr[idx] !== val){
     arr[idx] = val;
@@ -214,6 +241,7 @@ function paintSlotByElement(el){
   }
   return false;
 }
+
 function setupSwipePainting(){
   const grid = $("diaryGrid");
   let touchCandidate = false;
@@ -224,6 +252,7 @@ function setupSwipePainting(){
   let startY = 0;
   let startSlot = null;
   let lastSlot = null;
+  let startAction = "rest";
   const THRESHOLD = 10;
 
   function beginCandidate(target, point){
@@ -237,6 +266,7 @@ function setupSwipePainting(){
     startY = point.clientY;
     startSlot = Number(cell.dataset.slot);
     lastSlot = startSlot;
+    startAction = actionFromCell(cell) || "rest";
     return true;
   }
 
@@ -246,11 +276,9 @@ function setupSwipePainting(){
   }
 
   function paintSingle(slotIdx, noteText){
-    const val = currentPaintValue();
     const arr = getDaySlots(state.selectedDate);
-    arr[slotIdx] = val;
-    const activity = val || "clear";
-    addEntryRecord(state.selectedDate, slotIdx*SLOT, state.selectedDate, (slotIdx+1)*SLOT, activity, noteText || "Tap fill");
+    arr[slotIdx] = startAction;
+    addEntryRecord(state.selectedDate, slotIdx*SLOT, state.selectedDate, (slotIdx+1)*SLOT, startAction, noteText || "Tap fill");
     save();
     renderAll();
   }
@@ -259,8 +287,8 @@ function setupSwipePainting(){
     const from = Math.min(lastSlot, slotIdx);
     const to = Math.max(lastSlot, slotIdx);
     for(let i = from; i <= to; i++){
-      const slotEl = grid.querySelector(`.slot[data-slot="${i}"]`);
-      paintSlotByElement(slotEl);
+      const slotEl = grid.querySelector(`.slot[data-slot="${i}"][data-row="${startAction}"]`);
+      paintSlotByElement(slotEl, startAction);
     }
     lastSlot = slotIdx;
   }
@@ -273,7 +301,6 @@ function setupSwipePainting(){
     const absX = Math.abs(dx);
     const absY = Math.abs(dy);
 
-    // Decide whether the gesture is horizontal painting or vertical scrolling.
     if(!painting && !scrollMode){
       if(absX < THRESHOLD && absY < THRESHOLD){
         return;
@@ -282,8 +309,8 @@ function setupSwipePainting(){
         painting = true;
         touchCandidate = false;
         grid.classList.add("painting");
-        const startEl = grid.querySelector(`.slot[data-slot="${startSlot}"]`);
-        paintSlotByElement(startEl);
+        const startEl = grid.querySelector(`.slot[data-slot="${startSlot}"][data-row="${startAction}"]`);
+        paintSlotByElement(startEl, startAction);
         changed = true;
       } else if(absY > absX){
         scrollMode = true;
@@ -295,7 +322,6 @@ function setupSwipePainting(){
     }
 
     if(!painting) return;
-
     const el = document.elementFromPoint(point.clientX, point.clientY);
     const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
     if(!cell) return;
@@ -309,7 +335,6 @@ function setupSwipePainting(){
   }
 
   function end(){
-    // Tap without horizontal movement: select just one 15-minute block.
     if(touchCandidate && !painting && !scrollMode && startSlot !== null){
       paintSingle(startSlot, "Single tap fill");
       touchCandidate = false;
@@ -322,10 +347,9 @@ function setupSwipePainting(){
       grid.classList.remove("painting");
       document.querySelectorAll(".slot.dragPreview").forEach(x => x.classList.remove("dragPreview"));
       if(changed && startSlot !== null && lastSlot !== null){
-        const activity = currentPaintValue() || "clear";
         const a = Math.min(startSlot, lastSlot);
         const b = Math.max(startSlot, lastSlot);
-        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, activity, "Horizontal swipe fill");
+        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, startAction, "Horizontal swipe fill");
         save();
         renderAll();
       }
@@ -343,28 +367,9 @@ function setupSwipePainting(){
   grid.addEventListener("touchend", end);
   grid.addEventListener("touchcancel", end);
 
-  // Mouse support on desktop: click for one block, drag horizontally for many.
-  grid.addEventListener("mousedown", (e)=>{
-    beginCandidate(e.target, e);
-  });
+  grid.addEventListener("mousedown", (e)=>beginCandidate(e.target, e));
   document.addEventListener("mousemove", move);
   document.addEventListener("mouseup", end);
-}
-function renderPaintButtons(){
-  document.querySelectorAll(".paintBtn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.paint === (state.paintMode || "work"));
-  });
-}
-
-function addEntryRecord(startKey, startMins, endKey, endMins, activity, note){
-  state.entries.push({
-    id: Date.now()+"-"+Math.random().toString(16).slice(2),
-    start: `${startKey} ${fmtHM(startMins)}`,
-    end: `${endKey} ${fmtHM(endMins)}`,
-    activity,
-    note: note || ""
-  });
-  if(state.entries.length > 1000) state.entries = state.entries.slice(-1000);
 }
 
 function addEntryFromForm(){
@@ -475,6 +480,68 @@ function renderNextBreak(){
     : `<strong>Take 15 minutes rest now before more work.</strong>`;
 }
 
+function renderGraphPage(){
+  ensureProfile();
+  $("graphDate").textContent = fmtDateLong(state.selectedDate);
+  $("graphDriver").textContent = state.profile.driverName || "Not entered";
+  $("graphBaseTime").textContent = state.profile.baseTimeZone || "Local phone time";
+
+  const width = 960;
+  const left = 50;
+  const topY = 70;
+  const bottomY = 220;
+  const right = width - 20;
+  const slotW = (right - left) / 96;
+
+  const labels = [];
+  for(let h=0; h<=24; h++){
+    const x = left + h*4*slotW;
+    labels.push(`<line x1="${x}" y1="${topY}" x2="${x}" y2="${bottomY}" stroke="${h===24 ? '#bbb' : '#888'}" stroke-width="${h%6===0 ? 1.5 : 1}" />`);
+    if(h < 24){
+      const text = h===0 ? "12am" : h<12 ? `${h}am` : h===12 ? "12pm" : `${h-12}pm`;
+      labels.push(`<text x="${x+2}" y="24" font-size="12" fill="#333">${text}</text>`);
+    }
+  }
+
+  const horiz = [
+    `<line x1="${left}" y1="${topY}" x2="${right}" y2="${topY}" stroke="#555" stroke-width="1.5" />`,
+    `<line x1="${left}" y1="${(topY+bottomY)/2}" x2="${right}" y2="${(topY+bottomY)/2}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,4" />`,
+    `<line x1="${left}" y1="${bottomY}" x2="${right}" y2="${bottomY}" stroke="#555" stroke-width="1.5" />`,
+    `<text x="6" y="${topY+4}" font-size="14" fill="#222">WORK</text>`,
+    `<text x="10" y="${bottomY+4}" font-size="14" fill="#222">REST</text>`
+  ];
+
+  const getY = (slotIndex) => getSlot(state.selectedDate, slotIndex) === "work" ? topY : bottomY;
+  let d = `M ${left} ${getY(0)}`;
+  for(let i=0;i<96;i++){
+    const y = getY(i);
+    const nextY = i < 95 ? getY(i+1) : y;
+    const xEnd = left + (i+1)*slotW;
+    d += ` L ${xEnd} ${y}`;
+    if(i < 95 && nextY !== y){
+      d += ` L ${xEnd} ${nextY}`;
+    }
+  }
+
+  const svg = `
+    <svg viewBox="0 0 ${width} 270" width="100%" height="260" role="img" aria-label="Work diary graph page">
+      <rect x="0" y="0" width="${width}" height="270" fill="white" />
+      <rect x="${left}" y="${topY}" width="${right-left}" height="${bottomY-topY}" fill="#fff" stroke="#ccc" />
+      ${labels.join("")}
+      ${horiz.join("")}
+      <path d="${d}" fill="none" stroke="#111" stroke-width="3" />
+    </svg>`;
+  $("graphSvgHolder").innerHTML = svg;
+
+  const segs = segmentsForDay(state.selectedDate);
+  const rows = segs.map(s => `<tr><td>${fmtHM(s.startMins)}</td><td>${s.endMins>=1440 ? "24:00" : fmtHM(s.endMins)}</td><td>${activityLabel(s.activity)}</td><td>${Math.floor((s.endMins-s.startMins)/60)}h ${(s.endMins-s.startMins)%60}m</td></tr>`).join("");
+  $("graphSummaryTable").innerHTML = `
+    <table class="graphTable">
+      <thead><tr><th>Start</th><th>End</th><th>Activity</th><th>Duration</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function renderDate(){
   $("dateText").textContent=fmtDateLong(state.selectedDate);
   $("datePicker").value=state.selectedDate;
@@ -489,53 +556,39 @@ function renderTotals(){
   $("totalWork").textContent=minsToHoursText(t.work);
   $("totalRest").textContent=minsToHoursText(t.rest);
 }
-function renderTodayAdvice(){
-  const el=$("todayAdvice");
-  const warns=checkDayWarnings();
-  el.innerHTML = warns.map(w=>`<p>${w.text}</p>`).join("");
-}
-function renderTimer(){
-  const s=$("liveStatus"), since=$("liveSince");
-  if(!state.activeTimer){
-    s.textContent="No active timer";
-    since.textContent="";
-    return;
-  }
-  const start=new Date(state.activeTimer.startISO);
-  const mins=Math.max(0, Math.floor((Date.now()-start.getTime())/60000));
-  s.textContent = state.activeTimer.activity==="work" ? "Working / Driving" : "Resting";
-  since.textContent = `Started ${start.toLocaleString("en-AU")} — ${Math.floor(mins/60)}h ${mins%60}m so far`;
+function renderDriverSettings(){
+  ensureProfile();
+  $("driverName").value = state.profile.driverName || "";
+  $("licenceNumber").value = state.profile.licenceNumber || "";
+  $("baseTimeZone").value = state.profile.baseTimeZone || "Local phone time";
 }
 function renderAll(){
-  renderDate(); renderAlerts(); renderGrid(); renderTotals(); renderRuleCards(); renderNextBreak(); renderTodayAdvice(); renderTimer(); renderPaintButtons();
+  renderDate();
+  renderAlerts();
+  renderGrid();
+  renderTotals();
+  renderRuleCards();
+  renderNextBreak();
+  renderGraphPage();
+  renderDriverSettings();
 }
 
 function loadBFMSample(){
   const d = state.selectedDate;
   const next = addDays(d,1);
-  // Clear selected and next morning for clean sample
-  state.slots[d]=Array(SLOTS_PER_DAY).fill(undefined);
-  state.slots[next]=Array(SLOTS_PER_DAY).fill(undefined);
-  // previous stationary rest 11:00-18:00
-  for(let i=44;i<72;i++) setSlot(d,i,"stationary");
-  // work 18:00-00:00
+  state.slots[d]=Array(SLOTS_PER_DAY).fill("rest");
+  state.slots[next]=Array(SLOTS_PER_DAY).fill("rest");
   for(let i=72;i<96;i++) setSlot(d,i,"work");
-  // rest 00:00-00:15, work 00:15-02:45, rest 02:45-03:00, work 03:00-05:30, rest 05:30-06:00, work 06:00-09:00, stationary 09:00-16:00
-  setSlot(next,0,"rest");
   for(let i=1;i<11;i++) setSlot(next,i,"work");
-  setSlot(next,11,"rest");
   for(let i=12;i<22;i++) setSlot(next,i,"work");
-  for(let i=22;i<24;i++) setSlot(next,i,"rest");
   for(let i=24;i<36;i++) setSlot(next,i,"work");
-  for(let i=36;i<64;i++) setSlot(next,i,"stationary");
-  state.entries.push({id:Date.now()+"sample", start:`${d} 11:00`, end:`${d} 18:00`, activity:"stationary", note:"Sample major rest"});
   state.entries.push({id:Date.now()+"sample2", start:`${d} 18:00`, end:`${next} 00:00`, activity:"work", note:"Sample BFM work"});
   state.entries.push({id:Date.now()+"sample3", start:`${next} 00:00`, end:`${next} 00:15`, activity:"rest", note:"Sample rest"});
   save(); renderAll();
 }
 function clearSelectedDay(){
   if(confirm("Clear all blocks for selected day?")){
-    state.slots[state.selectedDate]=Array(SLOTS_PER_DAY).fill(undefined);
+    state.slots[state.selectedDate]=Array(SLOTS_PER_DAY).fill("rest");
     save(); renderAll();
   }
 }
@@ -543,39 +596,88 @@ function clearAll(){
   if(confirm("Clear all saved diary data from this phone/browser?")){
     localStorage.removeItem("truckDiaryPWA");
     state.slots={}; state.entries=[]; state.activeTimer=null;
+    state.profile={driverName:"", licenceNumber:"", baseTimeZone:"Local phone time"};
     save(); renderAll();
   }
 }
 function exportCsv(){
-  const rows=[["start","end","activity","note"]];
-  state.entries.forEach(e=>rows.push([e.start,e.end,e.activity,e.note || ""]));
+  ensureProfile();
+  const rows=[["driver_name","licence_number","base_time","scheme","selected_date","start","end","activity","note"]];
+  state.entries.forEach(e=>rows.push([
+    state.profile.driverName || "",
+    state.profile.licenceNumber || "",
+    state.profile.baseTimeZone || "Local phone time",
+    state.scheme,
+    state.selectedDate,
+    e.start,
+    e.end,
+    activityLabel(e.activity || ""),
+    e.note || ""
+  ]));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   const blob=new Blob([csv],{type:"text/csv"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
-  a.href=url; a.download="truck-work-diary-export.csv";
+  a.href=url; a.download=`truck-work-diary-${state.selectedDate}.csv`;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-function startTimer(activity){
-  if(state.activeTimer && !confirm("Stop current timer and start a new one?")) return;
-  state.activeTimer={activity, startISO:new Date().toISOString()};
-  save(); renderAll();
-}
-function stopTimer(){
-  if(!state.activeTimer){ alert("No active timer."); return; }
-  const start=new Date(state.activeTimer.startISO);
-  const end=new Date();
-  const roundedStart = new Date(Math.floor(start.getTime()/(SLOT*60000))*(SLOT*60000));
-  const roundedEnd = new Date(Math.ceil(end.getTime()/(SLOT*60000))*(SLOT*60000));
-  for(let t=roundedStart.getTime(); t<roundedEnd.getTime(); t+=SLOT*60000){
-    const {key,slot}=absToKeySlot(t);
-    setSlot(key,slot,state.activeTimer.activity);
+function exportPdf(){
+  ensureProfile();
+  const t = totalsForDay();
+  const segs = segmentsForDay(state.selectedDate);
+  const rows = segs.map(s => `<tr><td>${fmtHM(s.startMins)}</td><td>${s.endMins>=1440 ? "24:00" : fmtHM(s.endMins)}</td><td>${activityLabel(s.activity)}</td><td>${Math.floor((s.endMins-s.startMins)/60)}h ${(s.endMins-s.startMins)%60}m</td></tr>`).join("");
+  const graph = $("graphSvgHolder").innerHTML;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Work Diary ${state.selectedDate}</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;margin:24px;color:#111}
+    h1{font-size:24px;margin:0 0 8px}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 18px}
+    .box{border:1px solid #ccc;border-radius:10px;padding:10px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{border:1px solid #999;padding:7px;text-align:left;font-size:13px}
+    th{background:#eee}
+    .warn{background:#fff3cd;border:1px solid #e3bd4f;border-radius:10px;padding:10px;margin-top:12px}
+    .small{font-size:12px;color:#555;margin-top:20px}
+    .graph{border:1px solid #ccc;border-radius:10px;padding:10px;margin-top:14px}
+    @media print{button{display:none} body{margin:12mm}}
+  </style></head><body>
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <h1>Truck Work Diary Report</h1>
+    <div class="meta">
+      <div class="box"><strong>Date:</strong><br>${escapeHtml(fmtDateLong(state.selectedDate))}</div>
+      <div class="box"><strong>Scheme:</strong><br>${escapeHtml(state.scheme)}</div>
+      <div class="box"><strong>Driver:</strong><br>${escapeHtml(state.profile.driverName || "Not entered")}</div>
+      <div class="box"><strong>Licence:</strong><br>${escapeHtml(state.profile.licenceNumber || "Not entered")}</div>
+      <div class="box"><strong>Base time:</strong><br>${escapeHtml(state.profile.baseTimeZone || "Local phone time")}</div>
+      <div class="box"><strong>Totals:</strong><br>Work ${minsToHoursText(t.work)} | Rest ${minsToHoursText(t.rest)}</div>
+    </div>
+    <div class="graph">${graph}</div>
+    <table>
+      <thead><tr><th>Start</th><th>End</th><th>Activity</th><th>Duration</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="warn"><strong>App warnings:</strong><br>${escapeHtml(warningsText())}</div>
+    <p class="small">This report is from a personal checking helper only. It is not an NHVR-approved Electronic Work Diary and does not replace your official paper diary/EWD.</p>
+    <script>setTimeout(()=>window.print(), 500)<\/script>
+  </body></html>`;
+  const w = window.open("", "_blank");
+  if(!w){
+    alert("Popup blocked. Please allow popups, then try PDF export again.");
+    return;
   }
-  addEntryRecord(toKey(roundedStart), roundedStart.getHours()*60+roundedStart.getMinutes(), toKey(roundedEnd), roundedEnd.getHours()*60+roundedEnd.getMinutes(), state.activeTimer.activity, "Live timer");
-  state.selectedDate=toKey(roundedStart);
-  state.activeTimer=null;
-  save(); renderAll();
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+function saveDriverSettings(){
+  ensureProfile();
+  state.profile.driverName = $("driverName").value.trim();
+  state.profile.licenceNumber = $("licenceNumber").value.trim();
+  state.profile.baseTimeZone = $("baseTimeZone").value;
+  save();
+  renderAll();
+  alert("Driver details saved.");
 }
 
 function setup(){
@@ -590,11 +692,11 @@ function setup(){
   $("schemeSelect").onchange=e=>{state.scheme=e.target.value;save();renderAll();}
   $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;save();renderAll();}
   $("exportCsv").onclick=exportCsv;
+  $("exportPdf").onclick=exportPdf;
+  $("saveDriverSettings").onclick=saveDriverSettings;
   $("clearDay").onclick=clearSelectedDay;
   $("clearAll").onclick=clearAll;
-  $("startWorkBtn").onclick=()=>startTimer("work");
-  $("startRestBtn").onclick=()=>startTimer("rest");
-  $("stopTimerBtn").onclick=stopTimer;
+
   document.querySelectorAll(".tabbar button").forEach(btn=>{
     btn.onclick=()=>{
       document.querySelectorAll(".tabbar button").forEach(b=>b.classList.remove("active"));
@@ -602,20 +704,17 @@ function setup(){
       document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
       $(btn.dataset.tab).classList.add("active");
       $("screenTitle").textContent = btn.querySelector("span").textContent;
+      if(btn.dataset.tab === "graphScreen"){
+        renderGraphPage();
+      }
     };
   });
-  document.querySelectorAll(".paintBtn").forEach(btn=>{
-    btn.onclick=()=>{
-      state.paintMode = btn.dataset.paint;
-      save();
-      renderPaintButtons();
-    };
-  });
+
   setupSwipePainting();
-  setInterval(renderTimer, 30000);
   setInterval(()=>{ $("fakeTime").textContent=new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}); }, 30000);
   renderAll();
 }
+
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
 }

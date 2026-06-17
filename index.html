@@ -41,17 +41,13 @@
       <div class="legend">
         <span><i class="sw work"></i> Work / Drive</span>
         <span><i class="sw rest"></i> Rest</span>
-        <span><i class="sw stationary"></i> Stationary Rest</span>
         <span><i class="sw bad"></i> Possible breach</span>
       </div>
 
-      <div class="paintBar" aria-label="Swipe fill mode">
-        <span>Swipe mode:</span>
-        <button id="paintWork" class="paintBtn active" data-paint="work">Work</button>
-        <button id="paintRest" class="paintBtn" data-paint="rest">Rest</button>
-        <button id="paintStationary" class="paintBtn" data-paint="stationary">Stationary</button>
-        <button id="paintClear" class="paintBtn" data-paint="clear">Clear</button>
-      </div>
+      <p class="gridHint">
+        Tap one block or swipe <strong>left/right</strong> directly on the row you want:
+        <strong>Work</strong> or <strong>Rest</strong>. Swipe <strong>up/down</strong> scrolls only.
+      </p>
 
       <div id="diaryGrid" class="diaryGrid"></div>
 
@@ -70,8 +66,7 @@
           <label>Activity
             <select id="activity">
               <option value="work">Work / Driving</option>
-              <option value="rest">Other Rest</option>
-              <option value="stationary">Stationary Rest</option>
+              <option value="rest">Rest</option>
             </select>
           </label>
           <label>Note / location <input id="note" placeholder="e.g. Dubbo, page 45"></label>
@@ -80,35 +75,54 @@
           <button id="addEntry" class="primary">Add to diary</button>
           <button id="quickBFM" class="secondary">Load BFM 6pm sample</button>
         </div>
-        <p class="hint">Tip: use 24-hour time. Midnight is <strong>00:00</strong> on the next date.</p>
+        <p class="hint">Tip: use 24-hour time. Midnight is <strong>00:00</strong> on the next date. Times are checked in 15-minute blocks.</p>
       </section>
 
       <section class="card">
-        <h2>BFM checker</h2>
+        <h2>BFM / fatigue checker</h2>
         <div id="ruleCards" class="ruleCards"></div>
         <div class="nextBreak" id="nextBreak"></div>
       </section>
     </section>
 
-    <section id="drivingScreen" class="screen">
-      <section class="card dashboardCard">
-        <h2>Driving / Live timer</h2>
-        <p class="bigStatus" id="liveStatus">No active timer</p>
-        <p id="liveSince" class="hint"></p>
-        <div class="actions vertical">
-          <button id="startWorkBtn" class="primary">Start Work / Driving now</button>
-          <button id="startRestBtn" class="secondary">Start Rest now</button>
-          <button id="stopTimerBtn" class="danger">Stop active timer</button>
-        </div>
-        <p class="hint">This saves to your phone browser only. Keep writing your official paper diary.</p>
-      </section>
+    <section id="graphScreen" class="screen">
       <section class="card">
-        <h2>Today advice</h2>
-        <div id="todayAdvice"></div>
+        <h2>Work diary graph page</h2>
+        <p class="hint">This page shows your selected day in a graph style similar to a paper work diary page.</p>
+        <div class="graphMeta">
+          <div><strong id="graphDate">--</strong><span>Date</span></div>
+          <div><strong id="graphDriver">--</strong><span>Driver</span></div>
+          <div><strong id="graphBaseTime">--</strong><span>Base time</span></div>
+        </div>
+        <div class="graphWrap">
+          <div id="graphSvgHolder"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Diary line summary</h2>
+        <div id="graphSummaryTable"></div>
       </section>
     </section>
 
     <section id="settingsScreen" class="screen">
+      <section class="card">
+        <h2>Driver details</h2>
+        <label>Driver name <input id="driverName" placeholder="Enter driver name"></label>
+        <label>Licence number <input id="licenceNumber" placeholder="Enter licence number"></label>
+        <label>Base time
+          <select id="baseTimeZone">
+            <option value="Local phone time">Local phone time</option>
+            <option value="NSW/VIC/ACT/TAS - AEST/AEDT">NSW/VIC/ACT/TAS - AEST/AEDT</option>
+            <option value="Queensland - AEST">Queensland - AEST</option>
+            <option value="South Australia - ACST/ACDT">South Australia - ACST/ACDT</option>
+            <option value="Northern Territory - ACST">Northern Territory - ACST</option>
+            <option value="Western Australia - AWST">Western Australia - AWST</option>
+          </select>
+        </label>
+        <button id="saveDriverSettings" class="primary full">Save driver details</button>
+      </section>
+
       <section class="card">
         <h2>Settings</h2>
         <label>Scheme
@@ -122,11 +136,13 @@
           Count all rest as stationary rest for major-rest warning
         </label>
         <div class="actions vertical">
-          <button id="exportCsv" class="secondary">Export CSV</button>
+          <button id="exportCsv" class="secondary">Export CSV / Excel</button>
+          <button id="exportPdf" class="secondary">Export PDF report</button>
           <button id="clearDay" class="secondary">Clear selected day</button>
           <button id="clearAll" class="danger">Clear all saved data</button>
         </div>
       </section>
+
       <section class="card">
         <h2>Important</h2>
         <p>This is a personal helper for checking your paper diary. It is not an NHVR-approved Electronic Work Diary.</p>
@@ -138,9 +154,11 @@
         <h2>How to use</h2>
         <ol>
           <li>Select the correct date.</li>
-          <li>Add each work/rest line from your paper diary.</li>
-          <li>Green means work, blue means rest, dark blue means stationary rest.</li>
-          <li>Red means the app found a possible BFM/Standard rule problem.</li>
+          <li>Enter Driver details and Base time in Settings.</li>
+          <li>Tap or swipe directly on the <strong>Work</strong> or <strong>Rest</strong> row to select 15-minute blocks.</li>
+          <li>To change a block, tap the correct row at that time.</li>
+          <li>Open <strong>Graph</strong> to see your selected blocks drawn as a work diary graph page.</li>
+          <li>Use CSV / Excel export or PDF report export from Settings.</li>
           <li>Use the rule cards and next-break advice before you continue driving.</li>
         </ol>
       </section>
@@ -154,8 +172,8 @@
   </main>
 
   <nav class="tabbar">
-    <button data-tab="drivingScreen">↗<span>Driving</span></button>
     <button data-tab="diaryScreen" class="active">👥<span>Work Diary</span></button>
+    <button data-tab="graphScreen">📈<span>Graph</span></button>
     <button data-tab="settingsScreen">▣<span>Settings</span></button>
     <button data-tab="helpScreen">ⓘ<span>Help</span></button>
   </nav>
