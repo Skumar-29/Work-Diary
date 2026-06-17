@@ -216,69 +216,118 @@ function paintSlotByElement(el){
 }
 function setupSwipePainting(){
   const grid = $("diaryGrid");
-  let drawing = false;
+  let touchCandidate = false;
+  let painting = false;
+  let scrollMode = false;
   let changed = false;
+  let startX = 0;
+  let startY = 0;
   let startSlot = null;
   let lastSlot = null;
+  const THRESHOLD = 10;
 
-  function start(e){
-    const target = e.target.closest ? e.target.closest(".slot[data-slot]") : null;
-    if(!target) return;
-    drawing = true;
+  function beginCandidate(target, point){
+    const cell = target && target.closest ? target.closest(".slot[data-slot]") : null;
+    if(!cell) return false;
+    touchCandidate = true;
+    painting = false;
+    scrollMode = false;
     changed = false;
-    startSlot = Number(target.dataset.slot);
+    startX = point.clientX;
+    startY = point.clientY;
+    startSlot = Number(cell.dataset.slot);
     lastSlot = startSlot;
-    grid.classList.add("painting");
-    paintSlotByElement(target);
-    changed = true;
-    e.preventDefault();
+    return true;
   }
 
-  function move(e){
-    if(!drawing) return;
+  function start(e){
     const point = e.touches ? e.touches[0] : e;
-    const el = document.elementFromPoint(point.clientX, point.clientY);
-    const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
-    if(!cell) return;
-    const idx = Number(cell.dataset.slot);
-    if(Number.isNaN(idx) || idx === lastSlot) return;
+    beginCandidate(e.target, point);
+  }
 
-    const from = Math.min(lastSlot, idx);
-    const to = Math.max(lastSlot, idx);
+  function paintRangeTo(slotIdx){
+    const from = Math.min(lastSlot, slotIdx);
+    const to = Math.max(lastSlot, slotIdx);
     for(let i = from; i <= to; i++){
       const slotEl = grid.querySelector(`.slot[data-slot="${i}"]`);
       paintSlotByElement(slotEl);
     }
-    lastSlot = idx;
-    changed = true;
+    lastSlot = slotIdx;
+  }
+
+  function move(e){
+    if(!touchCandidate && !painting) return;
+    const point = e.touches ? e.touches[0] : e;
+    const dx = point.clientX - startX;
+    const dy = point.clientY - startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    // Decide whether the gesture is horizontal painting or vertical scrolling.
+    if(!painting && !scrollMode){
+      if(absX < THRESHOLD && absY < THRESHOLD){
+        return;
+      }
+      if(absX > absY * 1.2){
+        painting = true;
+        touchCandidate = false;
+        grid.classList.add("painting");
+        const startEl = grid.querySelector(`.slot[data-slot="${startSlot}"]`);
+        paintSlotByElement(startEl);
+        changed = true;
+      } else if(absY > absX){
+        scrollMode = true;
+        touchCandidate = false;
+        return;
+      } else {
+        return;
+      }
+    }
+
+    if(!painting) return;
+
+    const el = document.elementFromPoint(point.clientX, point.clientY);
+    const cell = el && el.closest ? el.closest(".slot[data-slot]") : null;
+    if(!cell) return;
+    const idx = Number(cell.dataset.slot);
+    if(Number.isNaN(idx)) return;
+    if(idx !== lastSlot){
+      paintRangeTo(idx);
+      changed = true;
+    }
     e.preventDefault();
   }
 
   function end(){
-    if(!drawing) return;
-    drawing = false;
-    grid.classList.remove("painting");
-    document.querySelectorAll(".slot.dragPreview").forEach(x => x.classList.remove("dragPreview"));
-    if(changed){
-      const activity = currentPaintValue() || "clear";
-      if(startSlot !== null && lastSlot !== null){
+    if(painting){
+      grid.classList.remove("painting");
+      document.querySelectorAll(".slot.dragPreview").forEach(x => x.classList.remove("dragPreview"));
+      if(changed && startSlot !== null && lastSlot !== null){
+        const activity = currentPaintValue() || "clear";
         const a = Math.min(startSlot, lastSlot);
         const b = Math.max(startSlot, lastSlot);
-        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, activity, "Swipe fill");
+        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, activity, "Horizontal swipe fill");
+        save();
+        renderAll();
       }
-      save();
-      renderAll();
     }
+    touchCandidate = false;
+    painting = false;
+    scrollMode = false;
+    changed = false;
     startSlot = null;
     lastSlot = null;
   }
 
-  grid.addEventListener("touchstart", start, {passive:false});
+  grid.addEventListener("touchstart", start, {passive:true});
   grid.addEventListener("touchmove", move, {passive:false});
   grid.addEventListener("touchend", end);
   grid.addEventListener("touchcancel", end);
 
-  grid.addEventListener("mousedown", start);
+  // Mouse support on desktop
+  grid.addEventListener("mousedown", (e)=>{
+    beginCandidate(e.target, e);
+  });
   document.addEventListener("mousemove", move);
   document.addEventListener("mouseup", end);
 }

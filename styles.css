@@ -102,5 +102,5 @@ ol{padding-left:20px}
 #paintStationary.active{background:var(--stationary);border-color:var(--stationary);color:white}
 #paintClear.active{background:#555;border-color:#555;color:white}
 .diaryGrid.painting,.diaryGrid.painting *{touch-action:none;user-select:none;-webkit-user-select:none}
-.slot{touch-action:none;-webkit-tap-highlight-color:transparent}
+.slot{touch-action:auto;-webkit-tap-highlight-color:transparent}
 .slot.dragPreview{outline:3px solid #111;outline-offset:-3px}

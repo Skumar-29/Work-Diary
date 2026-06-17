@@ -26,3 +26,9 @@ Swipe / slide update:
 - Put your finger on a 15-minute block and slide across the blocks.
 - The app fills every 15-minute block you slide over.
 - On iPhone, swipe inside the diary grid paints blocks. Scroll outside the grid to move the page.
+
+
+Horizontal swipe update:
+- Blocks are selected only when you drag mostly left-to-right or right-to-left.
+- Up/down finger movement now scrolls the page and does not paint blocks.
+- A small movement threshold is used so normal scrolling does not accidentally select blocks.
