@@ -245,6 +245,16 @@ function setupSwipePainting(){
     beginCandidate(e.target, point);
   }
 
+  function paintSingle(slotIdx, noteText){
+    const val = currentPaintValue();
+    const arr = getDaySlots(state.selectedDate);
+    arr[slotIdx] = val;
+    const activity = val || "clear";
+    addEntryRecord(state.selectedDate, slotIdx*SLOT, state.selectedDate, (slotIdx+1)*SLOT, activity, noteText || "Tap fill");
+    save();
+    renderAll();
+  }
+
   function paintRangeTo(slotIdx){
     const from = Math.min(lastSlot, slotIdx);
     const to = Math.max(lastSlot, slotIdx);
@@ -299,6 +309,15 @@ function setupSwipePainting(){
   }
 
   function end(){
+    // Tap without horizontal movement: select just one 15-minute block.
+    if(touchCandidate && !painting && !scrollMode && startSlot !== null){
+      paintSingle(startSlot, "Single tap fill");
+      touchCandidate = false;
+      startSlot = null;
+      lastSlot = null;
+      return;
+    }
+
     if(painting){
       grid.classList.remove("painting");
       document.querySelectorAll(".slot.dragPreview").forEach(x => x.classList.remove("dragPreview"));
@@ -324,7 +343,7 @@ function setupSwipePainting(){
   grid.addEventListener("touchend", end);
   grid.addEventListener("touchcancel", end);
 
-  // Mouse support on desktop
+  // Mouse support on desktop: click for one block, drag horizontally for many.
   grid.addEventListener("mousedown", (e)=>{
     beginCandidate(e.target, e);
   });

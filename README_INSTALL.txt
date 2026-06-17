@@ -32,3 +32,9 @@ Horizontal swipe update:
 - Blocks are selected only when you drag mostly left-to-right or right-to-left.
 - Up/down finger movement now scrolls the page and does not paint blocks.
 - A small movement threshold is used so normal scrolling does not accidentally select blocks.
+
+
+Tap + swipe update:
+- Tap a single 15-minute block to fill just that block.
+- Swipe left/right to fill many blocks.
+- Scroll up/down normally without filling blocks.
