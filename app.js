@@ -264,7 +264,7 @@ function ensureProfile(){
   if(!state.profile) state.profile = {};
   if(!state.profile.driverName) state.profile.driverName = "";
   if(!state.profile.licenceNumber) state.profile.licenceNumber = "";
-  if(!state.profile.baseTimeZone) state.profile.baseTimeZone = "Local phone time";
+  if(!state.profile.baseTimeZone || state.profile.baseTimeZone === "Local phone time") state.profile.baseTimeZone = "NSW";
 }
 function ensureDayDetailsContainer(){
   if(!state.dayDetails || typeof state.dayDetails !== "object") state.dayDetails = {};
@@ -336,6 +336,7 @@ function updateFutureDailyDetailsFromEffectiveDate(effectiveDate){
       applyAutoDefaultsToDay(key);
     }
   });
+  recomputeAutoPageNumbers();
 }
 
 function defaultDayDetail(){
@@ -1548,6 +1549,7 @@ function renderPageStatusBanner(){
 function buildPaperSheetHtml(){
   ensureProfile();
   const key = state.selectedDate;
+  applyAutoDefaultsToDay(key);
   const detail = ensureDayDetail(key);
   const pageStatus = detail.pageStatus || "active";
   const pageStatusText = pageStatusLabel(key);
@@ -1662,10 +1664,10 @@ function buildPaperSheetHtml(){
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
 
     ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
-    ${svgText(748,39,"WORK DIARY NO.",10,"#111","700")}
+    ${svgText(770,39,"WORK DIARY NO.",10,"#111","700")}
     ${svgText(890,39,"NFV",18,"#111","900")}
-    ${svgText(948,39,workDiaryNo,18,red,"700")}
-    ${svgText(1030,39,pageNo,18,red,"700")}
+    ${svgText(940,39,workDiaryNo,18,red,"700")}
+    ${svgText(990,39,pageNo,18,red,"700")}
 
     <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
     ${svgText(560,67,"DRIVER IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
@@ -1984,33 +1986,48 @@ function recomputeAutoPageNumbers(){
 function applyAutoDefaultsToDay(key){
   ensureBookSettings();
   ensureSettingsHistory();
-  applyRuleRecordToDay(key);
+  ensureRuleHistory();
+
   const rec = currentSettingsRecordForDate(key);
+  const rule = ruleRecordForDate(key);
   const detail = ensureDayDetail(key);
 
-  if(!detail.driverNameSnapshot) detail.driverNameSnapshot = rec.driverName || state.profile.driverName || "";
-  if(!detail.licenceNumberSnapshot) detail.licenceNumberSnapshot = rec.licenceNumber || state.profile.licenceNumber || "";
-  if(!detail.baseStateSnapshot) detail.baseStateSnapshot = rec.baseTimeZone || state.profile.baseTimeZone || "NSW";
+  // Effective-date driver/base defaults carry forward unless this page was manually edited.
+  if(!detail.selectedPageManual){
+    detail.driverNameSnapshot = rec.driverName || state.profile.driverName || "";
+    detail.licenceNumberSnapshot = (rec.licenceNumber || state.profile.licenceNumber || "").replace(/\D+/g, "");
+    detail.baseStateSnapshot = rec.baseTimeZone || state.profile.baseTimeZone || "NSW";
+  }
 
-  if((rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo) && !detail.workDiaryNoManual){
-    detail.workDiaryNo = rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo || "";
-  }
-  if((rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate) && !detail.numberPlateManual){
-    detail.numberPlate = (rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate || "").toUpperCase();
-  }
-  if(state.bookSettings.autoPageNumber){
-    const calc = calculatedPageNumberForDate(key);
-    if(!detail.pageNoManual){
-      detail.pageNo = calc || "";
+  // Effective-date work option/rule carries forward unless this page was manually edited.
+  if(!detail.ruleManual){
+    detail.ruleScheme = rule.scheme || state.scheme || "BFM";
+    detail.driverMode = rule.mode || "solo";
+    detail.twoUpEnabled = detail.driverMode === "twoUp";
+    if(detail.twoUpEnabled){
+      detail.twoUpScheme = rule.coDriverScheme || detail.twoUpScheme || "Standard";
     }
   }
-  if(state.bookSettings.carryForwardTwoUp && !detail.twoUpManual){
+
+  // Effective-date book/truck defaults carry forward unless field is manually overridden.
+  if(!detail.workDiaryNoManual){
+    detail.workDiaryNo = rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo || "";
+  }
+  if(!detail.numberPlateManual){
+    detail.numberPlate = (rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate || "").toUpperCase();
+  }
+
+  if(state.bookSettings.autoPageNumber && !detail.pageNoManual){
+    detail.pageNo = calculatedPageNumberForDate(key) || "";
+  }
+
+  // Two-up defaults only fill extra two-up identity fields; they do not override solo/two-up rule history.
+  if(detail.twoUpEnabled && state.bookSettings.carryForwardTwoUp && !detail.twoUpManual){
     const t = rec.defaultTwoUp || state.bookSettings.defaultTwoUp || {};
-    detail.twoUpEnabled = !!t.enabled;
-    detail.twoUpDriverName = t.twoUpDriverName || "";
-    detail.twoUpLicenceNumber = t.twoUpLicenceNumber || "";
-    detail.twoUpScheme = t.twoUpScheme || "BFM";
-    detail.twoUpBaseState = t.twoUpBaseState || "";
+    detail.twoUpDriverName = t.twoUpDriverName || detail.twoUpDriverName || "";
+    detail.twoUpLicenceNumber = (t.twoUpLicenceNumber || detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
+    detail.twoUpScheme = rule.coDriverScheme || t.twoUpScheme || detail.twoUpScheme || "Standard";
+    detail.twoUpBaseState = t.twoUpBaseState || detail.twoUpBaseState || detail.baseStateSnapshot || "";
   }
   return detail;
 }
@@ -2078,9 +2095,9 @@ function saveRuleHistorySetting(){
   const effectiveDate = $("ruleEffectiveDate").value || state.selectedDate || toKey(new Date());
   const rec = {
     effectiveDate,
-    scheme: $("ruleMyScheme").value,
-    mode: $("ruleDriverMode").value,
-    coDriverScheme: $("ruleDriverMode").value === "twoUp" ? $("ruleCoDriverScheme").value || "Standard" : ""
+    scheme: $("ruleMyScheme").value || state.scheme || "BFM",
+    mode: $("ruleDriverMode").value || "solo",
+    coDriverScheme: $("ruleDriverMode").value === "twoUp" ? ($("ruleCoDriverScheme").value || "Standard") : ""
   };
   const idx = state.ruleHistory.findIndex(x => x.effectiveDate === effectiveDate);
   if(idx >= 0) state.ruleHistory[idx] = rec;
@@ -2098,18 +2115,11 @@ function saveRuleHistorySetting(){
       }
     }
   });
-  if(state.selectedDate >= effectiveDate){
-    const d = ensureDayDetail(state.selectedDate);
-    if(!d.ruleManual){
-      d.ruleScheme = rec.scheme;
-      d.driverMode = rec.mode;
-      d.twoUpEnabled = rec.mode === "twoUp";
-      if(rec.mode === "twoUp") d.twoUpScheme = rec.coDriverScheme || d.twoUpScheme || "Standard";
-    }
-  }
+  applyAutoDefaultsToDay(state.selectedDate);
+  addAuditLog("Work option changed", `From ${effectiveDate}: ${rec.scheme} ${rec.mode}${rec.coDriverScheme ? ", co-driver "+rec.coDriverScheme : ""}`);
   save();
   renderAll();
-  addAuditLog("Work option changed", `From ${effectiveDate}: ${rec.scheme} ${rec.mode}${rec.coDriverScheme ? ", co-driver "+rec.coDriverScheme : ""}`); save(); showToast("Saved");
+  showToast("Saved");
 }
 function renderBookSettings(){
   ensureBookSettings();
@@ -2123,38 +2133,20 @@ function renderBookSettings(){
 }
 function saveBookSettings(){
   ensureBookSettings();
+  const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
   state.bookSettings.autoPageNumber = $("autoPageNumber").checked;
   state.bookSettings.carryForwardTwoUp = $("carryForwardTwoUp").checked;
   state.bookSettings.firstPageDate = $("firstPageDate").value || state.selectedDate;
-  state.bookSettings.firstPageNumber = $("firstPageNumber").value.trim();
+  state.bookSettings.firstPageNumber = $("firstPageNumber").value.replace(/\D+/g, "");
   state.bookSettings.defaultWorkDiaryNo = $("defaultWorkDiaryNo").value.trim();
   state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
-  const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
   saveSettingsRecord(effectiveDate);
   updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
-
-  // Recalculate page numbers for days that have not been manually overridden.
-  Object.keys(state.dayDetails || {}).forEach(key => {
-    const d = ensureDayDetail(key);
-    if(state.bookSettings.autoPageNumber && !d.pageNoManual){
-      const calc = calculatedPageNumberForDate(key);
-      if(calc) d.pageNo = calc;
-    }
-    if(state.bookSettings.defaultWorkDiaryNo && !d.workDiaryNo) d.workDiaryNo = state.bookSettings.defaultWorkDiaryNo;
-    if(state.bookSettings.defaultNumberPlate && !d.numberPlate) d.numberPlate = state.bookSettings.defaultNumberPlate.toUpperCase();
-  });
-
-  if(state.bookSettings.carryForwardTwoUp){
-    const d = ensureDayDetail(state.selectedDate);
-    if(d.twoUpManual || d.twoUpEnabled){
-      updateTwoUpCarryForwardFromDay();
-    }
-  }
-  saveSettingsRecord(effectiveDate);
-  updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
+  applyAutoDefaultsToDay(state.selectedDate);
+  addAuditLog("Book setup changed", `Effective from ${effectiveDate}`);
   save();
   renderAll();
-  addAuditLog("Book setup changed", `Effective from ${effectiveDate}`); save(); showToast("Saved");
+  showToast("Saved");
 }
 
 function renderGraphPage(){
@@ -2442,7 +2434,7 @@ function renderDate(){
   $("dateText").textContent=fmtDateLong(state.selectedDate);
   $("datePicker").value=state.selectedDate;
   $("schemeName").textContent=activeSchemeLabel();
-  $("schemeSelect").value=schemeForDate(state.selectedDate);
+  if($("schemeSelect")) $("schemeSelect").value=schemeForDate(state.selectedDate);
   $("restAsStationary").checked=!!state.restAsStationary;
   if($("startDate")) $("startDate").value=state.selectedDate;
   if($("endDate")) $("endDate").value=state.selectedDate;
@@ -2454,9 +2446,18 @@ function renderTotals(){
 }
 function renderDriverSettings(){
   ensureProfile();
-  $("driverName").value = state.profile.driverName || "";
-  $("licenceNumber").value = (state.profile.licenceNumber || "").replace(/\D+/g, "");
-  $("baseTimeZone").value = state.profile.baseTimeZone || "Local phone time";
+  ensureSettingsHistory();
+  ensureBookSettings();
+  ensureRuleHistory();
+  const rec = currentSettingsRecordForDate(state.selectedDate);
+  const rule = ruleRecordForDate(state.selectedDate);
+  if($("driverName")) $("driverName").value = rec.driverName || state.profile.driverName || "";
+  if($("licenceNumber")) $("licenceNumber").value = (rec.licenceNumber || state.profile.licenceNumber || "").replace(/\D+/g, "");
+  if($("baseTimeZone")) $("baseTimeZone").value = rec.baseTimeZone || state.profile.baseTimeZone || "NSW";
+  if($("settingsEffectiveDate")) $("settingsEffectiveDate").value = $("settingsEffectiveDate").value || state.selectedDate;
+  if($("schemeSelect")) $("schemeSelect").value = rule.scheme || state.scheme || "BFM";
+  renderBookSettings();
+  renderRuleHistorySettings();
 }
 function renderAll(){
   renderDate();
@@ -2517,7 +2518,7 @@ function exportCsv(){
   state.entries.forEach(e=>rows.push([
     state.profile.driverName || "",
     state.profile.licenceNumber || "",
-    state.profile.baseTimeZone || "Local phone time",
+    state.profile.baseTimeZone || "NSW",
     state.scheme,
     state.selectedDate,
     e.start,
@@ -2749,15 +2750,17 @@ function importJsonBackupFromFile(file){
 
 function saveDriverSettings(){
   ensureProfile();
+  const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
   state.profile.driverName = $("driverName").value.trim();
   state.profile.licenceNumber = $("licenceNumber").value.replace(/\D+/g, "");
-  state.profile.baseTimeZone = $("baseTimeZone").value;
-  const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
+  state.profile.baseTimeZone = $("baseTimeZone").value || "NSW";
   saveSettingsRecord(effectiveDate);
   updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
+  applyAutoDefaultsToDay(state.selectedDate);
+  addAuditLog("Driver/base details changed", `Effective from ${effectiveDate}`);
   save();
   renderAll();
-  addAuditLog("Driver/base details changed", `Effective from ${effectiveDate}`); save(); showToast("Saved");
+  showToast("Saved");
 }
 
 
@@ -2808,9 +2811,10 @@ function setup(){
   if($("quickBFM")) $("quickBFM").onclick=loadBFMSample;
   $("schemeSelect").onchange=e=>{
     state.scheme=e.target.value;
+    if($("ruleEffectiveDate")) $("ruleEffectiveDate").value = state.selectedDate;
     if($("ruleMyScheme")) $("ruleMyScheme").value = e.target.value;
-    save();
-    renderAll();
+    if($("ruleDriverMode")) $("ruleDriverMode").value = "solo";
+    saveRuleHistorySetting();
   }
   $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;save();renderAll();}
   if($("saveRuleHistory")) $("saveRuleHistory").onclick=saveRuleHistorySetting;

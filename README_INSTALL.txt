@@ -237,3 +237,18 @@ Header and two-up spacing refinement update:
 - Shifted the full WORK DIARY NO. / NFV / number group slightly to the right.
 - Moved the TWO-UP DRIVER'S IDENTIFICATION section slightly downward to stop overlap with the bottom hour row.
 - No rule logic or calculations changed.
+
+
+Defaults/carry-forward fix:
+- Fixed base time/state carry-forward from effective date so QLD/VIC/WA etc no longer revert to NSW on following pages.
+- Fixed work option carry-forward so BFM/Standard and solo/two-up apply from effective date to following pages.
+- Fixed Settings Scheme dropdown so selecting BFM Solo saves into work option history instead of snapping back to Standard.
+- Driver details, book setup, truck rego, work diary no and rule history now re-apply forward to non-manually-edited pages.
+- Save buttons now show the small auto-hiding Saved toast.
+- NHVR calculation/rule formulas were not changed.
+
+
+Header spacing tightening update:
+- Reduced spacing further in the top-right pattern:
+  WORK DIARY NO.  NFV  9912  03
+- Kept the rest of the graph/PDF layout and all rule calculations unchanged.
