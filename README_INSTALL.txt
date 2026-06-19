@@ -51,3 +51,18 @@ Share / Save Backup update:
 - On iPhone this should open the share sheet so you can tap Save to Files and choose the folder.
 - Normal Export Backup JSON remains available as direct download.
 - Backup reminder now uses Share / Save Backup JSON when supported.
+
+
+Paper daily sheet + two-up update:
+- Graph page redesigned to look closer to the National Work Diary Daily Sheet.
+- Added per-day fields: work diary no, page no, number plate, daily check time, fit for duty, and comments.
+- Added editable work/rest change rows with odometer and location fields.
+- Added two-up driver option with two-up driver details.
+- PDF export now uses the new paper sheet preview.
+
+
+Statistics + base state update:
+- Added new Statistics screen.
+- Statistics screen shows can-drive estimate, rolling window usage, breaks due, last 7 days, last 14 days, and last finished driving.
+- Base time selection is now separated into ACT, NSW, NT, QLD, SA, TAS, VIC, WA like the paper diary.
+- Existing paper-style graph page, two-up driver fields, PDF export, CSV export, JSON backup, and share/save backup are kept.

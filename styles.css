@@ -84,7 +84,7 @@ button{font-family:inherit}
 .graphTable{width:100%;border-collapse:collapse;font-size:13px}
 .graphTable th,.graphTable td{border:1px solid #ccc;padding:8px;text-align:left}
 .graphTable th{background:#f1f1f1}
-.tabbar{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);max-width:390px;width:90%;height:74px;border-radius:40px;background:#0d0d0d;display:grid;grid-template-columns:repeat(5,1fr);gap:0;padding:6px;z-index:10;border:1px solid #333;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.tabbar{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);max-width:390px;width:90%;height:74px;border-radius:40px;background:#0d0d0d;display:grid;grid-template-columns:repeat(6,1fr);gap:0;padding:6px;z-index:10;border:1px solid #333;box-shadow:0 4px 20px rgba(0,0,0,.4)}
 .tabbar button{background:transparent;color:#eee;border:0;border-radius:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 .tabbar button span{font-size:12px;margin-top:4px}
 .tabbar button.active{background:#333;color:#25a5ff}
@@ -99,3 +99,78 @@ ol{padding-left:20px}
 .dashboardCard{text-align:center}
 .bigStatus{font-size:28px;font-weight:900;margin:10px 0}
 #todayAdvice p{margin:8px 0;padding:8px 10px;background:#f5f5f5;border-radius:10px}
+
+
+/* Paper sheet graph update */
+.fullWidth{grid-column:1 / -1}
+textarea{font-size:16px;padding:10px;border-radius:10px;border:1px solid #bbb;background:#fff;color:#111;width:100%;font-family:inherit}
+.graphDetailsForm{align-items:start}
+.changeTable{width:100%;border-collapse:collapse;font-size:13px}
+.changeTable th,.changeTable td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
+.changeTable th{background:#f1f1f1}
+.changeTable input,.changeTable textarea{font-size:14px;padding:8px}
+.readonlyCell{background:#f7f7f7;font-weight:700}
+#paperSheetPreview{min-width:1080px}
+.paperSheet{background:#fff;color:#111;border:2px solid #444;border-radius:18px;padding:14px;font-family:Arial,Helvetica,sans-serif}
+.psTitle{font-size:20px;font-weight:700;text-align:center;letter-spacing:.5px;margin-bottom:8px}
+.psHeaderLine{display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center;margin-bottom:6px}
+.psHeaderLine .smallLbl{font-size:11px;color:#444}
+.psHeaderLine .bigText{font-size:18px;font-weight:700}
+.psHeaderLine .redText{font-size:18px;font-weight:700;color:#d82626}
+.psSectionTitle{background:#5f5f5f;color:#fff;text-align:center;font-weight:700;padding:4px 8px;margin:8px 0 6px;font-size:12px;letter-spacing:.4px}
+.psTopGrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;align-items:start}
+.psField{border:1px solid #333;min-height:38px;padding:4px 6px;background:#fff}
+.psField .lbl{font-size:11px;color:#333;margin-bottom:2px}
+.psField .val{font-size:16px;font-weight:700;color:#1439d6}
+.psField .val.black{color:#111}
+.psDayRow,.psStateRow{display:flex;gap:4px;flex-wrap:wrap}
+.psMiniBox{border:1px solid #333;min-width:28px;padding:6px 6px;text-align:center;font-size:12px;background:#fff}
+.psMiniBox.active{background:#eaf0ff;color:#1439d6;font-weight:700}
+.psCheckList{display:grid;grid-template-columns:repeat(2,auto);gap:6px 10px;align-content:start}
+.psCheck{display:flex;align-items:center;gap:6px;font-size:11px}
+.psCheckBox{width:12px;height:12px;border:1px solid #333;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.psCommentsArea{border:1px solid #333;min-height:72px;padding:8px;font-size:12px;white-space:pre-wrap}
+.psActivityArea{display:grid;grid-template-columns:38px 1fr;gap:0;margin-top:8px}
+.psSideTitle{writing-mode:vertical-rl;transform:rotate(180deg);background:#5f5f5f;color:#fff;font-weight:700;text-align:center;letter-spacing:.4px;padding:10px 0;font-size:12px}
+.psActivityMain{border:1px solid #333;border-left:0}
+.psRowsTable{width:100%;border-collapse:collapse}
+.psRowsTable th,.psRowsTable td{border:1px solid #333;padding:4px 6px;font-size:11px;vertical-align:top}
+.psRowsTable th{background:#fafafa}
+.psRowsTable td.vert{color:#1439d6;font-weight:700}
+.psRowsTable .optional{color:#555;font-size:10px}
+.psTotalsRow{display:flex;justify-content:flex-end;gap:28px;margin:6px 4px 0;font-size:12px;font-weight:700}
+.psTwoUpWrap{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.psSignatureBox{border:1px solid #333;min-height:55px;padding:4px 6px}
+.psFooterGrid{display:grid;grid-template-columns:1.2fr 2fr;gap:12px;margin-top:8px}
+.psFine{font-size:10px;color:#333;line-height:1.3}
+.psGraphBox{border-top:1px solid #333;padding-top:4px}
+.psHide{display:none}
+
+
+/* Statistics screen */
+.statsHero h2{margin-bottom:4px}
+.statsControl{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+.canDriveCard{border-radius:16px;padding:14px;margin-top:12px;border:1px solid #ddd;background:#f8fbff}
+.canDriveCard.ok{background:#e9f9ed;border-color:#aadfb5}
+.canDriveCard.warn{background:#fff3cd;border-color:#e5c45d}
+.canDriveCard.bad{background:#ffe4e4;border-color:#f1aaaa}
+.canDriveCard .big{font-size:25px;font-weight:900;margin:0 0 4px}
+.canDriveCard .sub{font-size:14px;color:#444;margin:0}
+.statsLimitCards{display:grid;grid-template-columns:1fr;gap:10px}
+.statLimit{border:1px solid #ddd;border-radius:14px;padding:12px;background:#fafafa}
+.statLimit.bad{background:#ffe4e4;border-color:#f1aaaa}
+.statLimit h3{margin:0 0 6px;font-size:16px;display:flex;justify-content:space-between;gap:8px}
+.statLimit .bar{height:10px;background:#ddd;border-radius:999px;overflow:hidden}
+.statLimit .fill{height:100%;background:#2c6d5e;width:0%}
+.statLimit.bad .fill{background:#d53636}
+.statLimit p{margin:6px 0 0;font-size:13px;color:#444}
+.statsRows{display:grid;gap:8px}
+.statRow{display:grid;grid-template-columns:1fr auto;gap:12px;border-bottom:1px solid #eee;padding:8px 0;align-items:start}
+.statRow strong{font-size:16px}
+.statRow span{color:#777;font-size:16px;text-align:right}
+.statRow small{display:block;color:#777;margin-top:4px;font-size:13px}
+.lastDrivingBox{background:#111;color:#fff;border-radius:14px;padding:14px;font-size:19px;font-weight:900}
+@media(max-width:390px){
+  .tabbar button span{font-size:10px}
+  .tabbar button{font-size:19px}
+}

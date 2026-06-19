@@ -54,6 +54,41 @@
       </section>
     </section>
 
+
+    <section id="statsScreen" class="screen">
+      <section class="card statsHero">
+        <h2>Driver Statistics</h2>
+        <p class="hint">Calculated from your saved Work/Rest blocks. Use as a helper only and keep your official diary correct.</p>
+        <div class="statsControl">
+          <label>Calculate as of
+            <input id="statsAsOf" type="datetime-local">
+          </label>
+          <button id="statsNowBtn" class="primary full">Calculate Statistics As Of Now</button>
+        </div>
+        <div id="canDriveCard" class="canDriveCard"></div>
+      </section>
+
+      <section class="card">
+        <h2>Driving limits</h2>
+        <div id="statsLimitCards" class="statsLimitCards"></div>
+      </section>
+
+      <section class="card">
+        <h2>Breaks due</h2>
+        <div id="statsBreaksDue" class="statsRows"></div>
+      </section>
+
+      <section class="card">
+        <h2>Last 7 days / 14 days</h2>
+        <div id="statsLongRange" class="statsRows"></div>
+      </section>
+
+      <section class="card">
+        <h2>Last finished driving</h2>
+        <div id="statsLastDriving" class="lastDrivingBox">No driving found.</div>
+      </section>
+    </section>
+
     <section id="diaryScreen" class="screen active">
       <div id="alerts" class="alerts"></div>
 
@@ -104,17 +139,51 @@
       </section>
     </section>
 
+    
     <section id="graphScreen" class="screen">
       <section class="card">
-        <h2>Work diary graph page</h2>
-        <p class="hint">This page shows your selected day in a graph style similar to a paper work diary page.</p>
-        <div class="graphMeta">
-          <div><strong id="graphDate">--</strong><span>Date</span></div>
-          <div><strong id="graphDriver">--</strong><span>Driver</span></div>
-          <div><strong id="graphBaseTime">--</strong><span>Base time</span></div>
+        <h2>Daily sheet details</h2>
+        <p class="hint">Fill these details so the graph page matches your paper work diary sheet more closely.</p>
+        <div id="graphDetailsForm" class="formGrid graphDetailsForm">
+          <label>Work diary no <input id="sheetWorkDiaryNo" data-day-detail="workDiaryNo" placeholder="e.g. VDW"></label>
+          <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" placeholder="e.g. 491838"></label>
+          <label>Number plate <input id="sheetNumberPlate" data-day-detail="numberPlate" placeholder="e.g. XQ01QZ"></label>
+          <label>Daily check time <input id="sheetDailyCheckTime" data-day-detail="dailyCheckTime" type="time"></label>
+          <label class="fullWidth">Comments / number plate change notes
+            <textarea id="sheetComments" data-day-detail="comments" rows="3" placeholder="Optional comments, delays, number plate change notes"></textarea>
+          </label>
+          <label class="checkLabel fullWidth">
+            <input id="sheetFitForDuty" data-day-detail="fitForDuty" type="checkbox">
+            Fit for Duty
+          </label>
+          <label class="checkLabel fullWidth">
+            <input id="sheetTwoUpEnabled" data-day-detail="twoUpEnabled" type="checkbox">
+            I am working with a two-up driver today
+          </label>
+          <label>Two-up driver name <input id="sheetTwoUpDriverName" data-day-detail="twoUpDriverName" placeholder="Optional"></label>
+          <label>Two-up licence no <input id="sheetTwoUpLicenceNumber" data-day-detail="twoUpLicenceNumber" placeholder="Optional"></label>
+          <label>Two-up scheme
+            <select id="sheetTwoUpScheme" data-day-detail="twoUpScheme">
+              <option value="Standard">Standard</option>
+              <option value="BFM">BFM</option>
+              <option value="AFM">AFM</option>
+            </select>
+          </label>
+          <label>Two-up base state <input id="sheetTwoUpBaseState" data-day-detail="twoUpBaseState" placeholder="e.g. VIC"></label>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>Work / rest change details</h2>
+        <p class="hint">The app automatically lists your change times from the selected blocks. Add the odometer and location so it matches your real work book.</p>
+        <div id="changeDetailsEditor"></div>
+      </section>
+
+      <section class="card">
+        <h2>Paper sheet preview</h2>
+        <p class="hint">This preview is designed to help you match your paper daily sheet. It also updates for two-up driver details when enabled.</p>
         <div class="graphWrap">
-          <div id="graphSvgHolder"></div>
+          <div id="paperSheetPreview"></div>
         </div>
       </section>
 
@@ -124,6 +193,7 @@
       </section>
     </section>
 
+
     <section id="settingsScreen" class="screen">
       <section class="card">
         <h2>Driver details</h2>
@@ -131,12 +201,14 @@
         <label>Licence number <input id="licenceNumber" placeholder="Enter licence number"></label>
         <label>Base time
           <select id="baseTimeZone">
-            <option value="Local phone time">Local phone time</option>
-            <option value="NSW/VIC/ACT/TAS - AEST/AEDT">NSW/VIC/ACT/TAS - AEST/AEDT</option>
-            <option value="Queensland - AEST">Queensland - AEST</option>
-            <option value="South Australia - ACST/ACDT">South Australia - ACST/ACDT</option>
-            <option value="Northern Territory - ACST">Northern Territory - ACST</option>
-            <option value="Western Australia - AWST">Western Australia - AWST</option>
+            <option value="ACT">ACT</option>
+            <option value="NSW">NSW</option>
+            <option value="NT">NT</option>
+            <option value="QLD">QLD</option>
+            <option value="SA">SA</option>
+            <option value="TAS">TAS</option>
+            <option value="VIC">VIC</option>
+            <option value="WA">WA</option>
           </select>
         </label>
         <button id="saveDriverSettings" class="primary full">Save driver details</button>
@@ -206,6 +278,7 @@
 
   <nav class="tabbar">
     <button data-tab="drivingScreen">↗<span>Driving</span></button>
+    <button data-tab="statsScreen">📊<span>Stats</span></button>
     <button data-tab="diaryScreen" class="active">👥<span>Work Diary</span></button>
     <button data-tab="graphScreen">📈<span>Graph</span></button>
     <button data-tab="settingsScreen">▣<span>Settings</span></button>
