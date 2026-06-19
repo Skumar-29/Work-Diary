@@ -174,3 +174,75 @@ textarea{font-size:16px;padding:10px;border-radius:10px;border:1px solid #bbb;ba
   .tabbar button span{font-size:10px}
   .tabbar button{font-size:19px}
 }
+
+.bookSetupBox{margin-top:14px;border-top:1px solid #eee;padding-top:12px}
+.bookSetupBox h3{font-size:17px;margin:0 0 8px}
+
+.twoUpRuleNote{background:#fff3cd;border:1px solid #e3bd4f;border-radius:12px;padding:10px;margin:10px 0;font-size:13px;color:#5f4500;line-height:1.35}
+
+
+/* Real work book PDF/SVG export */
+.realBookSheet{border:0!important;border-radius:0!important;padding:0!important;background:#fff!important;box-shadow:none!important}
+.realDiarySvg{display:block;background:white;width:100%;max-width:1120px;margin:0 auto}
+@media print{
+  @page{size:A4 landscape;margin:5mm}
+  body{margin:0!important;background:white!important}
+  .wrap{max-width:none!important;width:100%!important;margin:0!important}
+  .realDiarySvg{width:100%!important;height:auto!important}
+}
+
+.smartTip{background:#eef7ff;border:1px solid #cfe8ff;border-radius:12px;padding:9px 10px;margin:8px 0;font-size:13px;line-height:1.35;color:#333}
+
+.lockTip{background:#e9f9ed;border:1px solid #aadfb5;border-radius:12px;padding:9px 10px;margin:8px 0;font-size:13px;line-height:1.35;color:#174d22}
+
+.pageOverrideForm.disabled{opacity:.55;pointer-events:none}
+.pageOverrideForm input:disabled,.pageOverrideForm select:disabled{background:#f1f1f1;color:#777}
+
+/* Diary error audit */
+.auditSummary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.auditSummary .sumBox{border-radius:12px;padding:10px;text-align:center;background:#f5f5f5;border:1px solid #ddd}
+.auditSummary .sumBox strong{display:block;font-size:20px}
+.auditSummary .sumBox span{font-size:12px;color:#555}
+.auditList{display:grid;gap:8px}
+.auditItem{border:1px solid #ddd;border-radius:14px;padding:10px;background:#fff;text-align:left;width:100%}
+.auditItem.error{background:#ffe4e4;border-color:#f1aaaa}
+.auditItem.warn{background:#fff3cd;border-color:#e3c45d}
+.auditItem.info{background:#eef7ff;border-color:#cfe8ff}
+.auditItem strong{display:block;font-size:15px;margin-bottom:4px}
+.auditItem span{display:block;font-size:13px;color:#555}
+.auditItem small{display:block;font-size:12px;color:#777;margin-top:4px}
+.auditFocusBox{outline:4px solid #ff8a00!important;box-shadow:0 0 0 4px rgba(255,138,0,.25)!important;background:#fff8e8!important}
+.slot.auditFocus{outline:4px solid #ff8a00!important;outline-offset:-4px;box-shadow:inset 0 0 0 2px #111!important}
+input.auditField,select.auditField,textarea.auditField{outline:4px solid #ff8a00!important;background:#fff8e8!important}
+
+.auditFixPanel{display:none;margin:10px;border:2px solid #ff8a00;background:#fff8e8;border-radius:14px;padding:12px}
+.auditFixPanel.active{display:block}
+.auditFixPanel h3{margin:0 0 6px;font-size:17px}
+.auditFixPanel p{margin:6px 0;font-size:14px;line-height:1.35}
+.auditFixPanel .fixActions{display:flex;gap:8px;margin-top:10px}
+.auditFixPanel button{border:0;border-radius:10px;padding:9px 10px;font-weight:800;background:#2c6d5e;color:#fff}
+.auditFixPanel button.secondary{background:#eee;color:#111}
+.auditItem .suggestion{margin-top:7px;background:rgba(255,255,255,.65);border-radius:10px;padding:7px;color:#333;font-size:12px}
+
+.ruleHistoryBox{margin:12px 0;border-top:1px solid #eee;padding-top:12px}
+.ruleHistoryBox h3{font-size:17px;margin:0 0 8px}
+.historyList{margin-top:10px;display:grid;gap:8px}
+.historyItem{border:1px solid #ddd;border-radius:12px;padding:9px;background:#fafafa;font-size:13px}
+.historyItem strong{display:block;font-size:14px;margin-bottom:3px}
+.modeBadge{display:inline-block;border-radius:999px;padding:3px 7px;background:#eef7ff;border:1px solid #cfe8ff;font-size:12px;margin:2px 4px 2px 0}
+
+/* Compliance confidence and audit log */
+.confidenceBox{border-radius:14px;padding:12px;border:1px solid #ddd;background:#f5f5f5}
+.confidenceBox.safe{background:#e9f9ed;border-color:#aadfb5}
+.confidenceBox.warning{background:#fff3cd;border-color:#e3c45d}
+.confidenceBox.blocked{background:#ffe4e4;border-color:#f1aaaa}
+.confidenceBox h3{margin:0 0 6px;font-size:18px}
+.confidenceBox ul{margin:8px 0 0;padding-left:20px}
+.confidenceBox li{margin:4px 0;font-size:13px}
+.auditLogBox{margin-top:14px;border-top:1px solid #eee;padding-top:12px}
+.auditLogBox h3{font-size:17px;margin:0 0 8px}
+.auditLogList{display:grid;gap:7px;max-height:260px;overflow:auto;margin:8px 0}
+.auditLogItem{border:1px solid #ddd;border-radius:10px;padding:8px;background:#fafafa;font-size:12px}
+.auditLogItem strong{display:block;font-size:13px;margin-bottom:2px}
+.restTypeSelect{min-width:135px}
+.safeCalcNote{font-size:12px;color:#555;margin-top:6px;line-height:1.35}

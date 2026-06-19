@@ -52,6 +52,19 @@
         <h2>Today advice</h2>
         <div id="todayAdvice"></div>
       </section>
+
+      <section class="card">
+        <h2>Compliance confidence</h2>
+        <p class="hint">This tells you whether the app has enough information to safely calculate break advice for the selected/current date.</p>
+        <div id="complianceConfidence" class="confidenceBox"></div>
+      </section>
+
+      <section class="card">
+        <h2>Diary error check</h2>
+        <p class="hint">Checks current and saved past pages for missing details and possible rule issues. Tap any item to open that page and highlight the problem.</p>
+        <div id="auditSummary" class="auditSummary"></div>
+        <div id="drivingAuditList" class="auditList"></div>
+      </section>
     </section>
 
 
@@ -91,6 +104,7 @@
 
     <section id="diaryScreen" class="screen active">
       <div id="alerts" class="alerts"></div>
+      <div id="auditFixPanel" class="auditFixPanel"></div>
 
       <div class="legend">
         <span><i class="sw work"></i> Work / Drive</span>
@@ -111,37 +125,6 @@
       </div>
 
       <section class="card">
-        <h2>Add paper diary line</h2>
-        <div class="formGrid">
-          <label>Start date <input id="startDate" type="date"></label>
-          <label>Start time <input id="startTime" type="time" step="900" value="18:00"></label>
-          <label>End date <input id="endDate" type="date"></label>
-          <label>End time <input id="endTime" type="time" step="900" value="00:00"></label>
-          <label>Activity
-            <select id="activity">
-              <option value="work">Work / Driving</option>
-              <option value="rest">Rest</option>
-            </select>
-          </label>
-          <label>Note / location <input id="note" placeholder="e.g. Dubbo, page 45"></label>
-        </div>
-        <div class="actions">
-          <button id="addEntry" class="primary">Add to diary</button>
-          <button id="quickBFM" class="secondary">Load BFM 6pm sample</button>
-        </div>
-        <p class="hint">Tip: use 24-hour time. Midnight is <strong>00:00</strong> on the next date. Times are checked in 15-minute blocks.</p>
-      </section>
-
-      <section class="card">
-        <h2>BFM / fatigue checker</h2>
-        <div id="ruleCards" class="ruleCards"></div>
-        <div class="nextBreak" id="nextBreak"></div>
-      </section>
-    </section>
-
-    
-    <section id="graphScreen" class="screen">
-      <section class="card">
         <h2>Daily sheet details</h2>
         <p class="hint">Fill these details so the graph page matches your paper work diary sheet more closely.</p>
         <div id="graphDetailsForm" class="formGrid graphDetailsForm">
@@ -158,8 +141,9 @@
           </label>
           <label class="checkLabel fullWidth">
             <input id="sheetTwoUpEnabled" data-day-detail="twoUpEnabled" type="checkbox">
-            I am working with a two-up driver today
+            I am working with a two-up driver today — use two-up helper rules
           </label>
+          <p class="smartTip fullWidth">When carry-forward is ON in Settings, two-up details will continue onto the next daily sheet until you untick two-up or change the two-up driver details.</p>
           <label>Two-up driver name <input id="sheetTwoUpDriverName" data-day-detail="twoUpDriverName" placeholder="Optional"></label>
           <label>Two-up licence no <input id="sheetTwoUpLicenceNumber" data-day-detail="twoUpLicenceNumber" placeholder="Optional"></label>
           <label>Two-up scheme
@@ -173,11 +157,56 @@
         </div>
       </section>
 
+
+
+      <section class="card">
+        <h2>Edit selected page only</h2>
+        <p class="lockTip">Use this only if you need to correct the selected old page. It changes this date only and does not change future or previous pages.</p>
+        <label class="checkLabel">
+          <input id="unlockPageEdit" type="checkbox">
+          Unlock selected page details for editing
+        </label>
+        <div id="pageOverrideForm" class="formGrid pageOverrideForm">
+          <label>Driver name for this page <input id="pageDriverName" data-page-override="driverNameSnapshot" placeholder="Driver name"></label>
+          <label>Licence no for this page <input id="pageLicenceNumber" data-page-override="licenceNumberSnapshot" placeholder="Licence number"></label>
+          <label>Base state for this page
+            <select id="pageBaseState" data-page-override="baseStateSnapshot">
+              <option value="ACT">ACT</option>
+              <option value="NSW">NSW</option>
+              <option value="NT">NT</option>
+              <option value="QLD">QLD</option>
+              <option value="SA">SA</option>
+              <option value="TAS">TAS</option>
+              <option value="VIC">VIC</option>
+              <option value="WA">WA</option>
+            </select>
+          </label>
+          <label>Work diary no for this page <input id="pageWorkDiaryNo" data-page-override="workDiaryNo" placeholder="Work diary no"></label>
+          <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" placeholder="Page no"></label>
+          <label>Truck rego / number plate for this page <input id="pageNumberPlate" data-page-override="numberPlate" placeholder="Truck rego"></label>
+        </div>
+        <div class="actions vertical">
+          <button id="saveSelectedPageOnly" class="secondary">Save selected page only</button>
+          <button id="restoreSelectedPageDefaults" class="secondary">Restore selected page from defaults</button>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Work / rest change details</h2>
         <p class="hint">The app automatically lists your change times from the selected blocks. Add the odometer and location so it matches your real work book.</p>
         <div id="changeDetailsEditor"></div>
       </section>
+
+
+      <section class="card">
+        <h2>BFM / fatigue checker</h2>
+        <div id="ruleCards" class="ruleCards"></div>
+        <div class="nextBreak" id="nextBreak"></div>
+      </section>
+    </section>
+
+    
+    <section id="graphScreen" class="screen">
 
       <section class="card">
         <h2>Paper sheet preview</h2>
@@ -211,7 +240,32 @@
             <option value="WA">WA</option>
           </select>
         </label>
+        <label>Changes effective from date
+          <input id="settingsEffectiveDate" type="date">
+        </label>
+        <p class="smartTip">Changing driver/base/truck details will apply from this effective date forward. Previous daily sheets stay unchanged.</p>
         <button id="saveDriverSettings" class="primary full">Save driver details</button>
+
+        <div class="bookSetupBox">
+          <h3>Work diary book setup</h3>
+          <label class="checkLabel">
+            <input id="autoPageNumber" type="checkbox" checked>
+            Auto page number by date
+          </label>
+          <label class="checkLabel">
+            <input id="carryForwardTwoUp" type="checkbox" checked>
+            Carry forward two-up driver details until I turn it off
+          </label>
+          <div class="formGrid">
+            <label>First page date <input id="firstPageDate" type="date"></label>
+            <label>First page number <input id="firstPageNumber" inputmode="numeric" placeholder="e.g. 491838"></label>
+            <label>Default work diary no <input id="defaultWorkDiaryNo" placeholder="e.g. VDW"></label>
+            <label>Default number plate <input id="defaultNumberPlate" placeholder="e.g. XQ01QZ"></label>
+          </div>
+          <p class="hint">Example: if first page is 491838 today, tomorrow will show 491839 automatically. You can still override a specific day on the Graph page.</p>
+          <p class="smartTip">Default work diary no, truck rego and two-up defaults also follow the effective date above, so old pages are protected.</p>
+          <button id="saveBookSettings" class="secondary full">Save book setup</button>
+        </div>
       </section>
 
       <section class="card">
@@ -226,6 +280,38 @@
           <input id="restAsStationary" type="checkbox" checked>
           Count all rest as stationary rest for major-rest warning
         </label>
+
+        <div class="ruleHistoryBox">
+          <h3>Work option / rule history</h3>
+          <p class="smartTip">Use this whenever you change Standard/BFM, solo/two-up, or co-driver option. It applies from the effective date forward and old pages stay protected.</p>
+          <div class="formGrid">
+            <label>Rule effective from date <input id="ruleEffectiveDate" type="date"></label>
+            <label>My work option
+              <select id="ruleMyScheme">
+                <option value="Standard">Standard</option>
+                <option value="BFM">BFM</option>
+                <option value="AFM">AFM — record only until AFM conditions entered</option>
+              </select>
+            </label>
+            <label>Driver mode
+              <select id="ruleDriverMode">
+                <option value="solo">Solo</option>
+                <option value="twoUp">Two-up</option>
+              </select>
+            </label>
+            <label>Two-up co-driver option
+              <select id="ruleCoDriverScheme">
+                <option value="">Not applicable</option>
+                <option value="Standard">Standard</option>
+                <option value="BFM">BFM</option>
+                <option value="AFM">AFM</option>
+              </select>
+            </label>
+          </div>
+          <button id="saveRuleHistory" class="secondary full">Save work option change</button>
+          <div id="ruleHistoryList" class="historyList"></div>
+        </div>
+
         <div class="actions vertical">
           <button id="exportCsv" class="secondary">Export CSV / Excel</button>
           <button id="exportPdf" class="secondary">Export PDF report</button>
@@ -244,6 +330,14 @@
           <p id="backupReminderStatus" class="hint">Backup reminder: Off</p>
 
           <button id="clearDay" class="secondary">Clear selected day</button>
+
+        <div class="auditLogBox">
+          <h3>Audit log</h3>
+          <p class="hint">Records important app changes such as rule changes, selected-page edits, imports and clears. This is for your personal checking.</p>
+          <div id="auditLogList" class="auditLogList"></div>
+          <button id="clearAuditLog" class="secondary full">Clear audit log only</button>
+        </div>
+
           <button id="clearAll" class="danger">Clear all saved data</button>
         </div>
       </section>
