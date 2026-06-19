@@ -272,3 +272,61 @@ input[data-uppercase-only="true"]{text-transform:uppercase}
 .slot.locked{opacity:.45;cursor:not-allowed}
 .pageLockedOverlay{background:#ffe4e4;border:2px solid #d53636;border-radius:12px;padding:10px;margin:8px 0;font-weight:800;color:#7a0000}
 .auditActions button{touch-action:manipulation}
+
+
+/* Visual layout fix */
+.formGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:14px 18px;
+  align-items:end;
+}
+.formGrid label{min-width:0}
+.formGrid input,.formGrid select,.formGrid textarea{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+@media (max-width: 640px){
+  .formGrid{grid-template-columns:1fr!important}
+  .formGrid label{grid-column:auto!important}
+}
+.screen{padding-bottom:150px}
+.toastMessage{
+  position:fixed;
+  left:50%;
+  bottom:calc(92px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(20px);
+  background:rgba(20,20,20,.92);
+  color:#fff;
+  padding:10px 18px;
+  border-radius:999px;
+  font-weight:800;
+  font-size:15px;
+  z-index:9999;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease, transform .2s ease;
+  box-shadow:0 8px 24px rgba(0,0,0,.22);
+}
+.toastMessage.show{
+  opacity:1;
+  transform:translateX(-50%) translateY(0);
+}
+.realBookSheet{
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.realDiarySvg{
+  display:block;
+  width:100%;
+  max-width:1180px;
+  height:auto;
+  margin:0 auto;
+}
+@media print{
+  @page{size:A4 landscape;margin:4mm}
+  html,body{background:#fff!important}
+  .realDiarySvg{width:100%!important;height:auto!important;max-height:190mm!important}
+}

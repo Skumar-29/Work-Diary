@@ -205,3 +205,10 @@ Layout, optional audit, page numbering and cancelled-page lock update:
 
 Patch:
 - Swipe/tap Work block edits now immediately update used-page auto numbering.
+
+
+Visual layout and save toast update:
+- Settings forms now stack safely on iPhone, preventing overlapping fields like My work option and First page number.
+- Added small auto-hiding Saved toast notification for save actions.
+- Rebuilt the PDF/Graph SVG again with a shorter, more balanced layout closer to the sample sheet and less overlap risk.
+- Added extra bottom padding so the tab bar does not cover settings content.
