@@ -246,3 +246,18 @@ input.auditField,select.auditField,textarea.auditField{outline:4px solid #ff8a00
 .auditLogItem strong{display:block;font-size:13px;margin-bottom:2px}
 .restTypeSelect{min-width:135px}
 .safeCalcNote{font-size:12px;color:#555;margin-top:6px;line-height:1.35}
+
+.cancelledWatermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:72px;font-weight:900;color:rgba(210,0,0,.18);transform:rotate(-20deg);text-align:center;z-index:5}
+.statusBanner{background:#ffe4e4;border:2px solid #d53636;border-radius:12px;padding:10px;margin:8px 0;font-weight:800;color:#7a0000}
+.statusBanner.skipped{background:#fff3cd;border-color:#e3c45d;color:#604800}
+.realBookSheet{position:relative}
+
+input[data-uppercase-only="true"]{text-transform:uppercase}
+
+.dataMigrationBadge{display:inline-block;border-radius:999px;background:#e9f9ed;border:1px solid #aadfb5;color:#174d22;font-size:12px;padding:3px 8px;margin-left:6px}
+
+.auditActions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.auditActions button{border:0;border-radius:10px;padding:8px 10px;font-weight:800}
+.auditOpenBtn{background:#2c6d5e;color:#fff}
+.auditOptionalBtn{background:#eee;color:#111}
+.dismissedAuditBox{background:#f5f5f5;border:1px dashed #bbb;border-radius:12px;padding:8px;margin-top:8px;font-size:12px;color:#555}

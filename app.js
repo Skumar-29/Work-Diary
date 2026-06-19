@@ -96,7 +96,8 @@ let state = {
   },
   settingsHistory: [],
   ruleHistory: [],
-  auditLog: []
+  auditLog: [],
+  dismissedAudit: {}
 };
 
 const $ = id => document.getElementById(id);
@@ -126,6 +127,70 @@ function renderAuditLog(){
       <small>${escapeHtml(new Date(i.at).toLocaleString("en-AU"))} • Page date ${escapeHtml(i.date || "")}</small>
     </div>`).join("");
 }
+
+
+function enforceUppercaseOnly(e){
+  const el = e.target;
+  if(!el || !el.dataset || el.dataset.uppercaseOnly !== "true") return;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const upper = String(el.value || "").toUpperCase();
+  if(el.value !== upper){
+    el.value = upper;
+    try{ el.setSelectionRange(start, end); }catch(err){}
+  }
+}
+
+function enforceNumericOnly(e){
+  const el = e.target;
+  if(!el || !el.dataset || el.dataset.numericOnly !== "true") return;
+  const cleaned = String(el.value || "").replace(/\D+/g, "");
+  if(el.value !== cleaned) el.value = cleaned;
+}
+
+
+function ensureDismissedAudit(){
+  if(!state.dismissedAudit || typeof state.dismissedAudit !== "object") state.dismissedAudit = {};
+}
+function auditIgnoreKey(kind, date, extra){
+  return `${kind}|${date}|${extra || ""}`;
+}
+function isAuditDismissed(kind, date, extra){
+  ensureDismissedAudit();
+  return !!state.dismissedAudit[auditIgnoreKey(kind,date,extra)];
+}
+function dismissOptionalAudit(kind, date, extra, label){
+  ensureDismissedAudit();
+  const key = auditIgnoreKey(kind,date,extra);
+  state.dismissedAudit[key] = {
+    kind,
+    date,
+    extra: extra || "",
+    label: label || "Optional audit item",
+    at: new Date().toISOString()
+  };
+  addAuditLog("Audit item marked not required", `${date}: ${label || kind}`);
+  save();
+  renderAuditList();
+  renderAuditLog();
+}
+function restoreOptionalAudit(key){
+  ensureDismissedAudit();
+  delete state.dismissedAudit[key];
+  addAuditLog("Optional audit item restored", key);
+  save();
+  renderAuditList();
+  renderAuditLog();
+}
+function dismissedOptionalAuditHtml(){
+  ensureDismissedAudit();
+  const items = Object.entries(state.dismissedAudit || {}).slice(0,30);
+  if(!items.length) return "";
+  return `<div class="dismissedAuditBox"><strong>Optional items marked Not required:</strong><br>
+    ${items.map(([k,v])=>`${escapeHtml(v.date || "")}: ${escapeHtml(v.label || v.kind || "")} <button type="button" onclick="restoreOptionalAudit('${escapeHtml(k)}')">Show again</button>`).join("<br>")}
+  </div>`;
+}
+
 function clearAuditLogOnly(){
   if(confirm("Clear audit log only? This does not delete diary pages.")){
     state.auditLog = [];
@@ -371,6 +436,100 @@ function twoUpRuleWarningHtml(){
   return `<div class="twoUpRuleNote"><strong>Two-up helper mode:</strong> ${escapeHtml(activeRules().helperNote || "Verify two-up requirements against your official diary and NHVR rules.")}</div>`;
 }
 
+
+function safeClone(obj){
+  try{return JSON.parse(JSON.stringify(obj || {}));}catch(e){return {};}
+}
+function normalizeDayDetailForMigration(d){
+  const base = defaultDayDetail();
+  const out = {...base, ...(d || {})};
+  if(!Array.isArray(out.changeRows)) out.changeRows = [];
+  out.pageStatus = out.pageStatus || "active";
+  out.pageStatusReason = out.pageStatusReason || "";
+  out.twoUpScheme = out.twoUpScheme || "BFM";
+  out.numberPlate = (out.numberPlate || "").toUpperCase();
+  out.twoUpLicenceNumber = (out.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  out.licenceNumberSnapshot = (out.licenceNumberSnapshot || "").replace(/\D+/g, "");
+  out.changeRows = out.changeRows.map(r => ({
+    time: r.time || "",
+    activity: r.activity || "rest",
+    odometer: String(r.odometer || "").replace(/\D+/g, ""),
+    location: r.location || "",
+    note: r.note || "",
+    restType: r.restType || (r.activity === "work" ? "work" : "")
+  }));
+  return out;
+}
+function migrateImportedBackup(backup){
+  const b = safeClone(backup);
+  const migrated = {
+    selectedDate: b.selectedDate || toKey(new Date()),
+    scheme: b.scheme || "BFM",
+    restAsStationary: b.restAsStationary !== undefined ? !!b.restAsStationary : true,
+    slots: b.slots && typeof b.slots === "object" ? b.slots : {},
+    entries: Array.isArray(b.entries) ? b.entries : [],
+    profile: b.profile || {},
+    dayDetails: b.dayDetails && typeof b.dayDetails === "object" ? b.dayDetails : {},
+    bookSettings: b.bookSettings || {},
+    settingsHistory: Array.isArray(b.settingsHistory) ? b.settingsHistory : [],
+    ruleHistory: Array.isArray(b.ruleHistory) ? b.ruleHistory : [],
+    auditLog: Array.isArray(b.auditLog) ? b.auditLog : [],
+    dismissedAudit: b.dismissedAudit && typeof b.dismissedAudit === "object" ? b.dismissedAudit : {},
+    backupReminder: b.backupReminder || {},
+    schemaVersion: b.schemaVersion || b.backupVersion || 1
+  };
+
+  Object.keys(migrated.slots).forEach(key => {
+    const arr = Array.isArray(migrated.slots[key]) ? migrated.slots[key] : [];
+    migrated.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => arr[i] === "work" ? "work" : "rest");
+  });
+
+  Object.keys(migrated.dayDetails).forEach(key => {
+    migrated.dayDetails[key] = normalizeDayDetailForMigration(migrated.dayDetails[key]);
+  });
+
+  migrated.profile.driverName = migrated.profile.driverName || "";
+  migrated.profile.licenceNumber = (migrated.profile.licenceNumber || "").replace(/\D+/g, "");
+  migrated.profile.baseTimeZone = migrated.profile.baseTimeZone || "NSW";
+  migrated.bookSettings = {
+    autoPageNumber: migrated.bookSettings.autoPageNumber !== undefined ? !!migrated.bookSettings.autoPageNumber : true,
+    carryForwardTwoUp: migrated.bookSettings.carryForwardTwoUp !== undefined ? !!migrated.bookSettings.carryForwardTwoUp : true,
+    firstPageDate: migrated.bookSettings.firstPageDate || migrated.selectedDate,
+    firstPageNumber: migrated.bookSettings.firstPageNumber || "",
+    defaultWorkDiaryNo: migrated.bookSettings.defaultWorkDiaryNo || "",
+    defaultNumberPlate: (migrated.bookSettings.defaultNumberPlate || "").toUpperCase(),
+    defaultTwoUp: migrated.bookSettings.defaultTwoUp || {enabled:false, twoUpDriverName:"", twoUpLicenceNumber:"", twoUpScheme:"BFM", twoUpBaseState:""}
+  };
+  migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber = (migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
+  migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
+  migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
+  return migrated;
+}
+function migrateCurrentState(){
+  const migrated = migrateImportedBackup(state || {});
+  state = {...state, ...migrated};
+  ensureProfile();
+  ensureBackupReminder();
+  ensureDayDetailsContainer();
+  ensureBookSettings();
+  if(typeof ensureSettingsHistory === "function") ensureSettingsHistory();
+  if(typeof ensureRuleHistory === "function") ensureRuleHistory();
+  if(!Array.isArray(state.auditLog)) state.auditLog = [];
+  state.schemaVersion = APP_SCHEMA_VERSION;
+}
+function checkDataHealth(){
+  migrateCurrentState();
+  save();
+  const status = $("dataHealthStatus");
+  const dates = Object.keys(state.slots || {}).length;
+  const detailDates = Object.keys(state.dayDetails || {}).length;
+  const msg = `Data OK. Schema v${APP_SCHEMA_VERSION}. Saved block days: ${dates}. Detail pages: ${detailDates}. Older backups will be migrated on import.`;
+  if(status) status.textContent = msg;
+  alert(msg);
+}
+
+
 function save(){
   ensureProfile();
   ensureBackupReminder();
@@ -379,6 +538,7 @@ function save(){
   ensureSettingsHistory();
   ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog=[];
+  ensureDismissedAudit();
   localStorage.setItem("truckDiaryPWA", JSON.stringify(state));
 }
 function load(){
@@ -393,6 +553,7 @@ function load(){
   ensureSettingsHistory();
   ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog=[];
+  migrateCurrentState();
 }
 function isWork(key, idx){ return getSlot(key, idx) === "work"; }
 function isRestType(type){ return type === "rest"; }
@@ -716,6 +877,9 @@ function totalsForDay(){
 }
 function checkDayWarnings(){
   const warns=[];
+  if(isPageCancelledOrSkipped(state.selectedDate)){
+    return [{type:"warn", text:`This page is marked ${pageStatusLabel(state.selectedDate)}. Do not use this page for break/fatigue advice.`}];
+  }
   const rules = activeRules();
   let anyBreach=false;
   for(let i=0;i<SLOTS_PER_DAY;i++) if(slotBreaches(state.selectedDate,i)) anyBreach=true;
@@ -888,6 +1052,13 @@ function auditDate(key){
     });
   };
 
+  if(isPageCancelledOrSkipped(key)){
+    add("info","Page is marked cancelled/skipped",`${pageStatusLabel(key)}${detail.pageStatusReason ? ": " + detail.pageStatusReason : ""}`,{type:"field", field:"sheetPageStatus"},"No fatigue calculation is applied to this marked page. Make sure the paper book also clearly shows the page was crossed out/cancelled or skipped, and use the correct next page number on the next usable page.");
+    state.selectedDate = oldDate;
+    return errors;
+  }
+
+
   if(!detail.driverNameSnapshot && !(state.profile && state.profile.driverName)) add("error","Missing driver name","Driver name is empty for this page.",{type:"field", field:"pageDriverName"},fieldFix("driver name"));
   if(!detail.licenceNumberSnapshot && !(state.profile && state.profile.licenceNumber)) add("error","Missing licence number","Licence number is empty for this page.",{type:"field", field:"pageLicenceNumber"},fieldFix("licence number"));
   if(!detail.baseStateSnapshot && !(state.profile && state.profile.baseTimeZone)) add("error","Missing base state","Base state/time zone is empty for this page.",{type:"field", field:"pageBaseState"},"Choose the correct base state for this selected page. If your base changed from a date onward, update Settings with the correct effective date.");
@@ -917,7 +1088,22 @@ function auditDate(key){
   const changes = syncChangeRowsForDay(key);
   const missingLocation = changes.filter(r => !r.location && !r.note);
   if(changes.length > 1 && missingLocation.length){
-    add("warn","Missing work/rest change locations",`${missingLocation.length} change row(s) have no location/note.`,{type:"section", section:"changeDetailsEditor"},"Add the town/suburb/rest area or a note for each work/rest change so the PDF matches your paper diary.");
+    const locKey = missingLocation.map(r => r.time).join(",");
+    if(!isAuditDismissed("missing_location", key, locKey)){
+      const beforeLen = errors.length;
+      add("warn","Missing work/rest change locations",`${missingLocation.length} change row(s) have no location/note.`,{type:"section", section:"changeDetailsEditor"},"Add the town/suburb/rest area or a note for each work/rest change so the PDF matches your paper diary.");
+      errors[beforeLen].optionalDismiss = {kind:"missing_location", date:key, extra:locKey, label:"Missing work/rest change locations"};
+    }
+  }
+
+  const missingOdometer = changes.filter(r => !r.odometer);
+  if(changes.length > 1 && missingOdometer.length){
+    const odoKey = missingOdometer.map(r => r.time).join(",");
+    if(!isAuditDismissed("missing_odometer", key, odoKey)){
+      const beforeLen = errors.length;
+      add("warn","Missing odometer readings",`${missingOdometer.length} change row(s) have no odometer reading.`,{type:"section", section:"changeDetailsEditor"},"Enter odometer readings if you want the app/PDF to match your paper diary exactly. If your paper page does not require it for this situation, mark this optional item Not required.");
+      errors[beforeLen].optionalDismiss = {kind:"missing_odometer", date:key, extra:odoKey, label:"Missing odometer readings"};
+    }
   }
 
   const t = totalsForDay();
@@ -1013,15 +1199,29 @@ function renderAuditList(){
     holder.innerHTML = `<div class="alert ok">No diary errors found in saved pages.</div>`;
     return;
   }
-  holder.innerHTML = errors.slice(0,60).map((e,idx)=>`
-    <button class="auditItem ${e.severity}" data-audit-index="${idx}">
+  holder.innerHTML = errors.slice(0,60).map((e,idx)=>{
+    const opt = e.optionalDismiss ? `<button type="button" class="auditOptionalBtn" data-audit-dismiss="${idx}">Not required</button>` : "";
+    return `
+    <div class="auditItem ${e.severity}" data-audit-card="${idx}">
       <strong>${escapeHtml(e.title)}</strong>
       <span>${escapeHtml(e.message)}</span>
       <small>Date: ${escapeHtml(fmtDateLong(e.date))} • Page: ${escapeHtml(e.pageNo)}</small>
       <div class="suggestion"><strong>Possible fix:</strong> ${escapeHtml(e.suggestion)}</div>
-    </button>`).join("");
+      <div class="auditActions">
+        <button type="button" class="auditOpenBtn" data-audit-index="${idx}">Open error</button>
+        ${opt}
+      </div>
+    </div>`}).join("") + dismissedOptionalAuditHtml();
   holder.querySelectorAll("[data-audit-index]").forEach(btn=>{
     btn.onclick = () => openAuditError(errors[Number(btn.dataset.auditIndex)]);
+  });
+  holder.querySelectorAll("[data-audit-dismiss]").forEach(btn=>{
+    btn.onclick = () => {
+      const e = errors[Number(btn.dataset.auditDismiss)];
+      if(e && e.optionalDismiss){
+        dismissOptionalAudit(e.optionalDismiss.kind, e.optionalDismiss.date, e.optionalDismiss.extra, e.optionalDismiss.label);
+      }
+    };
   });
 }
 function switchToTab(tabId){
@@ -1159,7 +1359,7 @@ function renderChangeDetailsEditor(){
     <tr>
       <td class="readonlyCell">${escapeHtml(r.time)}</td>
       <td class="readonlyCell">${escapeHtml(activityLabel(r.activity))}</td>
-      <td><input data-change-index="${i}" data-change-field="odometer" value="${escapeHtml(r.odometer)}" placeholder="Optional"></td>
+      <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${escapeHtml(r.odometer)}" placeholder="Odometer"></td>
       <td><input data-change-index="${i}" data-change-field="location" value="${escapeHtml(r.location)}" placeholder="Town / suburb / rest area"></td>
       <td>
         ${r.activity === "rest" ? `
@@ -1247,10 +1447,34 @@ function buildPaperGraphSvg(key){
     <path d="${d}" fill="none" stroke="#1a38d9" stroke-width="2.4"/>
   </svg>`;
 }
+
+function selectedPageStatus(key=state.selectedDate){
+  const d = ensureDayDetail(key);
+  return d.pageStatus || "active";
+}
+function isPageCancelledOrSkipped(key=state.selectedDate){
+  const s = selectedPageStatus(key);
+  return s === "cancelled" || s === "skipped";
+}
+function pageStatusLabel(key=state.selectedDate){
+  const s = selectedPageStatus(key);
+  if(s === "cancelled") return "CANCELLED / VOID PAGE";
+  if(s === "skipped") return "SKIPPED / UNUSED PAGE";
+  return "ACTIVE PAGE";
+}
+function renderPageStatusBanner(){
+  const alerts = $("alerts");
+  if(!alerts) return "";
+  return "";
+}
+
 function buildPaperSheetHtml(){
   ensureProfile();
   const key = state.selectedDate;
   const detail = ensureDayDetail(key);
+  const pageStatus = detail.pageStatus || "active";
+  const pageStatusText = pageStatusLabel(key);
+  const pageStatusReason = detail.pageStatusReason || "";
   const changeRows = syncChangeRowsForDay(key);
   const totals = totalsForDay();
   const d = fromKey(key);
@@ -1456,9 +1680,12 @@ function buildPaperSheetHtml(){
 
     ${svgText(815,733,"Two-up Driver Signature:",11)}
     ${svgRect(815,737,190,28)}
+    ${pageStatus !== "active" ? `<text x="512" y="395" font-size="72" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 512 395)">${escapeHtml(pageStatusText)}</text>` : ""}
+    ${pageStatus !== "active" ? svgText(512,430,pageStatusReason,18,"#d53636","700",'text-anchor="middle"') : ""}
   </svg>`;
 
-  return `<div class="paperSheet realBookSheet">${svg}</div>`;
+  const banner = pageStatus !== "active" ? `<div class="statusBanner ${pageStatus === "skipped" ? "skipped" : ""}">${escapeHtml(pageStatusText)}${pageStatusReason ? ": " + escapeHtml(pageStatusReason) : ""}</div>` : "";
+  return `<div class="paperSheet realBookSheet">${banner}${svg}</div>`;
 }
 function renderGraphPreviewOnly(){
   const holder = $("paperSheetPreview");
@@ -1473,7 +1700,7 @@ function renderPageOverrideForm(){
   const unlocked = $("unlockPageEdit") ? $("unlockPageEdit").checked : false;
   const setVal = (id, value) => { const el=$(id); if(el) el.value = value || ""; };
   setVal("pageDriverName", detail.driverNameSnapshot || state.profile.driverName || "");
-  setVal("pageLicenceNumber", detail.licenceNumberSnapshot || state.profile.licenceNumber || "");
+  setVal("pageLicenceNumber", (detail.licenceNumberSnapshot || state.profile.licenceNumber || "").replace(/\D+/g, ""));
   setVal("pageBaseState", detail.baseStateSnapshot || state.profile.baseTimeZone || "NSW");
   setVal("pageWorkDiaryNo", detail.workDiaryNo || "");
   setVal("pagePageNo", detail.pageNo || "");
@@ -1495,11 +1722,11 @@ function saveSelectedPageOnly(){
     return;
   }
   detail.driverNameSnapshot = $("pageDriverName").value.trim();
-  detail.licenceNumberSnapshot = $("pageLicenceNumber").value.trim();
+  detail.licenceNumberSnapshot = $("pageLicenceNumber").value.replace(/\D+/g, "");
   detail.baseStateSnapshot = $("pageBaseState").value;
   detail.workDiaryNo = $("pageWorkDiaryNo").value.trim();
   detail.pageNo = $("pagePageNo").value.trim();
-  detail.numberPlate = $("pageNumberPlate").value.trim();
+  detail.numberPlate = $("pageNumberPlate").value.trim().toUpperCase();
 
   detail.workDiaryNoManual = true;
   detail.pageNoManual = true;
@@ -1536,22 +1763,30 @@ function renderGraphForm(){
   const setChk = (id, value) => { const el=$(id); if(el) el.checked = !!value; };
   setVal("sheetWorkDiaryNo", detail.workDiaryNo);
   setVal("sheetPageNo", detail.pageNo);
+  setVal("sheetPageStatus", detail.pageStatus || "active");
+  setVal("sheetPageStatusReason", detail.pageStatusReason || "");
   setVal("sheetNumberPlate", detail.numberPlate);
   setVal("sheetDailyCheckTime", detail.dailyCheckTime);
   const comments = $("sheetComments"); if(comments && comments.value !== String(detail.comments || "")) comments.value = detail.comments || "";
   setChk("sheetFitForDuty", detail.fitForDuty);
   setChk("sheetTwoUpEnabled", detail.twoUpEnabled);
   setVal("sheetTwoUpDriverName", detail.twoUpDriverName);
-  setVal("sheetTwoUpLicenceNumber", detail.twoUpLicenceNumber);
+  setVal("sheetTwoUpLicenceNumber", (detail.twoUpLicenceNumber || "").replace(/\D+/g, ""));
   setVal("sheetTwoUpScheme", detail.twoUpScheme || "BFM");
   setVal("sheetTwoUpBaseState", detail.twoUpBaseState);
 }
 function updateDayDetailFromGraphForm(){
   const detail = ensureDayDetail(state.selectedDate);
+  const oldPageStatus = detail.pageStatus || "active";
   document.querySelectorAll("[data-day-detail]").forEach(el => {
     const key = el.dataset.dayDetail;
     detail[key] = el.type === "checkbox" ? !!el.checked : el.value;
   });
+  detail.numberPlate = (detail.numberPlate || "").toUpperCase();
+  detail.twoUpLicenceNumber = (detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  if((detail.pageStatus || "active") !== oldPageStatus){
+    addAuditLog("Page status changed", `${state.selectedDate}: ${oldPageStatus} -> ${detail.pageStatus || "active"}. ${detail.pageStatusReason || ""}`);
+  }
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
   detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
   save();
@@ -1612,7 +1847,7 @@ function applyAutoDefaultsToDay(key){
     detail.workDiaryNo = rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo || "";
   }
   if((rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate) && !detail.numberPlateManual){
-    detail.numberPlate = rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate || "";
+    detail.numberPlate = (rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate || "").toUpperCase();
   }
   if(state.bookSettings.autoPageNumber){
     const calc = calculatedPageNumberForDate(key);
@@ -1653,7 +1888,7 @@ function updateTwoUpCarryForwardFromDay(){
   state.bookSettings.defaultTwoUp = {
     enabled: !!detail.twoUpEnabled,
     twoUpDriverName: detail.twoUpDriverName || "",
-    twoUpLicenceNumber: detail.twoUpLicenceNumber || "",
+    twoUpLicenceNumber: (detail.twoUpLicenceNumber || "").replace(/\D+/g, ""),
     twoUpScheme: detail.twoUpScheme || "BFM",
     twoUpBaseState: detail.twoUpBaseState || ""
   };
@@ -1744,7 +1979,7 @@ function saveBookSettings(){
   state.bookSettings.firstPageDate = $("firstPageDate").value || state.selectedDate;
   state.bookSettings.firstPageNumber = $("firstPageNumber").value.trim();
   state.bookSettings.defaultWorkDiaryNo = $("defaultWorkDiaryNo").value.trim();
-  state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim();
+  state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
   const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
   saveSettingsRecord(effectiveDate);
   updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
@@ -1757,7 +1992,7 @@ function saveBookSettings(){
       if(calc) d.pageNo = calc;
     }
     if(state.bookSettings.defaultWorkDiaryNo && !d.workDiaryNo) d.workDiaryNo = state.bookSettings.defaultWorkDiaryNo;
-    if(state.bookSettings.defaultNumberPlate && !d.numberPlate) d.numberPlate = state.bookSettings.defaultNumberPlate;
+    if(state.bookSettings.defaultNumberPlate && !d.numberPlate) d.numberPlate = state.bookSettings.defaultNumberPlate.toUpperCase();
   });
 
   if(state.bookSettings.carryForwardTwoUp){
@@ -1925,6 +2160,10 @@ function complianceIssuesForDate(key){
   const detail = ensureDayDetail(key);
   const issues = [];
   const blockers = [];
+  if(isPageCancelledOrSkipped(key)){
+    issues.push(`Marked cancelled/skipped page: ${pageStatusLabel(key)}. No break advice should be used for this page.`);
+    return {blockers, issues};
+  }
 
   if(hasAFMInRuleHistoryForDate(key)){
     blockers.push("AFM is selected. AFM certificate conditions are not entered, so the app cannot safely calculate AFM fatigue limits.");
@@ -2067,7 +2306,7 @@ function renderTotals(){
 function renderDriverSettings(){
   ensureProfile();
   $("driverName").value = state.profile.driverName || "";
-  $("licenceNumber").value = state.profile.licenceNumber || "";
+  $("licenceNumber").value = (state.profile.licenceNumber || "").replace(/\D+/g, "");
   $("baseTimeZone").value = state.profile.baseTimeZone || "Local phone time";
 }
 function renderAll(){
@@ -2243,6 +2482,8 @@ function buildJsonBackup(){
   return {
     app: "Truck Work Diary Checker",
     backupVersion: 1,
+    schemaVersion: APP_SCHEMA_VERSION,
+    appBuild: APP_BUILD_NAME,
     exportedAt: new Date().toISOString(),
     selectedDate: state.selectedDate,
     scheme: state.scheme,
@@ -2255,6 +2496,7 @@ function buildJsonBackup(){
     settingsHistory: state.settingsHistory || [],
     ruleHistory: state.ruleHistory || [],
     auditLog: state.auditLog || [],
+    dismissedAudit: state.dismissedAudit || {},
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -2323,26 +2565,29 @@ function importJsonBackupFromFile(file){
       if(!confirm("Import this backup? This will replace the app data currently saved on this phone.")){
         return;
       }
-      state.selectedDate = backup.selectedDate || toKey(new Date());
-      state.scheme = backup.scheme || "BFM";
-      state.restAsStationary = backup.restAsStationary !== undefined ? !!backup.restAsStationary : true;
-      state.slots = backup.slots || {};
-      state.entries = Array.isArray(backup.entries) ? backup.entries : [];
+      const migrated = migrateImportedBackup(backup);
+      state.selectedDate = migrated.selectedDate || toKey(new Date());
+      state.scheme = migrated.scheme || "BFM";
+      state.restAsStationary = migrated.restAsStationary !== undefined ? !!migrated.restAsStationary : true;
+      state.slots = migrated.slots || {};
+      state.entries = Array.isArray(migrated.entries) ? migrated.entries : [];
       state.activeTimer = null;
-      state.profile = backup.profile || {driverName:"", licenceNumber:"", baseTimeZone:"NSW"};
-      state.dayDetails = backup.dayDetails || {};
-      state.bookSettings = backup.bookSettings || state.bookSettings || {};
-      state.settingsHistory = backup.settingsHistory || [];
-      state.ruleHistory = backup.ruleHistory || [];
-      state.auditLog = backup.auditLog || [];
-      state.backupReminder = backup.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
+      state.profile = migrated.profile || {driverName:"", licenceNumber:"", baseTimeZone:"NSW"};
+      state.dayDetails = migrated.dayDetails || {};
+      state.bookSettings = migrated.bookSettings || state.bookSettings || {};
+      state.settingsHistory = migrated.settingsHistory || [];
+      state.ruleHistory = migrated.ruleHistory || [];
+      state.auditLog = migrated.auditLog || [];
+      state.dismissedAudit = migrated.dismissedAudit || {};
+      state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
+      state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
       ensureBackupReminder();
       ensureDayDetailsContainer();
       ensureBookSettings();
       save();
       renderAll();
-      addAuditLog("JSON backup imported", "Backup imported and replaced local app data."); save(); alert("Backup imported successfully.");
+      addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); alert("Backup imported successfully.");
     }catch(e){
       alert("Could not import backup. Please select a valid JSON backup file.");
     }finally{
@@ -2356,7 +2601,7 @@ function importJsonBackupFromFile(file){
 function saveDriverSettings(){
   ensureProfile();
   state.profile.driverName = $("driverName").value.trim();
-  state.profile.licenceNumber = $("licenceNumber").value.trim();
+  state.profile.licenceNumber = $("licenceNumber").value.replace(/\D+/g, "");
   state.profile.baseTimeZone = $("baseTimeZone").value;
   const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
   saveSettingsRecord(effectiveDate);
@@ -2401,6 +2646,8 @@ function stopTimer(){
 }
 
 function setup(){
+  document.addEventListener("input", enforceNumericOnly);
+  document.addEventListener("input", enforceUppercaseOnly);
   load();
   $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);save();renderAll();}
   $("nextDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,1);save();renderAll();}
@@ -2420,6 +2667,7 @@ function setup(){
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
   $("exportJsonBackup").onclick=exportJsonBackup;
+  if($("checkDataHealth")) $("checkDataHealth").onclick=checkDataHealth;
   $("shareJsonBackup").onclick=shareJsonBackup;
   $("importJsonBackup").onclick=()=>$("jsonImportFile").click();
   $("jsonImportFile").onchange=e=>importJsonBackupFromFile(e.target.files[0]);

@@ -129,8 +129,18 @@
         <p class="hint">Fill these details so the graph page matches your paper work diary sheet more closely.</p>
         <div id="graphDetailsForm" class="formGrid graphDetailsForm">
           <label>Work diary no <input id="sheetWorkDiaryNo" data-day-detail="workDiaryNo" placeholder="e.g. VDW"></label>
-          <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" placeholder="e.g. 491838"></label>
-          <label>Number plate <input id="sheetNumberPlate" data-day-detail="numberPlate" placeholder="e.g. XQ01QZ"></label>
+          <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="e.g. 491838"></label>
+          <label>Page status
+            <select id="sheetPageStatus" data-day-detail="pageStatus">
+              <option value="active">Active / normal page</option>
+              <option value="cancelled">Cancelled / void page</option>
+              <option value="skipped">Skipped / unused page</option>
+            </select>
+          </label>
+          <label class="fullWidth">Cancel / skip reason
+            <input id="sheetPageStatusReason" data-day-detail="pageStatusReason" placeholder="e.g. Wrong entry crossed out in paper book">
+          </label>
+          <label>Number plate <input id="sheetNumberPlate" data-day-detail="numberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           <label>Daily check time <input id="sheetDailyCheckTime" data-day-detail="dailyCheckTime" type="time"></label>
           <label class="fullWidth">Comments / number plate change notes
             <textarea id="sheetComments" data-day-detail="comments" rows="3" placeholder="Optional comments, delays, number plate change notes"></textarea>
@@ -145,7 +155,7 @@
           </label>
           <p class="smartTip fullWidth">When carry-forward is ON in Settings, two-up details will continue onto the next daily sheet until you untick two-up or change the two-up driver details.</p>
           <label>Two-up driver name <input id="sheetTwoUpDriverName" data-day-detail="twoUpDriverName" placeholder="Optional"></label>
-          <label>Two-up licence no <input id="sheetTwoUpLicenceNumber" data-day-detail="twoUpLicenceNumber" placeholder="Optional"></label>
+          <label>Two-up licence no <input id="sheetTwoUpLicenceNumber" data-day-detail="twoUpLicenceNumber" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Optional"></label>
           <label>Two-up scheme
             <select id="sheetTwoUpScheme" data-day-detail="twoUpScheme">
               <option value="Standard">Standard</option>
@@ -168,7 +178,7 @@
         </label>
         <div id="pageOverrideForm" class="formGrid pageOverrideForm">
           <label>Driver name for this page <input id="pageDriverName" data-page-override="driverNameSnapshot" placeholder="Driver name"></label>
-          <label>Licence no for this page <input id="pageLicenceNumber" data-page-override="licenceNumberSnapshot" placeholder="Licence number"></label>
+          <label>Licence no for this page <input id="pageLicenceNumber" data-page-override="licenceNumberSnapshot" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Licence number"></label>
           <label>Base state for this page
             <select id="pageBaseState" data-page-override="baseStateSnapshot">
               <option value="ACT">ACT</option>
@@ -182,8 +192,9 @@
             </select>
           </label>
           <label>Work diary no for this page <input id="pageWorkDiaryNo" data-page-override="workDiaryNo" placeholder="Work diary no"></label>
-          <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" placeholder="Page no"></label>
-          <label>Truck rego / number plate for this page <input id="pageNumberPlate" data-page-override="numberPlate" placeholder="Truck rego"></label>
+          <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Page no"></label>
+          <p class="smartTip fullWidth">If you cancelled a paper page and used the next page, mark the cancelled page status above, then manually set the correct page number on the usable page here if needed.</p>
+          <label>Truck rego / number plate for this page <input id="pageNumberPlate" data-page-override="numberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="Truck rego"></label>
         </div>
         <div class="actions vertical">
           <button id="saveSelectedPageOnly" class="secondary">Save selected page only</button>
@@ -227,7 +238,7 @@
       <section class="card">
         <h2>Driver details</h2>
         <label>Driver name <input id="driverName" placeholder="Enter driver name"></label>
-        <label>Licence number <input id="licenceNumber" placeholder="Enter licence number"></label>
+        <label>Licence number <input id="licenceNumber" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Enter licence number"></label>
         <label>Base time
           <select id="baseTimeZone">
             <option value="ACT">ACT</option>
@@ -258,9 +269,9 @@
           </label>
           <div class="formGrid">
             <label>First page date <input id="firstPageDate" type="date"></label>
-            <label>First page number <input id="firstPageNumber" inputmode="numeric" placeholder="e.g. 491838"></label>
+            <label>First page number <input id="firstPageNumber" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="e.g. 491838"></label>
             <label>Default work diary no <input id="defaultWorkDiaryNo" placeholder="e.g. VDW"></label>
-            <label>Default number plate <input id="defaultNumberPlate" placeholder="e.g. XQ01QZ"></label>
+            <label>Default number plate <input id="defaultNumberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           </div>
           <p class="hint">Example: if first page is 491838 today, tomorrow will show 491839 automatically. You can still override a specific day on the Graph page.</p>
           <p class="smartTip">Default work diary no, truck rego and two-up defaults also follow the effective date above, so old pages are protected.</p>
@@ -317,6 +328,9 @@
           <button id="exportPdf" class="secondary">Export PDF report</button>
           <button id="exportJsonBackup" class="secondary">Export Backup JSON</button>
           <button id="shareJsonBackup" class="secondary">Share / Save Backup JSON</button>
+
+          <button id="checkDataHealth" class="secondary">Check data health</button>
+          <p id="dataHealthStatus" class="hint">Data health not checked yet.</p>
           <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
           <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">
 
@@ -344,6 +358,7 @@
 
       <section class="card">
         <h2>Important</h2>
+        <p class="smartTip"><strong>Data safety tip:</strong> Before updating GitHub files, export a JSON backup. New versions will try to migrate old data safely, but backup first is still best practice.</p>
         <p>This is a personal helper for checking your paper diary. It is not an NHVR-approved Electronic Work Diary.</p>
       </section>
     </section>

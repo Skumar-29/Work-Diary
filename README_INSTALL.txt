@@ -144,3 +144,45 @@ Compliance confidence update:
 - Added audit log for important changes.
 - Added stronger audit warnings for missing rest type and missing setup information.
 - This update intentionally refuses confident advice when data is incomplete.
+
+
+Cancel/skip page update:
+- Added Page status in Daily sheet details: Active, Cancelled/Void, Skipped/Unused.
+- Added cancel/skip reason.
+- PDF/Graph preview shows a large CANCELLED/SKIPPED watermark and reason.
+- Audit treats cancelled/skipped pages separately and does not apply fatigue calculations to that marked page.
+- Existing selected-page editing can be used to manually set the next usable page number if a paper page is skipped/cancelled.
+
+
+Numeric keypad update:
+- Odometer fields now use numeric keypad and accept numbers only.
+- Page number fields now use numeric keypad and accept numbers only.
+- Licence number and truck rego remain text fields because they can contain letters depending on format.
+
+
+Uppercase number plate update:
+- Number plate / truck rego fields automatically convert typed letters to uppercase.
+- Applies to daily sheet number plate, default number plate, and selected-page number plate edit.
+
+
+Numeric licence update:
+- Driver licence number fields now open the numeric keypad.
+- Licence number fields accept numbers only.
+- Applies to main driver licence, selected-page licence, and two-up driver licence.
+- Truck rego remains uppercase letters/numbers.
+
+
+Backup compatibility / migration update:
+- Added schema version to JSON backups.
+- Added migration layer so older JSON backups are accepted and upgraded safely.
+- Missing fields from old backups are filled with safe defaults.
+- New data health check button verifies current local data and reports schema version.
+- Same localStorage key is kept so updating GitHub files does not intentionally delete phone data.
+- Best practice remains: export JSON backup before every update.
+
+
+Optional audit items update:
+- Missing work/rest change location warnings can be marked "Not required".
+- Missing odometer reading warnings can be marked "Not required".
+- This only hides optional odometer/location audit items and does not affect fatigue-rule errors or important missing details.
+- Optional dismissals are saved in JSON backups and can be shown again from the audit list.
