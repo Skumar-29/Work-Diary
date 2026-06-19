@@ -212,3 +212,14 @@ Visual layout and save toast update:
 - Added small auto-hiding Saved toast notification for save actions.
 - Rebuilt the PDF/Graph SVG again with a shorter, more balanced layout closer to the sample sheet and less overlap risk.
 - Added extra bottom padding so the tab bar does not cover settings content.
+
+
+Real paper diary layout update:
+- Graph/PDF daily sheet rebuilt to better match the uploaded real paper diary photo.
+- Left vertical Details of Activities box is contained inside the activities section.
+- Top driver identification boxes aligned more cleanly.
+- Two-up row separated from the hour number row.
+- Bottom two-up driver identification fields aligned to reduce overlap.
+- Work diary no, NFV and page number are closer together and displayed in red.
+- Added Export this page as PDF button at the bottom of the Graph screen.
+- No NHVR calculation/rule logic changed.

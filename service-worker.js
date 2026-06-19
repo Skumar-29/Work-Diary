@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v33-visual-layout-toast";
+const CACHE = "truck-work-diary-v34-real-book-layout-graph-pdf";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

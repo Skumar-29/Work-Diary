@@ -330,3 +330,24 @@ input[data-uppercase-only="true"]{text-transform:uppercase}
   html,body{background:#fff!important}
   .realDiarySvg{width:100%!important;height:auto!important;max-height:190mm!important}
 }
+
+
+.graphPdfBtn{margin:12px 0 22px}
+.realBookSheet{
+  background:#fff!important;
+  border-radius:12px;
+  padding:8px!important;
+}
+.realDiarySvg{
+  width:100%;
+  max-width:1180px;
+  height:auto;
+  display:block;
+  margin:0 auto;
+  background:#fff;
+}
+@media print{
+  @page{size:A4 landscape;margin:3mm}
+  .realBookSheet{padding:0!important;border-radius:0!important}
+  .realDiarySvg{width:100%!important;height:auto!important;max-height:184mm!important}
+}

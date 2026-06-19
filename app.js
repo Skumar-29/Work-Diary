@@ -1568,188 +1568,218 @@ function buildPaperSheetHtml(){
   const isStandard = currentScheme === "Standard";
   const isAFM = currentScheme === "AFM";
 
-  const W = 1120, H = 705;
-  const x0 = 150, x1 = 988;
-  const sideX = 988, rightX = 1092;
-  const slotW = (x1-x0)/96;
-  const workY = 494;
-  const restY = 548;
+  const W = 1120, H = 720;
+  const dark = "#555";
+  const blue = "#1439d6";
+  const red = "#d82626";
+
+  const sectionX = 28;
+  const sectionY = 178;
+  const sectionW = 1064;
+  const sectionH = 410;
+  const verticalW = 44;
+  const labelW = 105;
+  const gridX = sectionX + verticalW + labelW;
+  const gridRight = 986;
+  const sideRight = 1092;
+  const slotW = (gridRight - gridX) / 96;
+
+  const commentBottom = 246;
+  const odoBottom = 332;
+  const locBottom = 432;
+  const twoUpBottom = 455;
+  const numberBottom = 480;
+  const workBottom = 535;
+  const restBottom = 588;
+
+  const workY = 508;
+  const restY = 561;
 
   const gridLines = [];
   for(let i=0;i<=24;i++){
-    const x = x0 + i*4*slotW;
-    gridLines.push(svgLine(x,242,x,438,"#111",1));
+    const x = gridX + i*4*slotW;
+    gridLines.push(svgLine(x,commentBottom,x,numberBottom,"#111",1));
   }
   for(let i=0;i<=96;i++){
-    const x = x0 + i*slotW;
+    const x = gridX + i*slotW;
     const major = i%4===0;
-    gridLines.push(svgLine(x,448,x,570,major ? "#111" : "#777",major ? 1 : .6));
+    gridLines.push(svgLine(x,numberBottom,x,restBottom,major ? "#111" : "#777",major ? 1 : .55));
   }
 
   const hourNums = [];
   for(let h=0; h<=24; h++){
-    const x = x0 + h*4*slotW;
+    const x = gridX + h*4*slotW;
     const n = h === 0 || h === 24 ? "12" : (h > 12 ? String(h-12) : String(h));
-    hourNums.push(svgText(x,445,n,15,"#111","400",'text-anchor="middle"'));
-    hourNums.push(svgText(x,588,n,15,"#111","400",'text-anchor="middle"'));
+    hourNums.push(svgText(x,476,n,14,"#111","400",'text-anchor="middle"'));
+    hourNums.push(svgText(x,606,n,14,"#111","400",'text-anchor="middle"'));
   }
 
   const getY = (slotIndex) => getSlot(key, slotIndex) === "work" ? workY : restY;
-  let lineD = `M ${x0} ${getY(0)}`;
+  let lineD = `M ${gridX} ${getY(0)}`;
   for(let i=0;i<96;i++){
     const y = getY(i);
     const nextY = i < 95 ? getY(i+1) : y;
-    const xEnd = x0 + (i+1)*slotW;
+    const xEnd = gridX + (i+1)*slotW;
     lineD += ` L ${xEnd} ${y}`;
     if(i < 95 && nextY !== y) lineD += ` L ${xEnd} ${nextY}`;
   }
 
   const changeText = [];
-  changeRows.slice(0,20).forEach(r => {
+  changeRows.slice(0,22).forEach(r => {
     const mins = timeToMins(r.time);
-    const x = x0 + (mins/15)*slotW + 10;
-    if(r.odometer) changeText.push(`<text transform="translate(${x},320) rotate(-90)" font-size="12" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(r.odometer)}</text>`);
+    const x = gridX + (mins/15)*slotW + 9;
+    if(r.odometer){
+      changeText.push(`<text transform="translate(${x},318) rotate(-90)" font-size="12" fill="${blue}" font-weight="700" font-family="Arial">${escapeHtml(r.odometer)}</text>`);
+    }
     const loc = r.location || r.note || "";
-    if(loc) changeText.push(`<text transform="translate(${x},420) rotate(-90)" font-size="12" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(loc)}</text>`);
+    if(loc){
+      changeText.push(`<text transform="translate(${x},420) rotate(-90)" font-size="12" fill="${blue}" font-weight="700" font-family="Arial">${escapeHtml(loc)}</text>`);
+    }
   });
 
-  const stateBoxes = svgBoxedLetters(395,128,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,38,23,10);
-  const dayBoxes = svgBoxedLetters(520,84,["S","M","T","W","T","F","S"],dayIdx,24,24,10);
+  const stateBoxes = svgBoxedLetters(382,132,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,38,24,10);
+  const dayBoxes = svgBoxedLetters(520,86,["S","M","T","W","T","F","S"],dayIdx,25,25,11);
   const twoUpScheme = detail.twoUpScheme || "BFM";
   const twoUpState = detail.twoUpBaseState || "";
-  const twoUpStates = svgBoxedLetters(635,665,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,30,24,9);
+  const twoUpStates = svgBoxedLetters(665,690,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,30,24,9);
 
   const workRestOptions =
-    svgCheckbox(700,84,"Standard",isStandard,11) +
-    svgCheckbox(778,84,"Standard Bus",false,11) +
-    svgCheckbox(700,110,"BFM",isBFM,11) +
-    svgCheckbox(778,110,"AFM",isAFM,11) +
-    svgCheckbox(700,136,"Fit for Duty",!!detail.fitForDuty,11);
+    svgCheckbox(700,86,"Standard",isStandard,12) +
+    svgCheckbox(778,86,"Standard Bus",false,12) +
+    svgCheckbox(700,112,"BFM",isBFM,12) +
+    svgCheckbox(778,112,"AFM",isAFM,12) +
+    svgCheckbox(700,138,"Fit for Duty",!!detail.fitForDuty,12);
 
   const twoUpCheck =
-    svgCheckbox(870,642,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",11) +
-    svgCheckbox(940,642,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",11) +
-    svgCheckbox(990,642,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",11);
+    svgCheckbox(880,654,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",12) +
+    svgCheckbox(950,654,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
+    svgCheckbox(1000,654,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
 
-  const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(72,188+i*12,line,9,"#111","400")).join("");
+  const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(78,194+i*12,line,9,"#111","400")).join("");
 
   const svg = `
   <svg class="realDiarySvg" viewBox="0 0 ${W} ${H}" width="100%" height="auto" role="img" aria-label="National Work Diary Daily Sheet">
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
-    ${svgText(560,24,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
-    ${svgText(760,34,"WORK DIARY NO.",10,"#111","700")}
-    ${svgText(875,36,workDiaryNo,17,"#111","700")}
-    ${svgText(1030,36,pageNo,17,"#d82626","700",'text-anchor="middle"')}
 
-    <rect x="24" y="48" width="1072" height="24" fill="#555"/>
-    ${svgText(560,65,"DRIVER IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
+    ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
+    ${svgText(760,38,"WORK DIARY NO.",10,"#111","700")}
+    ${svgText(870,40,workDiaryNo,18,red,"700",'text-anchor="middle"')}
+    ${svgText(928,40,"NFV",20,red,"900",'text-anchor="middle"')}
+    ${svgText(1018,40,pageNo,18,red,"700",'text-anchor="middle"')}
 
-    ${svgText(32,88,"Driver's Name:",9)}
-    ${svgRect(32,92,350,30)}
-    ${svgText(207,113,driver,16,"#1439d6","700",'text-anchor="middle"')}
+    <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
+    ${svgText(560,67,"DRIVER IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
 
-    ${svgText(398,88,"Date:",9)}
-    ${svgRect(398,92,120,30)}
-    ${svgText(458,113,dateStr,15,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(34,88,"Driver's Name:",9)}
+    ${svgRect(34,92,348,30)}
+    ${svgText(208,113,driver,16,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(525,82,"Day of the Week:",9)}
+    ${svgText(392,88,"Date:",9)}
+    ${svgRect(392,92,126,30)}
+    ${svgText(455,113,dateStr,15,blue,"700",'text-anchor="middle"')}
+
+    ${svgText(522,82,"Day of the Week:",9)}
     ${dayBoxes}
 
-    ${svgText(700,80,"Work/Rest Option",9)}
+    ${svgText(700,82,"Driver",9)}
+    ${svgText(700,96,"Work/Rest Option",9)}
     ${workRestOptions}
 
-    ${svgText(888,80,"Time of daily check (if required):",8)}
+    ${svgText(888,82,"Time of daily check (if required):",8)}
     ${svgRect(888,92,192,30)}
-    ${svgText(984,113,detail.dailyCheckTime || "",14,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(984,113,detail.dailyCheckTime || "",14,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(32,128,"License No:",9)}
-    ${svgRect(32,132,180,28)}
-    ${svgText(122,151,licence,15,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(34,128,"License No:",9)}
+    ${svgRect(34,132,178,28)}
+    ${svgText(123,151,licence,15,blue,"700",'text-anchor="middle"')}
 
     ${svgText(225,128,"Number Plate:",9)}
-    ${svgRect(225,132,150,28)}
-    ${svgText(300,151,plate,15,"#1439d6","700",'text-anchor="middle"')}
+    ${svgRect(225,132,145,28)}
+    ${svgText(297,151,plate,15,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(395,124,"Time Zone: State/Territory (Driver Base)",9)}
+    ${svgText(382,128,"Time Zone: State/Territory (Driver Base)",9)}
     ${stateBoxes}
 
-    ${svgRect(24,172,44,398,"#555","#555")}
-    <text transform="translate(54,395) rotate(-90)" font-size="17" fill="#fff" font-weight="700" font-family="Arial">DETAILS OF ACTIVITIES FOR THIS DAY</text>
+    ${svgRect(sectionX,sectionY,verticalW,sectionH,dark,dark)}
+    <text transform="translate(${sectionX+28},${sectionY+sectionH/2}) rotate(-90)" font-size="17" fill="#fff" font-weight="700" font-family="Arial" text-anchor="middle">DETAILS OF ACTIVITIES FOR THIS DAY</text>
 
-    ${svgRect(68,172,1028,398)}
-    ${svgLine(68,242,1096,242)}
-    ${svgLine(68,330,988,330)}
-    ${svgLine(68,428,988,428)}
-    ${svgLine(68,448,1096,448)}
-    ${svgLine(68,470,1096,470)}
-    ${svgLine(68,520,1096,520)}
-    ${svgLine(68,570,1096,570)}
-    ${svgLine(150,172,150,570)}
-    ${svgLine(988,242,988,570)}
+    ${svgRect(sectionX+verticalW,sectionY,sectionW-verticalW,sectionH)}
+    ${svgLine(sectionX+verticalW,commentBottom,sideRight,commentBottom)}
+    ${svgLine(sectionX+verticalW,odoBottom,gridRight,odoBottom)}
+    ${svgLine(sectionX+verticalW,locBottom,gridRight,locBottom)}
+    ${svgLine(sectionX+verticalW,twoUpBottom,gridRight,twoUpBottom)}
+    ${svgLine(sectionX+verticalW,numberBottom,sideRight,numberBottom)}
+    ${svgLine(sectionX+verticalW,workBottom,sideRight,workBottom)}
+    ${svgLine(sectionX+verticalW,restBottom,sideRight,restBottom)}
+    ${svgLine(gridX,sectionY,gridX,restBottom)}
+    ${svgLine(gridRight,commentBottom,gridRight,restBottom)}
+    ${svgLine(1018,numberBottom,1018,restBottom)}
 
-    ${svgText(72,186,"Number Plate",10)}
-    ${svgText(72,199,"Change and",10)}
-    ${svgText(72,212,"Comments",10)}
-    ${svgText(72,225,"(optional)",8)}
+    ${svgText(78,192,"Number Plate",10)}
+    ${svgText(78,205,"Change and",10)}
+    ${svgText(78,218,"Comments",10)}
+    ${svgText(78,231,"(optional)",8)}
     ${comments}
 
-    ${svgText(72,286,"Odometer",10)}
-    ${svgText(72,300,"Reading",10)}
+    ${svgText(78,290,"Odometer",10)}
+    ${svgText(78,304,"Reading",10)}
 
-    ${svgText(72,362,"Name of",10)}
-    ${svgText(72,376,"Location at",10)}
-    ${svgText(72,390,"Work and",10)}
-    ${svgText(72,404,"Rest Change",10)}
-    ${svgText(72,418,"(rest area,",8)}
+    ${svgText(78,362,"Name of",10)}
+    ${svgText(78,376,"Location at",10)}
+    ${svgText(78,390,"Work and",10)}
+    ${svgText(78,404,"Rest Change",10)}
+    ${svgText(78,418,"(suburb/town)",8)}
 
-    ${svgText(72,443,"Two-up",10)}
-    ${svgText(72,500,"My Work",10)}
-    ${svgText(72,552,"Rest",10)}
-    ${svgText(998,286,"Space for your",8)}
-    ${svgText(998,298,"work/rest hours",8)}
-    ${svgText(998,310,"(optional)",8)}
+    ${svgText(78,448,"Two-up",10)}
+    ${svgText(78,507,"My Work",10)}
+    ${svgText(78,561,"My Rest",10)}
+
+    ${svgText(998,288,"Space for your",8)}
+    ${svgText(998,300,"work/rest hours",8)}
+    ${svgText(998,312,"(optional)",8)}
 
     ${gridLines.join("")}
     ${hourNums.join("")}
     ${changeText.join("")}
-    <path d="${lineD}" fill="none" stroke="#1439d6" stroke-width="2.2"/>
+    <path d="${lineD}" fill="none" stroke="${blue}" stroke-width="2.2"/>
 
-    ${svgText(1008,444,"All drivers:",8)}
-    ${svgText(1008,455,"calculate totals",8)}
-    ${svgText(1042,486,"Total Work:",10,"#111","700",'text-anchor="middle"')}
-    ${svgText(1042,512,`${Math.floor(totals.work/60)}h ${totals.work%60}m`,17,"#1439d6","700",'text-anchor="middle"')}
-    ${svgText(1042,537,"Total Rest:",10,"#111","700",'text-anchor="middle"')}
-    ${svgText(1042,563,`${Math.floor(totals.rest/60)}h ${totals.rest%60}m`,17,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(1028,456,"All drivers:",8)}
+    ${svgText(1028,467,"calculate totals",8)}
+    ${svgText(1052,494,"Total Work:",10,"#111","700",'text-anchor="middle"')}
+    ${svgText(1052,518,`${Math.floor(totals.work/60)}h ${totals.work%60}m`,17,blue,"700",'text-anchor="middle"')}
+    ${svgText(1052,545,"Total Rest:",10,"#111","700",'text-anchor="middle"')}
+    ${svgText(1052,570,`${Math.floor(totals.rest/60)}h ${totals.rest%60}m`,17,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(30,610,"Driver Signature:",10)}
-    ${svgText(30,638,"To the best of my knowledge and belief the information I have recorded on this",8)}
-    ${svgText(30,650,"daily sheet is true and correct",8)}
-    ${svgRect(30,662,350,32)}
+    ${svgText(32,612,"Driver Signature:",10)}
+    ${svgText(32,639,"To the best of my knowledge and belief the information I have recorded on this",8)}
+    ${svgText(32,651,"daily sheet is true and correct",8)}
+    ${svgRect(32,662,350,34)}
 
-    <rect x="405" y="590" width="690" height="24" fill="#555"/>
-    ${svgText(750,607,"TWO-UP DRIVER'S IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
+    <rect x="405" y="603" width="688" height="24" fill="${dark}"/>
+    ${svgText(749,620,"TWO-UP DRIVER'S IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
 
-    ${svgText(405,632,"Two-up Driver Name:",9)}
-    ${svgRect(405,636,220,28)}
-    ${svgText(515,655,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",13,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(405,641,"Two-up Driver's Name:",9)}
+    ${svgRect(405,646,220,28)}
+    ${svgText(515,665,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",13,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(645,632,"Two-up Driver's License No:",9)}
-    ${svgRect(645,636,205,28)}
-    ${svgText(747,655,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",13,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(645,641,"Two-up Driver's License No:",9)}
+    ${svgRect(645,646,210,28)}
+    ${svgText(750,665,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",13,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(870,632,"Two-up Driver",9)}
+    ${svgText(880,641,"Two-up Driver",9)}
     ${twoUpCheck}
 
-    ${svgText(405,666,"Two-up Driver\'s Work Diary & Page No:",9)}
-    ${svgRect(405,670,220,26)}
+    ${svgText(405,685,"Two-up Driver's Work Diary & Page No:",9)}
+    ${svgRect(405,690,220,26)}
 
-    ${svgText(635,666,"Two-up Driver\'s License issued:",9)}
+    ${svgText(665,685,"Two-up Driver's License issued:",9)}
     ${twoUpStates}
 
-    ${svgText(870,666,"Two-up Driver Signature:",9)}
-    ${svgRect(870,670,225,26)}
-    ${pageStatus !== "active" ? `<text x="560" y="390" font-size="70" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 560 390)">${escapeHtml(pageStatusText)}</text>` : ""}
-    ${pageStatus !== "active" ? svgText(560,425,pageStatusReason,16,"#d53636","700",'text-anchor="middle"') : ""}
+    ${svgText(880,685,"Two-up Driver Signature:",9)}
+    ${svgRect(880,690,213,26)}
+
+    ${pageStatus !== "active" ? `<text x="560" y="400" font-size="70" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 560 400)">${escapeHtml(pageStatusText)}</text>` : ""}
+    ${pageStatus !== "active" ? svgText(560,435,pageStatusReason,16,red,"700",'text-anchor="middle"') : ""}
   </svg>`;
 
   const banner = pageStatus !== "active" ? `<div class="statusBanner ${pageStatus === "skipped" ? "skipped" : ""}">${escapeHtml(pageStatusText)}${pageStatusReason ? ": " + escapeHtml(pageStatusReason) : ""}</div>` : "";
@@ -2787,6 +2817,7 @@ function setup(){
   if($("saveRuleHistory")) $("saveRuleHistory").onclick=saveRuleHistorySetting;
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
+  if($("graphExportPdf")) $("graphExportPdf").onclick=exportPdf;
   $("exportJsonBackup").onclick=exportJsonBackup;
   if($("checkDataHealth")) $("checkDataHealth").onclick=checkDataHealth;
   $("shareJsonBackup").onclick=shareJsonBackup;
