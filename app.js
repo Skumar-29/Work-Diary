@@ -1568,7 +1568,7 @@ function buildPaperSheetHtml(){
   const isStandard = currentScheme === "Standard";
   const isAFM = currentScheme === "AFM";
 
-  const W = 1120, H = 720;
+  const W = 1120, H = 732;
   const dark = "#555";
   const blue = "#1439d6";
   const red = "#d82626";
@@ -1641,7 +1641,7 @@ function buildPaperSheetHtml(){
   const dayBoxes = svgBoxedLetters(520,86,["S","M","T","W","T","F","S"],dayIdx,25,25,11);
   const twoUpScheme = detail.twoUpScheme || "BFM";
   const twoUpState = detail.twoUpBaseState || "";
-  const twoUpStates = svgBoxedLetters(665,690,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,30,24,9);
+  const twoUpStates = svgBoxedLetters(665,697,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,30,24,9);
 
   const workRestOptions =
     svgCheckbox(700,86,"Standard",isStandard,12) +
@@ -1651,9 +1651,9 @@ function buildPaperSheetHtml(){
     svgCheckbox(700,138,"Fit for Duty",!!detail.fitForDuty,12);
 
   const twoUpCheck =
-    svgCheckbox(880,654,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",12) +
-    svgCheckbox(950,654,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
-    svgCheckbox(1000,654,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
+    svgCheckbox(880,661,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",12) +
+    svgCheckbox(950,661,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
+    svgCheckbox(1000,661,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
 
   const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(78,194+i*12,line,9,"#111","400")).join("");
 
@@ -1662,10 +1662,10 @@ function buildPaperSheetHtml(){
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
 
     ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
-    ${svgText(700,39,"WORK DIARY NO.",10,"#111","700")}
-    ${svgText(845,41,"NFV",20,"#111","900",'text-anchor="middle"')}
-    ${svgText(952,41,workDiaryNo,18,red,"700",'text-anchor="middle"')}
-    ${svgText(1040,41,pageNo,18,red,"700",'text-anchor="middle"')}
+    ${svgText(748,39,"WORK DIARY NO.",10,"#111","700")}
+    ${svgText(890,39,"NFV",18,"#111","900")}
+    ${svgText(948,39,workDiaryNo,18,red,"700")}
+    ${svgText(1030,39,pageNo,18,red,"700")}
 
     <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
     ${svgText(560,67,"DRIVER IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
@@ -1754,28 +1754,28 @@ function buildPaperSheetHtml(){
     ${svgText(32,651,"daily sheet is true and correct",8)}
     ${svgRect(32,662,350,34)}
 
-    <rect x="405" y="603" width="688" height="24" fill="${dark}"/>
-    ${svgText(749,620,"TWO-UP DRIVER'S IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
+    <rect x="405" y="610" width="688" height="24" fill="${dark}"/>
+    ${svgText(749,627,"TWO-UP DRIVER'S IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
 
-    ${svgText(405,641,"Two-up Driver's Name:",9)}
-    ${svgRect(405,646,220,28)}
-    ${svgText(515,665,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",13,blue,"700",'text-anchor="middle"')}
+    ${svgText(405,648,"Two-up Driver's Name:",9)}
+    ${svgRect(405,653,220,28)}
+    ${svgText(515,672,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",13,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(645,641,"Two-up Driver's License No:",9)}
-    ${svgRect(645,646,210,28)}
-    ${svgText(750,665,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",13,blue,"700",'text-anchor="middle"')}
+    ${svgText(645,648,"Two-up Driver's License No:",9)}
+    ${svgRect(645,653,210,28)}
+    ${svgText(750,672,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",13,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(880,641,"Two-up Driver",9)}
+    ${svgText(880,648,"Two-up Driver",9)}
     ${twoUpCheck}
 
-    ${svgText(405,685,"Two-up Driver's Work Diary & Page No:",9)}
-    ${svgRect(405,690,220,26)}
+    ${svgText(405,692,"Two-up Driver's Work Diary & Page No:",9)}
+    ${svgRect(405,697,220,26)}
 
-    ${svgText(665,685,"Two-up Driver's License issued:",9)}
+    ${svgText(665,692,"Two-up Driver's License issued:",9)}
     ${twoUpStates}
 
-    ${svgText(930,685,"Two-up Driver Signature:",9)}
-    ${svgRect(930,690,163,26)}
+    ${svgText(930,692,"Two-up Driver Signature:",9)}
+    ${svgRect(930,697,163,26)}
 
     ${pageStatus !== "active" ? `<text x="560" y="400" font-size="70" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 560 400)">${escapeHtml(pageStatusText)}</text>` : ""}
     ${pageStatus !== "active" ? svgText(560,435,pageStatusReason,16,red,"700",'text-anchor="middle"') : ""}

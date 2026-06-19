@@ -230,3 +230,10 @@ Minor real-book layout correction update:
 - Shrunk/moved the Two-up Driver Signature box so it no longer overlaps the license-issued boxes.
 - Made the Driver Name, Date and daily-check boxes slightly thinner for cleaner separation from the row below.
 - Updated the Work Diary No pattern to: WORK DIARY NO.  NFV  9912  03, with black label/NFV and red number/page.
+
+
+Header and two-up spacing refinement update:
+- Reduced spacing between NFV, work diary number and page number to match the paper diary pattern more closely.
+- Shifted the full WORK DIARY NO. / NFV / number group slightly to the right.
+- Moved the TWO-UP DRIVER'S IDENTIFICATION section slightly downward to stop overlap with the bottom hour row.
+- No rule logic or calculations changed.
