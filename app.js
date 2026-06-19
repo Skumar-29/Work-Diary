@@ -1,3 +1,5 @@
+const APP_SCHEMA_VERSION = 4;
+const APP_BUILD_NAME = "nav-fix-optional-audit";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -325,6 +327,8 @@ function defaultDayDetail(){
     baseStateSnapshot: "",
     numberPlateManual: false,
     pageNo: "",
+    pageStatus: "active",
+    pageStatusReason: "",
     numberPlate: "",
     dailyCheckTime: "",
     comments: "",
@@ -539,6 +543,7 @@ function save(){
   ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog=[];
   ensureDismissedAudit();
+  state.schemaVersion = APP_SCHEMA_VERSION;
   localStorage.setItem("truckDiaryPWA", JSON.stringify(state));
 }
 function load(){
@@ -1223,6 +1228,14 @@ function renderAuditList(){
       }
     };
   });
+}
+function safeSwitchTab(tabId){
+  const target = $(tabId);
+  if(!target) return;
+  document.querySelectorAll(".tabbar button").forEach(b=>b.classList.toggle("active", b.dataset.tab === tabId));
+  document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active", s.id === tabId));
+  const btn = document.querySelector(`.tabbar button[data-tab="${tabId}"]`);
+  if(btn && $("screenTitle")) $("screenTitle").textContent = btn.querySelector("span").textContent;
 }
 function switchToTab(tabId){
   document.querySelectorAll(".tabbar button").forEach(b=>b.classList.toggle("active", b.dataset.tab === tabId));
@@ -2587,7 +2600,7 @@ function importJsonBackupFromFile(file){
       ensureBookSettings();
       save();
       renderAll();
-      addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); alert("Backup imported successfully.");
+      addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); alert("Backup imported successfully.");
     }catch(e){
       alert("Could not import backup. Please select a valid JSON backup file.");
     }finally{
@@ -2693,21 +2706,21 @@ function setup(){
 
   document.querySelectorAll(".tabbar button").forEach(btn=>{
     btn.onclick=()=>{
-      document.querySelectorAll(".tabbar button").forEach(b=>b.classList.remove("active"));
-      btn.classList.add("active");
-      document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
-      $(btn.dataset.tab).classList.add("active");
-      $("screenTitle").textContent = btn.querySelector("span").textContent;
-      if(btn.dataset.tab === "graphScreen"){
-        renderGraphPage();
+      safeSwitchTab(btn.dataset.tab);
+      try{
+        if(btn.dataset.tab === "graphScreen"){
+          renderGraphPage();
+        }
+        if(btn.dataset.tab === "statsScreen"){
+          renderStatistics();
+        }
+        if(btn.dataset.tab === "drivingScreen"){
+          renderAuditList();
+        }
+        renderTimer();
+      }catch(e){
+        console.error("Screen render error", e);
       }
-      if(btn.dataset.tab === "statsScreen"){
-        renderStatistics();
-      }
-      if(btn.dataset.tab === "drivingScreen"){
-        renderAuditList();
-      }
-      renderTimer();
     };
   });
 

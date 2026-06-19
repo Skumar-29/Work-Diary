@@ -186,3 +186,9 @@ Optional audit items update:
 - Missing odometer reading warnings can be marked "Not required".
 - This only hides optional odometer/location audit items and does not affect fatigue-rule errors or important missing details.
 - Optional dismissals are saved in JSON backups and can be shown again from the audit list.
+
+
+Navigation fix update:
+- Fixed missing schema constants that could stop app setup and prevent screen buttons from working.
+- Added defensive tab switching so navigation still works even if one screen has a render warning.
+- Kept optional "Not required" audit items for odometer/location warnings.
