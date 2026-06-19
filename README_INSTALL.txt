@@ -223,3 +223,10 @@ Real paper diary layout update:
 - Work diary no, NFV and page number are closer together and displayed in red.
 - Added Export this page as PDF button at the bottom of the Graph screen.
 - No NHVR calculation/rule logic changed.
+
+
+Minor real-book layout correction update:
+- Removed extra Work/Rest Option text from graph header to avoid overlap with Standard.
+- Shrunk/moved the Two-up Driver Signature box so it no longer overlaps the license-issued boxes.
+- Made the Driver Name, Date and daily-check boxes slightly thinner for cleaner separation from the row below.
+- Updated the Work Diary No pattern to: WORK DIARY NO.  NFV  9912  03, with black label/NFV and red number/page.

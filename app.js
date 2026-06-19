@@ -1637,7 +1637,7 @@ function buildPaperSheetHtml(){
     }
   });
 
-  const stateBoxes = svgBoxedLetters(382,132,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,38,24,10);
+  const stateBoxes = svgBoxedLetters(382,134,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,38,24,10);
   const dayBoxes = svgBoxedLetters(520,86,["S","M","T","W","T","F","S"],dayIdx,25,25,11);
   const twoUpScheme = detail.twoUpScheme || "BFM";
   const twoUpState = detail.twoUpBaseState || "";
@@ -1662,42 +1662,41 @@ function buildPaperSheetHtml(){
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
 
     ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
-    ${svgText(760,38,"WORK DIARY NO.",10,"#111","700")}
-    ${svgText(870,40,workDiaryNo,18,red,"700",'text-anchor="middle"')}
-    ${svgText(928,40,"NFV",20,red,"900",'text-anchor="middle"')}
-    ${svgText(1018,40,pageNo,18,red,"700",'text-anchor="middle"')}
+    ${svgText(700,39,"WORK DIARY NO.",10,"#111","700")}
+    ${svgText(845,41,"NFV",20,"#111","900",'text-anchor="middle"')}
+    ${svgText(952,41,workDiaryNo,18,red,"700",'text-anchor="middle"')}
+    ${svgText(1040,41,pageNo,18,red,"700",'text-anchor="middle"')}
 
     <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
     ${svgText(560,67,"DRIVER IDENTIFICATION",15,"#fff","700",'text-anchor="middle"')}
 
     ${svgText(34,88,"Driver's Name:",9)}
-    ${svgRect(34,92,348,30)}
-    ${svgText(208,113,driver,16,blue,"700",'text-anchor="middle"')}
+    ${svgRect(34,92,348,26)}
+    ${svgText(208,109,driver,16,blue,"700",'text-anchor="middle"')}
 
     ${svgText(392,88,"Date:",9)}
-    ${svgRect(392,92,126,30)}
-    ${svgText(455,113,dateStr,15,blue,"700",'text-anchor="middle"')}
+    ${svgRect(392,92,126,26)}
+    ${svgText(455,109,dateStr,15,blue,"700",'text-anchor="middle"')}
 
     ${svgText(522,82,"Day of the Week:",9)}
     ${dayBoxes}
 
     ${svgText(700,82,"Driver",9)}
-    ${svgText(700,96,"Work/Rest Option",9)}
     ${workRestOptions}
 
     ${svgText(888,82,"Time of daily check (if required):",8)}
-    ${svgRect(888,92,192,30)}
-    ${svgText(984,113,detail.dailyCheckTime || "",14,blue,"700",'text-anchor="middle"')}
+    ${svgRect(888,92,192,26)}
+    ${svgText(984,109,detail.dailyCheckTime || "",14,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(34,128,"License No:",9)}
-    ${svgRect(34,132,178,28)}
-    ${svgText(123,151,licence,15,blue,"700",'text-anchor="middle"')}
+    ${svgText(34,130,"License No:",9)}
+    ${svgRect(34,134,178,28)}
+    ${svgText(123,153,licence,15,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(225,128,"Number Plate:",9)}
-    ${svgRect(225,132,145,28)}
-    ${svgText(297,151,plate,15,blue,"700",'text-anchor="middle"')}
+    ${svgText(225,130,"Number Plate:",9)}
+    ${svgRect(225,134,145,28)}
+    ${svgText(297,153,plate,15,blue,"700",'text-anchor="middle"')}
 
-    ${svgText(382,128,"Time Zone: State/Territory (Driver Base)",9)}
+    ${svgText(382,130,"Time Zone: State/Territory (Driver Base)",9)}
     ${stateBoxes}
 
     ${svgRect(sectionX,sectionY,verticalW,sectionH,dark,dark)}
@@ -1775,8 +1774,8 @@ function buildPaperSheetHtml(){
     ${svgText(665,685,"Two-up Driver's License issued:",9)}
     ${twoUpStates}
 
-    ${svgText(880,685,"Two-up Driver Signature:",9)}
-    ${svgRect(880,690,213,26)}
+    ${svgText(930,685,"Two-up Driver Signature:",9)}
+    ${svgRect(930,690,163,26)}
 
     ${pageStatus !== "active" ? `<text x="560" y="400" font-size="70" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 560 400)">${escapeHtml(pageStatusText)}</text>` : ""}
     ${pageStatus !== "active" ? svgText(560,435,pageStatusReason,16,red,"700",'text-anchor="middle"') : ""}
