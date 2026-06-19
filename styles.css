@@ -261,3 +261,14 @@ input[data-uppercase-only="true"]{text-transform:uppercase}
 .auditOpenBtn{background:#2c6d5e;color:#fff}
 .auditOptionalBtn{background:#eee;color:#111}
 .dismissedAuditBox{background:#f5f5f5;border:1px dashed #bbb;border-radius:12px;padding:8px;margin-top:8px;font-size:12px;color:#555}
+
+/* Layout/page-number/audit reliability update */
+.realBookSheet{overflow:auto}
+.realDiarySvg{max-width:1180px}
+@media print{
+  @page{size:A4 landscape;margin:4mm}
+  .realDiarySvg{width:100%!important;max-height:190mm!important}
+}
+.slot.locked{opacity:.45;cursor:not-allowed}
+.pageLockedOverlay{background:#ffe4e4;border:2px solid #d53636;border-radius:12px;padding:10px;margin:8px 0;font-weight:800;color:#7a0000}
+.auditActions button{touch-action:manipulation}

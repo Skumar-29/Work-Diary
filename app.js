@@ -229,7 +229,12 @@ function getSlot(key, idx){
   return arr && arr[idx] ? arr[idx] : "rest";
 }
 function setSlot(key, idx, val){
+  if(typeof isPageCancelledOrSkipped === "function" && isPageCancelledOrSkipped(key)){
+    return;
+  }
   getDaySlots(key)[idx] = val;
+  if(val === "work") ensureDayDetail(key).usePage = true;
+  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
 }
 function minuteAbs(key, slotIndex){
   return fromKey(key).getTime() + slotIndex*SLOT*60000;
@@ -329,6 +334,7 @@ function defaultDayDetail(){
     pageNo: "",
     pageStatus: "active",
     pageStatusReason: "",
+    usePage: false,
     numberPlate: "",
     dailyCheckTime: "",
     comments: "",
@@ -683,6 +689,10 @@ function renderGrid(){
         cell.title = `${fmtHM(slotIndex*15)} ${row.label}`;
         cell.dataset.slot = slotIndex;
         cell.dataset.row = row.action;
+        if(isPageCancelledOrSkipped(state.selectedDate)){
+          cell.disabled = true;
+          cell.classList.add("locked");
+        }
         if(auditFocus && auditFocus.date === state.selectedDate && auditFocus.type === "slot" && Array.isArray(auditFocus.slots) && auditFocus.slots.includes(slotIndex)){
           cell.classList.add("auditFocus");
         }
@@ -718,6 +728,8 @@ function paintSlotByElement(el, forcedAction=null){
   const arr = getDaySlots(state.selectedDate);
   if(arr[idx] !== val){
     arr[idx] = val;
+    if(val === "work") ensureDayDetail(state.selectedDate).usePage = true;
+    if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
     cell.classList.add("dragPreview");
     return true;
   }
@@ -738,6 +750,10 @@ function setupSwipePainting(){
   const THRESHOLD = 10;
 
   function beginCandidate(target, point){
+    if(isPageCancelledOrSkipped(state.selectedDate)){
+      alert("This page is marked cancelled/skipped. Change Page status back to Active before editing Work/Rest blocks.");
+      return false;
+    }
     const cell = target && target.closest ? target.closest(".slot[data-slot]") : null;
     if(!cell) return false;
     touchCandidate = true;
@@ -758,8 +774,14 @@ function setupSwipePainting(){
   }
 
   function paintSingle(slotIdx, noteText){
+    if(isPageCancelledOrSkipped(state.selectedDate)){
+      alert("This page is marked cancelled/skipped. Change Page status back to Active before editing Work/Rest blocks.");
+      return;
+    }
     const arr = getDaySlots(state.selectedDate);
     arr[slotIdx] = startAction;
+    if(startAction === "work") ensureDayDetail(state.selectedDate).usePage = true;
+    if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
     addEntryRecord(state.selectedDate, slotIdx*SLOT, state.selectedDate, (slotIdx+1)*SLOT, startAction, noteText || "Tap fill");
     save();
     renderAll();
@@ -1063,6 +1085,11 @@ function auditDate(key){
     return errors;
   }
 
+  if(!pageUsesBookPage(key)){
+    state.selectedDate = oldDate;
+    return errors;
+  }
+
 
   if(!detail.driverNameSnapshot && !(state.profile && state.profile.driverName)) add("error","Missing driver name","Driver name is empty for this page.",{type:"field", field:"pageDriverName"},fieldFix("driver name"));
   if(!detail.licenceNumberSnapshot && !(state.profile && state.profile.licenceNumber)) add("error","Missing licence number","Licence number is empty for this page.",{type:"field", field:"pageLicenceNumber"},fieldFix("licence number"));
@@ -1070,7 +1097,11 @@ function auditDate(key){
   if(!detail.pageNo) add("warn","Missing page number","Page number is empty or not calculated.",{type:"field", field:"pagePageNo"},"Check Work diary book setup. Add first page date and first page number, or manually enter page number for this selected page.");
   if(!detail.workDiaryNo) add("warn","Missing work diary number","Work diary number is empty.",{type:"field", field:"pageWorkDiaryNo"},"Enter the work diary number for this page, or add it as a default in Settings so future pages fill automatically.");
   if(!detail.numberPlate) add("warn","Missing truck rego","Truck rego / number plate is empty.",{type:"field", field:"pageNumberPlate"},"Enter the truck rego for this selected page. If this truck continues from this date, update Default number plate with the correct effective date.");
-  if(!detail.fitForDuty) add("info","Fit for Duty not ticked","Fit for Duty is not ticked on this page.",{type:"field", field:"sheetFitForDuty"},"If you were fit for duty for this page, tick Fit for Duty. If not, leave it unticked and keep accurate records.");
+  if(!detail.fitForDuty && !isAuditDismissed("fit_for_duty", key, "fit")){
+    const beforeLen = errors.length;
+    add("info","Fit for Duty not ticked","Fit for Duty is not ticked on this page.",{type:"field", field:"sheetFitForDuty"},"If this is not required for this page, mark it Not required. If you were fit for duty and want it shown on the sheet, tick Fit for Duty.");
+    errors[beforeLen].optionalDismiss = {kind:"fit_for_duty", date:key, extra:"fit", label:"Fit for Duty not ticked"};
+  }
   const confidence = complianceIssuesForDate(key);
   confidence.blockers.forEach(b => add("error","Cannot safely calculate",b,{type:"section", section:"complianceConfidence"},"Fix the missing setup information before relying on due-break or fatigue advice."));
   confidence.issues.filter(x => x.includes("Rest type")).slice(0,3).forEach(x => add("warn","Missing rest type",x,{type:"section", section:"changeDetailsEditor"},"Select Rest / Stationary rest / Sleeper berth / Night rest so major rest and two-up checks can be safer."));
@@ -1228,7 +1259,29 @@ function renderAuditList(){
       }
     };
   });
+  bindAuditListDelegation(errors);
 }
+
+function bindAuditListDelegation(errors){
+  const holder = $("drivingAuditList");
+  if(!holder) return;
+  holder.onclick = (ev)=>{
+    const openBtn = ev.target.closest ? ev.target.closest("[data-audit-index]") : null;
+    const dismissBtn = ev.target.closest ? ev.target.closest("[data-audit-dismiss]") : null;
+    if(openBtn){
+      ev.preventDefault();
+      const e = errors[Number(openBtn.dataset.auditIndex)];
+      openAuditError(e);
+    } else if(dismissBtn){
+      ev.preventDefault();
+      const e = errors[Number(dismissBtn.dataset.auditDismiss)];
+      if(e && e.optionalDismiss){
+        dismissOptionalAudit(e.optionalDismiss.kind, e.optionalDismiss.date, e.optionalDismiss.extra, e.optionalDismiss.label);
+      }
+    }
+  };
+}
+
 function safeSwitchTab(tabId){
   const target = $(tabId);
   if(!target) return;
@@ -1271,33 +1324,29 @@ function openAuditError(err){
   auditFocus = {date: err.date, title: err.title, message: err.message, suggestion: err.suggestion, pageNo: err.pageNo, ...(err.focus || {})};
   state.selectedDate = err.date;
   save();
-  renderAll();
+  try{ renderAll(); }catch(e){ console.error("Render after audit open failed", e); }
+  safeSwitchTab("diaryScreen");
   renderAuditFixPanel();
-  switchToTab("diaryScreen");
   setTimeout(()=>{
     clearAuditHighlights();
+    let target = null;
     if(auditFocus.type === "field" && auditFocus.field){
-      const el = $(auditFocus.field);
-      if(el){
-        el.classList.add("auditField");
-        el.scrollIntoView({behavior:"smooth", block:"center"});
-        try{ el.focus({preventScroll:true}); }catch(e){}
+      target = $(auditFocus.field);
+      if(target){
+        target.classList.add("auditField");
+        try{ target.focus({preventScroll:true}); }catch(e){}
       }
     } else if(auditFocus.type === "section" && auditFocus.section){
-      const el = $(auditFocus.section);
-      if(el){
-        el.classList.add("auditFocusBox");
-        el.scrollIntoView({behavior:"smooth", block:"center"});
-      }
+      target = $(auditFocus.section);
+      if(target) target.classList.add("auditFocusBox");
     } else {
-      const grid = $("diaryGrid");
-      if(grid){
-        grid.classList.add("auditFocusBox");
-        grid.scrollIntoView({behavior:"smooth", block:"center"});
-      }
+      target = $("diaryGrid");
+      if(target) target.classList.add("auditFocusBox");
     }
-    alert(`Opened ${fmtDateLong(err.date)} page ${err.pageNo}: ${err.title}\n\nPossible fix: ${err.suggestion}`);
-  }, 250);
+    if(target && target.scrollIntoView){
+      target.scrollIntoView({behavior:"smooth", block:"center"});
+    }
+  }, 300);
 }
 
 function renderTodayAdvice(){
@@ -1504,37 +1553,33 @@ function buildPaperSheetHtml(){
   const isStandard = currentScheme === "Standard";
   const isAFM = currentScheme === "AFM";
 
-  const W = 1024, H = 768;
-  const x0 = 148, x1 = 914;
+  const W = 1120, H = 820;
+  const x0 = 150, x1 = 940;
   const slotW = (x1-x0)/96;
-  const workY = 548;
-  const restY = 606;
-  const graphBottom = 632;
+  const graphTop = 520;
+  const workY = 555;
+  const restY = 608;
+  const graphBottom = 635;
 
   const gridLines = [];
-  // Activity detail section vertical lines.
   for(let i=0;i<=24;i++){
     const x = x0 + i*4*slotW;
-    gridLines.push(svgLine(x,250,x,491,"#111",1));
+    gridLines.push(svgLine(x,245,x,495,"#111",1));
   }
   for(let i=0;i<=96;i++){
     const x = x0 + i*slotW;
     const major = i%4===0;
-    gridLines.push(svgLine(x,492,x,510,major ? "#111" : "#777",major ? 1 : .6));
-    gridLines.push(svgLine(x,530,x,628,major ? "#111" : "#777",major ? 1 : .6));
+    gridLines.push(svgLine(x,graphTop,x,graphBottom,major ? "#111" : "#777",major ? 1 : .6));
   }
 
-  const topNums = [];
-  for(let h=0; h<24; h++){
-    const x = x0 + h*4*slotW + 2;
-    const n = h === 0 ? "12" : (h > 12 ? String(h-12) : String(h));
-    topNums.push(svgText(x,510,n,18,"#111","400"));
-    topNums.push(svgText(x,648,n,18,"#111","400"));
+  const hourNums = [];
+  for(let h=0; h<=24; h++){
+    const x = x0 + h*4*slotW;
+    const n = h === 0 || h === 24 ? "12" : (h > 12 ? String(h-12) : String(h));
+    hourNums.push(svgText(x,515,n,15,"#111","400",'text-anchor="middle"'));
+    hourNums.push(svgText(x,653,n,15,"#111","400",'text-anchor="middle"'));
   }
-  topNums.push(svgText(x1-10,510,"12",18,"#111","400"));
-  topNums.push(svgText(x1-10,648,"12",18,"#111","400"));
 
-  // Blue step line for work/rest.
   const getY = (slotIndex) => getSlot(key, slotIndex) === "work" ? workY : restY;
   let lineD = `M ${x0} ${getY(0)}`;
   for(let i=0;i<96;i++){
@@ -1545,156 +1590,155 @@ function buildPaperSheetHtml(){
     if(i < 95 && nextY !== y) lineD += ` L ${xEnd} ${nextY}`;
   }
 
-  // Change-row details in vertical style like diary book.
   const changeText = [];
   changeRows.slice(0,20).forEach(r => {
     const mins = timeToMins(r.time);
-    const x = x0 + (mins/15)*slotW + 12;
-    if(r.odometer) changeText.push(`<text transform="translate(${x},333) rotate(-90)" font-size="13" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(r.odometer)}</text>`);
+    const x = x0 + (mins/15)*slotW + 10;
+    if(r.odometer) changeText.push(`<text transform="translate(${x},330) rotate(-90)" font-size="12" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(r.odometer)}</text>`);
     const loc = r.location || r.note || "";
-    if(loc) changeText.push(`<text transform="translate(${x},458) rotate(-90)" font-size="13" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(loc)}</text>`);
+    if(loc) changeText.push(`<text transform="translate(${x},452) rotate(-90)" font-size="12" fill="#1439d6" font-weight="700" font-family="Arial">${escapeHtml(loc)}</text>`);
   });
 
-  const stateBoxes = svgBoxedLetters(386,128,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,38,25,11);
-  const dayBoxes = svgBoxedLetters(522,84,["S","M","T","W","T","F","S"],dayIdx,26,28,12);
-
+  const stateBoxes = svgBoxedLetters(390,132,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],base,39,24,10);
+  const dayBoxes = svgBoxedLetters(520,88,["S","M","T","W","T","F","S"],dayIdx,25,26,11);
   const twoUpScheme = detail.twoUpScheme || "BFM";
   const twoUpState = detail.twoUpBaseState || "";
-  const twoUpStates = svgBoxedLetters(805,704,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,28,25,10);
+  const twoUpStates = svgBoxedLetters(700,765,["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"],twoUpState,30,24,9);
 
   const workRestOptions =
-    svgCheckbox(680,86,"Standard",isStandard) +
-    svgCheckbox(752,86,"Standard Bus",false) +
-    svgCheckbox(680,116,"BFM",isBFM) +
-    svgCheckbox(752,116,"AFM",isAFM) +
-    svgCheckbox(680,145,"Fit for Duty",!!detail.fitForDuty);
+    svgCheckbox(700,88,"Standard",isStandard,12) +
+    svgCheckbox(775,88,"Standard Bus",false,12) +
+    svgCheckbox(700,116,"BFM",isBFM,12) +
+    svgCheckbox(775,116,"AFM",isAFM,12) +
+    svgCheckbox(700,144,"Fit for Duty",!!detail.fitForDuty,12);
 
   const twoUpCheck =
-    svgCheckbox(815,685,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",12) +
-    svgCheckbox(884,685,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
-    svgCheckbox(934,685,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
+    svgCheckbox(930,720,"Standard",detail.twoUpEnabled && twoUpScheme==="Standard",12) +
+    svgCheckbox(1000,720,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
+    svgCheckbox(1048,720,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
 
-  const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(72,188+i*14,line,11,"#111","400")).join("");
+  const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(70,195+i*13,line,10,"#111","400")).join("");
 
   const svg = `
   <svg class="realDiarySvg" viewBox="0 0 ${W} ${H}" width="100%" height="auto" role="img" aria-label="National Work Diary Daily Sheet">
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
-    ${svgText(512,28,"NATIONAL WORK DIARY DAILY SHEET",18,"#111","700",'text-anchor="middle"')}
-    ${svgText(680,64,"WORK DIARY NO.",11,"#111","700")}
-    ${svgText(795,66,workDiaryNo,18,"#111","700")}
-    ${svgText(935,66,pageNo,18,"#d82626","700")}
+    ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",18,"#111","700",'text-anchor="middle"')}
+    ${svgText(760,36,"WORK DIARY NO.",11,"#111","700")}
+    ${svgText(875,38,workDiaryNo,18,"#111","700")}
+    ${svgText(1030,38,pageNo,18,"#d82626","700",'text-anchor="middle"')}
 
-    <rect x="18" y="48" width="988" height="25" fill="#555"/>
-    ${svgText(512,66,"DRIVER INDENTIFICATION",16,"#fff","700",'text-anchor="middle"')}
+    <rect x="24" y="50" width="1072" height="26" fill="#555"/>
+    ${svgText(560,68,"DRIVER IDENTIFICATION",16,"#fff","700",'text-anchor="middle"')}
 
-    ${svgText(28,89,"Driver's Name:",11,"#111","400")}
-    ${svgRect(28,92,336,35)}
-    ${svgText(196,116,driver,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(32,92,"Driver's Name:",10)}
+    ${svgRect(32,96,350,32)}
+    ${svgText(207,118,driver,17,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(373,89,"Date:",11,"#111","400")}
-    ${svgRect(373,92,132,35)}
-    ${svgText(439,117,dateStr,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(398,92,"Date:",10)}
+    ${svgRect(398,96,120,32)}
+    ${svgText(458,118,dateStr,16,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(520,81,"Day of the Week:",11,"#111","400")}
+    ${svgText(525,88,"Day of the Week:",10)}
     ${dayBoxes}
 
-    ${svgText(678,81,"Work/Rest Option",11,"#111","400")}
+    ${svgText(700,84,"Work/Rest Option",10)}
     ${workRestOptions}
 
-    ${svgText(852,81,"Time of daily check (if required):",10,"#111","400")}
-    ${svgRect(852,92,154,35)}
-    ${svgText(929,116,detail.dailyCheckTime || "",16,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(890,84,"Time of daily check (if required):",9)}
+    ${svgRect(890,96,190,32)}
+    ${svgText(985,118,detail.dailyCheckTime || "",15,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(28,123,"License No:",10,"#111","400")}
-    ${svgRect(28,128,174,35)}
-    ${svgText(115,152,licence,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(32,135,"License No:",10)}
+    ${svgRect(32,140,180,30)}
+    ${svgText(122,161,licence,16,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(210,123,"Number Plate:",10,"#111","400")}
-    ${svgRect(210,128,174,35)}
-    ${svgText(297,152,plate,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(225,135,"Number Plate:",10)}
+    ${svgRect(225,140,150,30)}
+    ${svgText(300,161,plate,16,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(388,123,"Time Zone: State/Territory (Driver Base)",10,"#111","400")}
+    ${svgText(390,128,"Time Zone: State/Territory (Driver Base)",10)}
     ${stateBoxes}
 
-    ${svgRect(18,172,42,455,"#555","#555")}
-    <text transform="translate(48,400) rotate(-90)" font-size="20" fill="#fff" font-weight="700" font-family="Arial">DETAILS OF ACTIVITIES FOR THIS DAY</text>
+    ${svgRect(24,180,44,455,"#555","#555")}
+    <text transform="translate(54,415) rotate(-90)" font-size="18" fill="#fff" font-weight="700" font-family="Arial">DETAILS OF ACTIVITIES FOR THIS DAY</text>
 
-    ${svgRect(60,172,946,455)}
-    ${svgLine(60,250,1006,250)}
-    ${svgLine(60,336,914,336)}
-    ${svgLine(60,462,914,462)}
-    ${svgLine(60,492,914,492)}
-    ${svgLine(60,520,1006,520)}
-    ${svgLine(60,575,1006,575)}
-    ${svgLine(60,628,1006,628)}
-    ${svgLine(148,172,148,628)}
-    ${svgLine(914,250,914,628)}
+    ${svgRect(68,180,1028,455)}
+    ${svgLine(68,245,1096,245)}
+    ${svgLine(68,335,940,335)}
+    ${svgLine(68,465,940,465)}
+    ${svgLine(68,495,1096,495)}
+    ${svgLine(68,520,1096,520)}
+    ${svgLine(68,580,1096,580)}
+    ${svgLine(68,635,1096,635)}
+    ${svgLine(150,180,150,635)}
+    ${svgLine(940,245,940,635)}
+    ${svgLine(1020,495,1020,635)}
 
-    ${svgText(64,190,"Number Plate",12)}
-    ${svgText(64,204,"Change and",12)}
-    ${svgText(64,218,"Comments",12)}
-    ${svgText(64,232,"(optional)",11)}
+    ${svgText(72,196,"Number Plate",11)}
+    ${svgText(72,210,"Change and",11)}
+    ${svgText(72,224,"Comments",11)}
+    ${svgText(72,238,"(optional)",9)}
     ${comments}
 
-    ${svgText(64,292,"Odometer",12)}
-    ${svgText(64,306,"Reading",12)}
+    ${svgText(72,290,"Odometer",11)}
+    ${svgText(72,304,"Reading",11)}
 
-    ${svgText(64,372,"Name of",12)}
-    ${svgText(64,388,"Location at",12)}
-    ${svgText(64,404,"Work and",12)}
-    ${svgText(64,420,"Rest Change",12)}
-    ${svgText(64,436,"(e.g. rest area,",10)}
-    ${svgText(64,448,"truck stop,",10)}
-    ${svgText(64,460,"suburb or town)",10)}
+    ${svgText(72,375,"Name of",11)}
+    ${svgText(72,390,"Location at",11)}
+    ${svgText(72,405,"Work and",11)}
+    ${svgText(72,420,"Rest Change",11)}
+    ${svgText(72,435,"(rest area,",9)}
+    ${svgText(72,448,"truck stop,",9)}
+    ${svgText(72,461,"suburb/town)",9)}
 
-    ${svgText(64,482,"Two-up",12)}
-    ${svgText(64,558,"My Work",12)}
-    ${svgText(64,611,"Rest",12)}
-    ${svgText(922,285,"Space for you to",9)}
-    ${svgText(922,298,"your work and rest hours",9)}
-    ${svgText(922,311,"(optional)",9)}
+    ${svgText(72,486,"Two-up",11)}
+    ${svgText(72,557,"My Work",11)}
+    ${svgText(72,611,"Rest",11)}
+    ${svgText(950,290,"Space for your",9)}
+    ${svgText(950,303,"work/rest hours",9)}
+    ${svgText(950,316,"(optional)",9)}
 
     ${gridLines.join("")}
-    ${topNums.join("")}
+    ${hourNums.join("")}
     ${changeText.join("")}
     <path d="${lineD}" fill="none" stroke="#1439d6" stroke-width="2.2"/>
 
-    ${svgText(922,516,"All drivers:",8)}
-    ${svgText(922,528,"calculate totals",8)}
-    ${svgText(936,548,"Total Work:",11,"#111","700")}
-    ${svgText(960,575,`${Math.floor(totals.work/60)}h ${totals.work%60}m`,18,"#1439d6","700",'text-anchor="middle"')}
-    ${svgText(938,601,"Total Rest:",11,"#111","700")}
-    ${svgText(960,626,`${Math.floor(totals.rest/60)}h ${totals.rest%60}m`,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(946,514,"All drivers:",8)}
+    ${svgText(946,526,"calculate totals",8)}
+    ${svgText(1032,548,"Total Work:",11,"#111","700",'text-anchor="middle"')}
+    ${svgText(1032,575,`${Math.floor(totals.work/60)}h ${totals.work%60}m`,18,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(1032,603,"Total Rest:",11,"#111","700",'text-anchor="middle"')}
+    ${svgText(1032,628,`${Math.floor(totals.rest/60)}h ${totals.rest%60}m`,18,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(18,663,"Driver Signature:",12)}
-    ${svgText(18,693,"To the best of my knowledge and belief the information I have recorded on this",9)}
-    ${svgText(18,706,"daily sheet is true and correct",9)}
-    ${svgRect(18,718,330,40)}
+    ${svgText(30,664,"Driver Signature:",12)}
+    ${svgText(30,692,"To the best of my knowledge and belief the information I have recorded on this",9)}
+    ${svgText(30,705,"daily sheet is true and correct",9)}
+    ${svgRect(30,720,350,42)}
 
-    <rect x="380" y="642" width="626" height="25" fill="#555"/>
-    ${svgText(693,661,"TWO-UP DRIVER'S IDENTIFICATION",16,"#fff","700",'text-anchor="middle"')}
+    <rect x="405" y="660" width="690" height="26" fill="#555"/>
+    ${svgText(750,679,"TWO-UP DRIVER'S IDENTIFICATION",16,"#fff","700",'text-anchor="middle"')}
 
-    ${svgText(380,682,"Two-up Driver Name:",11)}
-    ${svgRect(380,686,230,32)}
-    ${svgText(495,708,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",14,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(405,705,"Two-up Driver Name:",10)}
+    ${svgRect(405,710,250,32)}
+    ${svgText(530,732,detail.twoUpEnabled ? detail.twoUpDriverName || "" : "",14,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(630,682,"Two-up Driver's License No:",11)}
-    ${svgRect(630,686,170,32)}
-    ${svgText(715,708,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",14,"#1439d6","700",'text-anchor="middle"')}
+    ${svgText(675,705,"Two-up Driver's License No:",10)}
+    ${svgRect(675,710,230,32)}
+    ${svgText(790,732,detail.twoUpEnabled ? detail.twoUpLicenceNumber || "" : "",14,"#1439d6","700",'text-anchor="middle"')}
 
-    ${svgText(815,682,"Two-up Driver",11)}
+    ${svgText(930,705,"Two-up Driver",10)}
     ${twoUpCheck}
 
-    ${svgText(380,733,"Two-up Driver's Work Diary & Page No:",11)}
-    ${svgRect(380,737,250,28)}
+    ${svgText(405,760,"Two-up Driver's Work Diary & Page No:",10)}
+    ${svgRect(405,765,260,30)}
 
-    ${svgText(644,733,"Two-up Driver's License issued:",11)}
+    ${svgText(700,760,"Two-up Driver's License issued:",10)}
     ${twoUpStates}
 
-    ${svgText(815,733,"Two-up Driver Signature:",11)}
-    ${svgRect(815,737,190,28)}
-    ${pageStatus !== "active" ? `<text x="512" y="395" font-size="72" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 512 395)">${escapeHtml(pageStatusText)}</text>` : ""}
-    ${pageStatus !== "active" ? svgText(512,430,pageStatusReason,18,"#d53636","700",'text-anchor="middle"') : ""}
+    ${svgText(930,760,"Two-up Driver Signature:",10)}
+    ${svgRect(930,765,165,30)}
+    ${pageStatus !== "active" ? `<text x="560" y="430" font-size="74" fill="rgba(210,0,0,.22)" font-weight="900" font-family="Arial" text-anchor="middle" transform="rotate(-20 560 430)">${escapeHtml(pageStatusText)}</text>` : ""}
+    ${pageStatus !== "active" ? svgText(560,465,pageStatusReason,17,"#d53636","700",'text-anchor="middle"') : ""}
   </svg>`;
 
   const banner = pageStatus !== "active" ? `<div class="statusBanner ${pageStatus === "skipped" ? "skipped" : ""}">${escapeHtml(pageStatusText)}${pageStatusReason ? ": " + escapeHtml(pageStatusReason) : ""}</div>` : "";
@@ -1778,6 +1822,7 @@ function renderGraphForm(){
   setVal("sheetPageNo", detail.pageNo);
   setVal("sheetPageStatus", detail.pageStatus || "active");
   setVal("sheetPageStatusReason", detail.pageStatusReason || "");
+  setChk("sheetUsePage", !!detail.usePage);
   setVal("sheetNumberPlate", detail.numberPlate);
   setVal("sheetDailyCheckTime", detail.dailyCheckTime);
   const comments = $("sheetComments"); if(comments && comments.value !== String(detail.comments || "")) comments.value = detail.comments || "";
@@ -1802,6 +1847,7 @@ function updateDayDetailFromGraphForm(){
   }
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
   detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
+  recomputeAutoPageNumbers();
   save();
   renderAlerts();
   renderRuleCards();
@@ -1838,13 +1884,63 @@ function dateDiffDays(fromKeyStr, toKeyStr){
   const b = fromKey(toKeyStr);
   return Math.round((b.getTime() - a.getTime()) / DAY_MS);
 }
+function dayHasAnyWork(key){
+  const arr = (state.slots && Array.isArray(state.slots[key])) ? state.slots[key] : [];
+  if(arr.some(v => v === "work")) return true;
+  return (state.entries || []).some(e => (e.activity === "work") && (String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key));
+}
+function pageUsesBookPage(key){
+  const d = ensureDayDetail(key);
+  const status = d.pageStatus || "active";
+  if(status === "cancelled" || status === "skipped") return true;
+  if(d.usePage) return true;
+  if(dayHasAnyWork(key)) return true;
+  if(d.pageNoManual && d.pageNo) return true;
+  return false;
+}
+function usedBookPageDatesUpTo(key){
+  ensureBookSettings();
+  const firstDate = state.bookSettings.firstPageDate || key;
+  const dates = new Set();
+  Object.keys(state.dayDetails || {}).forEach(d => dates.add(d));
+  Object.keys(state.slots || {}).forEach(d => dates.add(d));
+  (state.entries || []).forEach(e => {
+    if(e.start) dates.add(String(e.start).slice(0,10));
+    if(e.end) dates.add(String(e.end).slice(0,10));
+  });
+  dates.add(key);
+  return [...dates].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= firstDate && d <= key && pageUsesBookPage(d)).sort();
+}
 function calculatedPageNumberForDate(key){
   ensureBookSettings();
   if(!state.bookSettings.autoPageNumber) return "";
   const first = parseInt(state.bookSettings.firstPageNumber, 10);
   if(!first || !state.bookSettings.firstPageDate) return "";
-  return String(first + dateDiffDays(state.bookSettings.firstPageDate, key));
+  if(!pageUsesBookPage(key)) return "";
+  const usedDates = usedBookPageDatesUpTo(key);
+  const index = usedDates.indexOf(key);
+  if(index < 0) return "";
+  return String(first + index);
 }
+
+function recomputeAutoPageNumbers(){
+  ensureBookSettings();
+  if(!state.bookSettings.autoPageNumber) return;
+  const dates = new Set();
+  Object.keys(state.dayDetails || {}).forEach(d => dates.add(d));
+  Object.keys(state.slots || {}).forEach(d => dates.add(d));
+  (state.entries || []).forEach(e => {
+    if(e.start) dates.add(String(e.start).slice(0,10));
+    if(e.end) dates.add(String(e.end).slice(0,10));
+  });
+  [...dates].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().forEach(d => {
+    const detail = ensureDayDetail(d);
+    if(!detail.pageNoManual){
+      detail.pageNo = calculatedPageNumberForDate(d) || "";
+    }
+  });
+}
+
 function applyAutoDefaultsToDay(key){
   ensureBookSettings();
   ensureSettingsHistory();
@@ -1864,8 +1960,8 @@ function applyAutoDefaultsToDay(key){
   }
   if(state.bookSettings.autoPageNumber){
     const calc = calculatedPageNumberForDate(key);
-    if(calc && !detail.pageNoManual){
-      detail.pageNo = calc;
+    if(!detail.pageNoManual){
+      detail.pageNo = calc || "";
     }
   }
   if(state.bookSettings.carryForwardTwoUp && !detail.twoUpManual){
@@ -2411,8 +2507,8 @@ function exportPdf(){
     .pdfBtns button{padding:10px 12px;border:0;border-radius:10px;background:#2c6d5e;color:white;font-weight:800}
     .pdfBtns button+button{background:#eee;color:#111}
     .paperSheet,.realBookSheet{border:0!important;border-radius:0!important;padding:0!important;background:#fff!important;box-shadow:none!important}
-    .realDiarySvg{display:block;width:100%;height:auto;background:#fff}
-    @media print{.pdfBtns{display:none}.wrap{width:100%}.realDiarySvg{width:100%;height:auto}}
+    .realDiarySvg{display:block;width:100%;height:auto;background:#fff;max-height:190mm}
+    @media print{.pdfBtns{display:none}.wrap{width:100%}.realDiarySvg{width:100%;height:auto;max-height:190mm}}
   </style></head><body>
     <div class="wrap">
       <div class="pdfBtns"><button onclick="window.print()">Print / Save as PDF</button><button onclick="if(window.opener){window.close()}else{history.back()}">Close / Back to app</button></div>
@@ -2654,6 +2750,7 @@ function stopTimer(){
   );
   state.selectedDate=toKey(roundedStart);
   state.activeTimer=null;
+  recomputeAutoPageNumbers();
   save();
   renderAll();
 }

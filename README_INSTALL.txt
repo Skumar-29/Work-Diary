@@ -192,3 +192,16 @@ Navigation fix update:
 - Fixed missing schema constants that could stop app setup and prevent screen buttons from working.
 - Added defensive tab switching so navigation still works even if one screen has a render warning.
 - Kept optional "Not required" audit items for odometer/location warnings.
+
+
+Layout, optional audit, page numbering and cancelled-page lock update:
+- Rebuilt the real-book SVG/PDF layout with more spacing to avoid overlapping header, graph, totals and two-up sections.
+- Fit for Duty not ticked can now be marked Not required, same as optional odometer/location items.
+- Open error now uses safer navigation and scrolling/highlighting.
+- Auto page numbers now count used book pages, not every calendar day. Full rest days without Work/use-page do not consume a page number.
+- Added Use paper page for this day checkbox for manual page use.
+- Cancelled/skipped pages lock the Work/Rest grid and timer until changed back to Active.
+- NHVR/fatigue calculation logic was not changed in this update.
+
+Patch:
+- Swipe/tap Work block edits now immediately update used-page auto numbering.

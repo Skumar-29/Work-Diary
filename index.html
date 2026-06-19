@@ -140,6 +140,10 @@
           <label class="fullWidth">Cancel / skip reason
             <input id="sheetPageStatusReason" data-day-detail="pageStatusReason" placeholder="e.g. Wrong entry crossed out in paper book">
           </label>
+          <label class="checkLabel fullWidth">
+            <input id="sheetUsePage" data-day-detail="usePage" type="checkbox">
+            Use paper page for this day, even if no Work blocks are recorded
+          </label>
           <label>Number plate <input id="sheetNumberPlate" data-day-detail="numberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           <label>Daily check time <input id="sheetDailyCheckTime" data-day-detail="dailyCheckTime" type="time"></label>
           <label class="fullWidth">Comments / number plate change notes
@@ -273,7 +277,7 @@
             <label>Default work diary no <input id="defaultWorkDiaryNo" placeholder="e.g. VDW"></label>
             <label>Default number plate <input id="defaultNumberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           </div>
-          <p class="hint">Example: if first page is 491838 today, tomorrow will show 491839 automatically. You can still override a specific day on the Graph page.</p>
+          <p class="hint">Example: if first used page is 491838, the next used work/cancelled/skipped page gets 491839 automatically. Full rest days with no page use do not consume a page number. You can still override a specific day on the Graph page.</p>
           <p class="smartTip">Default work diary no, truck rego and two-up defaults also follow the effective date above, so old pages are protected.</p>
           <button id="saveBookSettings" class="secondary full">Save book setup</button>
         </div>
