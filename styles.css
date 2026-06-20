@@ -1136,12 +1136,12 @@ body.location-picker-off .locPickerWrap input{
   }
 }
 
-/* Header alignment fix: Find + Refresh + title + arrows on one line */
+/* Header tight alignment fix: Refresh directly after Find */
 .titleRow{
   display:grid!important;
-  grid-template-columns:auto auto minmax(0,1fr) auto!important;
+  grid-template-columns:auto auto 1fr auto!important;
   align-items:center!important;
-  column-gap:6px!important;
+  column-gap:3px!important;
   padding:8px 14px 4px!important;
   min-height:44px!important;
 }
@@ -1165,7 +1165,7 @@ body.location-picker-off .locPickerWrap input{
   grid-column:2!important;
   justify-self:start!important;
   align-self:center!important;
-  margin:0!important;
+  margin:0 0 0 2px!important;
   width:36px!important;
   min-width:36px!important;
   height:34px!important;
@@ -1177,6 +1177,9 @@ body.location-picker-off .locPickerWrap input{
   display:inline-flex!important;
   align-items:center!important;
   justify-content:center!important;
+}
+.findBtn + .refreshBtn{
+  margin-left:2px!important;
 }
 .titleRow h1,
 #screenTitle{
@@ -1191,7 +1194,7 @@ body.location-picker-off .locPickerWrap input{
   white-space:nowrap!important;
   overflow:hidden!important;
   text-overflow:ellipsis!important;
-  transform:translateX(8px);
+  transform:none!important;
 }
 .dateNav{
   grid-column:4!important;
@@ -1223,8 +1226,8 @@ body.location-picker-off .locPickerWrap input{
 }
 @media (max-width:420px){
   .titleRow{
-    grid-template-columns:auto auto minmax(74px,1fr) auto!important;
-    column-gap:5px!important;
+    grid-template-columns:auto auto minmax(72px,1fr) auto!important;
+    column-gap:2px!important;
     padding-left:10px!important;
     padding-right:10px!important;
   }
@@ -1239,14 +1242,18 @@ body.location-picker-off .locPickerWrap input{
     width:32px!important;
     min-width:32px!important;
     height:32px!important;
+    margin-left:1px!important;
     font-size:16px!important;
     line-height:32px!important;
+  }
+  .findBtn + .refreshBtn{
+    margin-left:1px!important;
   }
   .titleRow h1,
   #screenTitle{
     font-size:19px!important;
     line-height:32px!important;
-    transform:translateX(4px);
+    transform:none!important;
   }
   .dateNav{
     width:88px!important;

@@ -462,3 +462,9 @@ Header alignment fix:
 - Kept Refresh immediately after Find.
 - Center title adjusted slightly to account for the left buttons.
 - UI-only change; no data, page numbering, or NHVR calculation logic changed.
+
+
+Header tight alignment fix:
+- Moved the 🔄 refresh button directly beside Find with almost no gap.
+- Removed the extra title shift so the screen title is closer to center.
+- UI-only change; no data, page numbering, or NHVR calculation logic changed.
