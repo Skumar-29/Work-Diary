@@ -317,3 +317,12 @@ Usability/performance fix update:
 - Graph preview is reduced by about 20-25% in preview size on the Graph screen; export PDF remains full size.
 - Render/update work reduced to improve lag/hanging.
 - NHVR fatigue calculation engine unchanged.
+
+
+Fast mode performance update:
+- Block selection no longer runs full NHVR breach scanning on every grid render.
+- Date previous/next now renders the diary screen first and avoids rebuilding graph/audit/statistics.
+- Typing in detail fields uses debounced saving and does not rebuild heavy screens on each letter.
+- Heavy screens render only when opened: Graph, Driving audit, Statistics, Vehicles, Settings.
+- Swipe/tap block edits use fast render and debounced save.
+- NHVR fatigue calculation engine unchanged; audit/statistics still run when those screens are opened.

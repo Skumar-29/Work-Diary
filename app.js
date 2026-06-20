@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 8;
-const APP_BUILD_NAME = "usability-performance-fix";
+const APP_SCHEMA_VERSION = 9;
+const APP_BUILD_NAME = "fast-mode-rendering";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -254,7 +254,6 @@ function setSlot(key, idx, val){
   }
   getDaySlots(key)[idx] = val;
   if(val === "work") ensureDayDetail(key).usePage = true;
-  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
 }
 function minuteAbs(key, slotIndex){
   return fromKey(key).getTime() + slotIndex*SLOT*60000;
@@ -917,6 +916,22 @@ function save(){
   state.schemaVersion = APP_SCHEMA_VERSION;
   localStorage.setItem("truckDiaryPWA", JSON.stringify(state));
 }
+let saveSoonTimer = null;
+function saveSoon(){
+  clearTimeout(saveSoonTimer);
+  saveSoonTimer = setTimeout(() => {
+    saveSoonTimer = null;
+    save();
+  }, 350);
+}
+function flushSaveSoon(){
+  if(saveSoonTimer){
+    clearTimeout(saveSoonTimer);
+    saveSoonTimer = null;
+    save();
+  }
+}
+
 function load(){
   const raw = localStorage.getItem("truckDiaryPWA");
   if(raw){
@@ -1042,7 +1057,7 @@ function renderGrid(){
         const t = getSlot(state.selectedDate, slotIndex);
 
         if(row.action === "work"){
-          if(t === "work") cell.classList.add(slotBreaches(state.selectedDate, slotIndex) ? "bad" : "work");
+          if(t === "work") cell.classList.add("work");
           else cell.classList.add("empty");
         } else {
           if(t === "rest") cell.classList.add("rest");
@@ -1093,7 +1108,6 @@ function paintSlotByElement(el, forcedAction=null){
   if(arr[idx] !== val){
     arr[idx] = val;
     if(val === "work") ensureDayDetail(state.selectedDate).usePage = true;
-    if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
     cell.classList.add("dragPreview");
     return true;
   }
@@ -1189,10 +1203,9 @@ function setupSwipePainting(){
     const arr = getDaySlots(state.selectedDate);
     arr[slotIdx] = startAction;
     if(startAction === "work") ensureDayDetail(state.selectedDate).usePage = true;
-    if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
     addEntryRecord(state.selectedDate, slotIdx*SLOT, state.selectedDate, (slotIdx+1)*SLOT, startAction, noteText || "Tap fill");
-    save();
-    renderAll();
+    saveSoon();
+    renderDiaryFast();
   }
 
   function paintRangeFromStartTo(slotIdx){
@@ -1262,10 +1275,9 @@ function setupSwipePainting(){
       if(changed && startSlot !== null && lastSlot !== null){
         const a = Math.min(startSlot, lastSlot);
         const b = Math.max(startSlot, lastSlot);
-        if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
-        addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, startAction, "Horizontal swipe fill");
-        save();
-        renderAll();
+            addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, startAction, "Horizontal swipe fill");
+        saveSoon();
+        renderDiaryFast();
       }
     }
     touchCandidate = false;
@@ -1319,30 +1331,12 @@ function checkDayWarnings(){
   if(isPageCancelledOrSkipped(state.selectedDate)){
     return [{type:"warn", text:`This page is marked ${pageStatusLabel(state.selectedDate)}. Do not use this page for break/fatigue advice.`}];
   }
-  const rules = activeRules();
-  let anyBreach=false;
-  for(let i=0;i<SLOTS_PER_DAY;i++) if(slotBreaches(state.selectedDate,i)) anyBreach=true;
-  if(anyBreach) warns.push({type:"bad", text:`Possible ${rules.name} rule breach found. Red blocks show work time that may exceed selected limits.`});
-  const selectedEndAbs = fromKey(state.selectedDate).getTime() + DAY_MS;
-  const majorWindow = rules.majorRestWindow || 1440;
-  const major = maxContinuousStationary(selectedEndAbs, majorWindow);
-  if(rules.majorRest && major < rules.majorRest){
-    warns.push({type:"warn", text:`${rules.name}: no ${rules.majorRest/60}h continuous rest block found in the last ${majorWindow/60}h window ending on this day.`});
-  }
-  (rules.extraRestWindows || []).forEach(req => {
-    const best = maxContinuousStationary(selectedEndAbs, req.minutes);
-    if(best < req.required){
-      warns.push({type:"warn", text:`${rules.name}: ${req.label} not found in saved blocks ending on this day.`});
-    }
-  });
   if(selectedDayIsTwoUp()){
     const missing = twoUpMissingDetails();
     if(missing.length){
       warns.push({type:"warn", text:`Two-up is selected but missing: ${missing.join(", ")}.`});
     }
-    warns.push({type:"warn", text:"Two-up helper mode is active. Rest/sleeper berth and night-rest requirements should be verified against your official work diary/EWD."});
   }
-  if(!warns.length) warns.push({type:"ok", text:`No daily rolling-window warning found for ${rules.name}.`});
   return warns;
 }
 function renderAlerts(){
@@ -2675,17 +2669,16 @@ function updateDayDetailFromGraphForm(){
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
   detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
   recomputeAutoPageNumbers();
-  save();
-  renderAlerts();
-  renderRuleCards();
-  renderNextBreak();
+  saveSoon();
+  renderDiaryFast();
 }
 
 function saveDailySheetDetails(){
   updateDayDetailFromGraphForm();
   autoSaveRegistryFromDiaryPage(state.selectedDate);
+  flushSaveSoon();
   save();
-  renderAll();
+  renderDiaryFast();
   if(typeof showToast === "function") showToast("Saved");
 }
 
@@ -2696,10 +2689,10 @@ function handleChangeDetailsInput(e){
   const field = target.dataset.changeField;
   if(Number.isNaN(idx) || !field) return;
   const detail = ensureDayDetail(state.selectedDate);
-  syncChangeRowsForDay(state.selectedDate);
+  if(!Array.isArray(detail.changeRows)) detail.changeRows = [];
   if(!detail.changeRows[idx]) return;
   detail.changeRows[idx][field] = target.value;
-  save();
+  saveSoon();
 }
 function renderGraphSummaryOnly(){
   const segs = segmentsForDay(state.selectedDate);
@@ -3206,6 +3199,33 @@ function renderTotals(){
   $("totalWork").textContent=minsToHoursText(t.work);
   $("totalRest").textContent=minsToHoursText(t.rest);
 }
+function renderAlertsFast(){
+  const a = $("alerts");
+  if(!a) return;
+  a.innerHTML = "";
+  if(isPageCancelledOrSkipped(state.selectedDate)){
+    const el=document.createElement("div");
+    el.className="alert warn";
+    el.textContent=`This page is marked ${pageStatusLabel(state.selectedDate)}. Do not use this page for break/fatigue advice.`;
+    a.appendChild(el);
+  } else if(selectedDayIsTwoUp()){
+    const missing = twoUpMissingDetails();
+    if(missing.length){
+      const el=document.createElement("div");
+      el.className="alert warn";
+      el.textContent=`Two-up is selected but missing: ${missing.join(", ")}.`;
+      a.appendChild(el);
+    }
+  }
+}
+function renderDiaryFast(){
+  renderDate();
+  renderGrid();
+  renderTotals();
+  renderTimer();
+  renderAlertsFast();
+}
+
 function renderDriverSettings(){
   ensureProfile();
   ensureSettingsHistory();
@@ -3223,20 +3243,30 @@ function renderDriverSettings(){
 }
 function renderAll(){
   renderDate();
-  renderAlerts();
   renderGrid();
   renderTotals();
-  renderRuleCards();
-  renderNextBreak();
-  renderTodayAdvice();
   renderTimer();
-  renderComplianceConfidence();
-  renderAuditFixPanel();
+  renderAlertsFast();
+
   const active = document.querySelector(".screen.active");
   const activeId = active ? active.id : "diaryScreen";
+
   if(activeId === "graphScreen") renderGraphPage();
-  if(activeId === "statsScreen") renderStatistics();
-  if(activeId === "drivingScreen") renderAuditList();
+  if(activeId === "statsScreen"){
+    renderRuleCards();
+    renderNextBreak();
+    renderTodayAdvice();
+    renderStatistics();
+    renderComplianceConfidence();
+  }
+  if(activeId === "drivingScreen"){
+    renderRuleCards();
+    renderNextBreak();
+    renderTodayAdvice();
+    renderAuditList();
+    renderComplianceConfidence();
+    renderAuditFixPanel();
+  }
   if(activeId === "vehiclesScreen") renderVehicleDriverRegistry();
   if(activeId === "settingsScreen"){
     renderDriverSettings();
@@ -3572,15 +3602,17 @@ function stopTimer(){
 }
 
 function setup(){
+  document.addEventListener("visibilitychange", () => { if(document.hidden) flushSaveSoon(); });
+  window.addEventListener("pagehide", flushSaveSoon);
   setupVehicleDriverRegistryButtons();
   document.addEventListener("input", enforceNumericOnly);
   document.addEventListener("input", enforceUppercaseOnly);
   load();
-  $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);save();renderAll();}
-  $("nextDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,1);save();renderAll();}
-  $("todayBtn").onclick=()=>{state.selectedDate=toKey(new Date());save();renderAll();}
+  $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);saveSoon();renderDiaryFast();}
+  $("nextDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,1);saveSoon();renderDiaryFast();}
+  if($("todayBtn")) $("todayBtn").onclick=()=>{state.selectedDate=toKey(new Date());saveSoon();renderDiaryFast();}
   $("dateText").onclick=()=>$("datePicker").showPicker ? $("datePicker").showPicker() : $("datePicker").click();
-  $("datePicker").onchange=e=>{state.selectedDate=e.target.value;save();renderAll();}
+  $("datePicker").onchange=e=>{state.selectedDate=e.target.value;saveSoon();renderDiaryFast();}
   if($("addEntry")) $("addEntry").onclick=addEntryFromForm;
   if($("quickBFM")) $("quickBFM").onclick=loadBFMSample;
   $("schemeSelect").onchange=e=>{
@@ -3590,7 +3622,7 @@ function setup(){
     if($("ruleDriverMode")) $("ruleDriverMode").value = "solo";
     saveRuleHistorySetting();
   }
-  $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;save();renderAll();}
+  $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;saveSoon();renderDiaryFast();}
   if($("saveRuleHistory")) $("saveRuleHistory").onclick=saveRuleHistorySetting;
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
@@ -3635,19 +3667,36 @@ function setup(){
     btn.onclick=()=>{
       safeSwitchTab(btn.dataset.tab);
       try{
+        renderDate();
+        renderTimer();
+        if(btn.dataset.tab === "diaryScreen"){
+          renderDiaryFast();
+        }
         if(btn.dataset.tab === "graphScreen"){
           renderGraphPage();
         }
         if(btn.dataset.tab === "statsScreen"){
+          renderRuleCards();
+          renderNextBreak();
+          renderTodayAdvice();
           renderStatistics();
+          renderComplianceConfidence();
         }
         if(btn.dataset.tab === "drivingScreen"){
+          renderRuleCards();
+          renderNextBreak();
+          renderTodayAdvice();
           renderAuditList();
+          renderComplianceConfidence();
         }
         if(btn.dataset.tab === "vehiclesScreen"){
           renderVehicleDriverRegistry();
         }
-        renderTimer();
+        if(btn.dataset.tab === "settingsScreen"){
+          renderDriverSettings();
+          renderBackupReminderSettings();
+          renderAuditLog();
+        }
       }catch(e){
         console.error("Screen render error", e);
       }

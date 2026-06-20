@@ -556,3 +556,7 @@ main{
   #graphScreen #paperSheetPreview{min-width:0!important;max-width:none!important}
   #graphScreen .realDiarySvg{max-width:none!important}
 }
+
+/* Fast mode smooth interactions */
+#diaryGrid{touch-action:pan-y}
+.slot{will-change:background-color}
