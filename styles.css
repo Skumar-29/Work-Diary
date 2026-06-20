@@ -1402,3 +1402,10 @@ body.location-picker-off .locPickerWrap input{
   color:#fff!important;
   border-color:#8b0000!important;
 }
+
+/* Required rest red block focus */
+.slot.bad{
+  background:var(--red)!important;
+  color:#fff!important;
+  border-color:#8b0000!important;
+}

@@ -508,3 +508,15 @@ Fatigue engine verification update:
 - Strengthened next-break/active-window calculations so fresh history still shows due-break status.
 - Added guarded NHVR engine self-test function for console/debug checks.
 - No diary data, N/D smart options, diary book history, page numbering, or UI settings were reset.
+
+
+Required-rest highlight fix:
+- Red blocks now mean "put the required rest here" instead of marking all later work blocks red.
+- Short-rest breaches mark only the required rest duration:
+  - 15 min = 1 block
+  - 30 min = 2 blocks
+  - parsed hour rest durations mark the corresponding number of 15-minute blocks.
+- Rolling short-window detection is kept so continuous work still triggers breaches from fresh history.
+- Previous-date records are still considered by the NHVR engine where available.
+- Missing previous history is not treated as old-work unless data exists/settings say it should be imported.
+- No N/D, smart short-break, diary-book, page-number, or UI settings were changed.

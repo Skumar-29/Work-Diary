@@ -1,5 +1,5 @@
 const APP_SCHEMA_VERSION = 28;
-const APP_BUILD_NAME = "fatigue-engine-verified";
+const APP_BUILD_NAME = "required-rest-highlight-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1142,7 +1142,10 @@ function breachSlotSetForGrid(key){
     findings.forEach(f=>{
       if((f.severity || "error") !== "error") return;
       if(f.focus && Array.isArray(f.focus.slots)){
-        f.focus.slots.forEach(s => set.add(Number(s)));
+        f.focus.slots.forEach(s => {
+          const n = Number(s);
+          if(!Number.isNaN(n)) set.add(n);
+        });
       }
     });
   }catch(err){
@@ -1828,37 +1831,113 @@ function nhvrLongNightSlotCounter(abs){
 
 
 
-function nhvrRollingShortWindowFindings(key, profile, rule, dayStart, dayEnd){
-  const slotSet = new Set();
-  const startsBySlot = {};
-  const messagesBySlot = {};
-  const stepMs = SLOT * 60000;
-  for(let endAbs = dayStart + stepMs; endAbs <= dayEnd; endAbs += stepMs){
-    const startAbs = endAbs - rule.minutes * 60000;
-    const work = nhvrWorkBetween(startAbs, endAbs);
-    if(work > rule.maxWork){
-      const precise = nhvrOverLimitSlotsForDate(key, startAbs, endAbs, rule.maxWork);
-      precise.slots.forEach(s => {
-        if(!Number.isNaN(Number(s))){
-          slotSet.add(Number(s));
-          startsBySlot[s] = startAbs;
-          messagesBySlot[s] = `${profile.name}: ${formatMinsShort(work)} work in a rolling ${rule.label} period ending ${formatDateTimeForStats(endAbs)}. Limit is ${formatMinsShort(rule.maxWork)}.`;
-        }
-      });
+
+function nhvrRequiredRestMinutesForRule(rule){
+  // rule.rest text is used in current engine. Parse the minimum qualifying rest.
+  const txt = String(rule && (rule.rest || rule.label || "") || "").toLowerCase();
+  const nums = [...txt.matchAll(/(\d+)\s*(?:min|minute|minutes|m\b)/g)].map(m => Number(m[1])).filter(Boolean);
+  if(nums.length) return Math.max(...nums);
+  const hourNums = [...txt.matchAll(/(\d+)\s*(?:h|hr|hour|hours)/g)].map(m => Number(m[1])*60).filter(Boolean);
+  if(hourNums.length) return Math.max(...hourNums);
+  // Safe fallback for short-rest rules.
+  return 15;
+}
+function nhvrRestRequirementLabel(mins){
+  if(mins % 60 === 0) return `${mins/60} hour${mins===60 ? "" : "s"}`;
+  return `${mins} minutes`;
+}
+function nhvrSlotsFromAbsRangeForKey(key, startAbs, durationMins){
+  const slots = [];
+  const total = Math.max(1, Math.ceil(durationMins / SLOT));
+  for(let i=0; i<total; i++){
+    const t = startAbs + i*SLOT*60000;
+    const ks = absToKeySlot(t);
+    if(ks.key === key && ks.slot >= 0 && ks.slot < SLOTS_PER_DAY){
+      slots.push(ks.slot);
     }
   }
-  const slots = [...slotSet].sort((a,b)=>a-b);
-  if(!slots.length) return [];
-  const firstSlot = slots[0];
-  const firstTime = fmtHM(firstSlot * SLOT);
-  const firstStart = startsBySlot[firstSlot] || dayStart;
-  return [nhvrFinding(
-    "error", key, `${rule.label} short-rest breach`,
-    messagesBySlot[firstSlot] || `${profile.name}: rolling ${rule.label} short-rest limit exceeded.`,
-    slots,
-    `First red block starts at ${firstTime}. Add or move ${rule.rest || "the required rest"} before this point, or change incorrectly selected Work blocks to Rest.`,
-    firstStart
-  )];
+  return slots;
+}
+function nhvrFirstWorkSlotAfterDue(key, dueAbs, dayEnd){
+  for(let t=dueAbs; t<dayEnd; t+=SLOT*60000){
+    if(activityAtAbs(t) === "work"){
+      const ks = absToKeySlot(t);
+      if(ks.key === key) return {abs:t, slot:ks.slot};
+    }
+  }
+  return null;
+}
+function nhvrRequiredRestSlotsForDate(key, dueAbs, requiredRestMins){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const first = nhvrFirstWorkSlotAfterDue(key, dueAbs, dayEnd);
+  if(!first) return [];
+  return nhvrSlotsFromAbsRangeForKey(key, first.abs, requiredRestMins);
+}
+function nhvrRequiredRestFocus(key, dueAbs, requiredRestMins){
+  const slots = nhvrRequiredRestSlotsForDate(key, dueAbs, requiredRestMins);
+  const first = slots.length ? fmtHM(Math.min(...slots)*SLOT) : "";
+  return {slots, firstTime:first, requiredRestMins};
+}
+function nhvrRequiredRestSuggestion(rule, key, dueAbs, requiredRestMins, slots){
+  const label = nhvrRestRequirementLabel(requiredRestMins);
+  const first = slots && slots.length ? fmtHM(Math.min(...slots)*SLOT) : formatDateTimeForStats(dueAbs);
+  return `Break/rest is due from ${first}. To fix this rule, change ${Math.ceil(requiredRestMins/SLOT)} block(s) to Rest here (${label}). Only these required-rest blocks are marked red so you can see exactly where to fix it.`;
+}
+function nhvrRequiredRestFinding(severity, key, title, message, rule, dueAbs, anchorAbs){
+  const req = nhvrRequiredRestMinutesForRule(rule);
+  const focus = nhvrRequiredRestFocus(key, dueAbs, req);
+  return nhvrFinding(
+    severity,
+    key,
+    title,
+    message,
+    focus.slots,
+    nhvrRequiredRestSuggestion(rule, key, dueAbs, req, focus.slots),
+    anchorAbs || dueAbs
+  );
+}
+
+
+function nhvrRollingShortWindowFindings(key, profile, rule, dayStart, dayEnd){
+  const findings = [];
+  const seenDue = new Set();
+  const windowMins = rule.minutes;
+  const stepMs = SLOT * 60000;
+  const requiredRestMins = nhvrRequiredRestMinutesForRule(rule);
+
+  // Rolling window ending inside this day. When work exceeds the limit,
+  // mark only the required rest blocks from the first illegal work block.
+  for(let endAbs = dayStart + stepMs; endAbs <= dayEnd; endAbs += stepMs){
+    const startAbs = endAbs - windowMins * 60000;
+    const work = nhvrWorkBetween(startAbs, endAbs);
+    if(work > rule.maxWork){
+      // The first illegal point is the work block that pushes the rolling window over limit.
+      const dueAbs = endAbs - stepMs;
+      const ks = absToKeySlot(dueAbs);
+      if(ks.key !== key) continue;
+      const dueKey = `${rule.label}|${ks.slot}|${requiredRestMins}`;
+      if(seenDue.has(dueKey)) continue;
+      seenDue.add(dueKey);
+
+      const focus = nhvrRequiredRestFocus(key, dueAbs, requiredRestMins);
+      if(!focus.slots.length) continue;
+
+      findings.push(nhvrFinding(
+        "error",
+        key,
+        `${rule.label} break due`,
+        `${profile.name}: ${formatMinsShort(work)} work in a rolling ${rule.label} period ending ${formatDateTimeForStats(endAbs)}. Limit is ${formatMinsShort(rule.maxWork)}. Required rest: ${nhvrRestRequirementLabel(requiredRestMins)}.`,
+        focus.slots,
+        nhvrRequiredRestSuggestion(rule, key, dueAbs, requiredRestMins, focus.slots),
+        startAbs
+      ));
+
+      // Once this rule marks the first required rest on this page, do not paint every later work block.
+      break;
+    }
+  }
+  return findings;
 }
 
 function nhvrAddRollingShortRestChecks(key, profile, dayStart, dayEnd, addFinding){
@@ -1898,16 +1977,18 @@ function nhvrBreachesForDate(key){
       if(winEnd <= dayStart || s >= dayEnd) return;
       const work = nhvrWorkBetween(s, winEnd);
       if(work > rule.maxWork){
-        const precise = nhvrOverLimitSlotsForDate(key, s, winEnd, rule.maxWork);
-        addFinding(nhvrFinding(
-          "error",
-          key,
-          `${rule.label} short-rest breach`,
-          `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
-          precise.slots,
-          nhvrPreciseFixSuggestion(rule, profile, key, precise.slots, s, winEnd, work),
-          s
-        ));
+        const dueAbs = nhvrFirstWorkSlotAfterDue(key, s + rule.maxWork*60000, Math.min(winEnd, dayEnd));
+        if(dueAbs){
+          addFinding(nhvrRequiredRestFinding(
+            "error",
+            key,
+            `${rule.label} break due`,
+            `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
+            rule,
+            dueAbs.abs,
+            s
+          ));
+        }
       }
     });
   });
@@ -1923,16 +2004,19 @@ function nhvrBreachesForDate(key){
       if(rule.maxWork !== null && rule.maxWork !== undefined){
         const work = nhvrWorkBetween(s, winEnd);
         if(work > rule.maxWork){
-          const precise = nhvrOverLimitSlotsForDate(key, s, winEnd, rule.maxWork);
-          addFinding(nhvrFinding(
-            "error",
-            key,
-            `${rule.label} work limit breach`,
-            `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
-            precise.slots,
-            nhvrPreciseFixSuggestion(rule, profile, key, precise.slots, s, winEnd, work) + ` A later major rest inside this already-started period does not reset this ${rule.label} count.`,
-            s
-          ));
+          const dueAbs = nhvrFirstWorkSlotAfterDue(key, s + rule.maxWork*60000, Math.min(winEnd, dayEnd));
+          if(dueAbs){
+            const reqRule = rule.restCheck ? {...rule, rest: rule.restCheck.label} : rule;
+            addFinding(nhvrRequiredRestFinding(
+              "error",
+              key,
+              `${rule.label} rest due`,
+              `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
+              reqRule,
+              dueAbs.abs,
+              s
+            ));
+          }
         }
       }
 
@@ -1985,8 +2069,31 @@ function nhvrBreachesForDate(key){
       }
     });
   });
-  return findings.slice(0, 12);
+  return nhvrCompressFindingsToRequiredRestBlocks(key, findings).slice(0, 12);
 }
+
+function nhvrCompressFindingsToRequiredRestBlocks(key, findings){
+  // Final safety: do not allow a whole long work sequence to paint red.
+  // Red means "put required rest here", not "all later work is wrong".
+  return (findings || []).map(f => {
+    if(!f || !f.focus || !Array.isArray(f.focus.slots)) return f;
+    const slots = [...new Set(f.focus.slots.map(Number).filter(n => !Number.isNaN(n)))].sort((a,b)=>a-b);
+    if(slots.length <= 2) return {...f, focus:{...(f.focus||{}), slots}};
+    const text = `${f.title || ""} ${f.message || ""} ${f.fix || ""}`.toLowerCase();
+    let required = 0;
+    if(text.includes("7 hour") || text.includes("7-hour")) required = 28;
+    else if(text.includes("24 hour") || text.includes("24-hour")) required = 96;
+    else if(text.includes("30 min") || text.includes("30 minute")) required = 2;
+    else if(text.includes("15 min") || text.includes("15 minute")) required = 1;
+    else if(text.includes("break due") || text.includes("rest due")) required = Math.min(slots.length, 2);
+    if(required > 0 && slots.length > required){
+      return {...f, focus:{...(f.focus||{}), slots:slots.slice(0, required)}};
+    }
+    return {...f, focus:{...(f.focus||{}), slots}};
+  });
+}
+
+
 function nhvrActiveWindows(asOfAbs){
   const key = absToKeySlot(asOfAbs).key;
   const profile = nhvrProfileForDate(key);
@@ -4662,6 +4769,22 @@ function quickRefreshCurrentScreen(){
     try{ renderAll(); }catch(e){}
   }
 }
+
+
+function nhvrSelfTestRequiredRestHighlights(){
+  const key = state.selectedDate || toKey(new Date());
+  const old = JSON.stringify({slots: state.slots[key], detail: state.dayDetails[key]});
+  state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+  for(let i=0;i<40;i++) state.slots[key][i] = "work"; // 10 hours continuous
+  const res = nhvrBreachesForDate(key).map(f => ({title:f.title, slots:f.focus && f.focus.slots, message:f.message, fix:f.fix}));
+  try{
+    const parsed = JSON.parse(old);
+    if(parsed.slots) state.slots[key] = parsed.slots; else delete state.slots[key];
+    if(parsed.detail) state.dayDetails[key] = parsed.detail;
+  }catch(e){}
+  return res;
+}
+
 
 function setup(){
   bindFindModalControls();
