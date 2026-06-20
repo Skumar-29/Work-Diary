@@ -887,3 +887,30 @@ body.location-picker-off .locPickerWrap input{
   background:var(--red)!important;
   color:#fff!important;
 }
+
+/* Jump to page/date */
+.jumpCard{
+  border:2px solid #d9efe6;
+}
+.jumpGrid{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:10px;
+  align-items:end;
+}
+.jumpGrid button{
+  min-height:44px;
+  white-space:nowrap;
+}
+#jumpStatus{
+  min-height:18px;
+  font-weight:700;
+}
+@media (max-width:520px){
+  .jumpGrid{
+    grid-template-columns:1fr;
+  }
+  .jumpGrid button{
+    width:100%;
+  }
+}

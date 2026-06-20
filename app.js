@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 14;
-const APP_BUILD_NAME = "precise-breach-highlighting";
+const APP_SCHEMA_VERSION = 15;
+const APP_BUILD_NAME = "jump-page-date";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -169,6 +169,47 @@ function enforceNumericOnly(e){
   const cleaned = String(el.value || "").replace(/\D+/g, "");
   if(el.value !== cleaned) el.value = cleaned;
 }
+
+function cleanPageNumberInput(value){
+  return String(value || "").replace(/[^\d ]+/g, "").replace(/\s+/g, " ").trim();
+}
+function pageNumberDigits(value){
+  return String(value || "").replace(/\D+/g, "");
+}
+function samePageNumber(a,b){
+  const ad = pageNumberDigits(a);
+  const bd = pageNumberDigits(b);
+  if(ad && bd) return ad === bd;
+  return cleanPageNumberInput(a) === cleanPageNumberInput(b);
+}
+function formatPageNumberLikeTemplate(value, template){
+  const digits = pageNumberDigits(value);
+  const tpl = cleanPageNumberInput(template);
+  if(!digits || !tpl.includes(" ")) return digits;
+  const lengths = tpl.split(" ").map(part => pageNumberDigits(part).length).filter(Boolean);
+  if(lengths.length < 2) return digits;
+  const groups = [];
+  let pos = digits.length;
+  for(let i=lengths.length-1; i>=1; i--){
+    const len = lengths[i];
+    const start = Math.max(0, pos - len);
+    groups.unshift(digits.slice(start, pos));
+    pos = start;
+  }
+  groups.unshift(digits.slice(0, pos));
+  return groups.filter(Boolean).join(" ");
+}
+function enforcePageNumberOnly(e){
+  const el = e.target;
+  if(!el || !el.dataset || el.dataset.pageNumberOnly !== "true") return;
+  const start = el.selectionStart;
+  const cleaned = cleanPageNumberInput(el.value);
+  if(el.value !== cleaned){
+    el.value = cleaned;
+    try{ el.setSelectionRange(Math.min(start, cleaned.length), Math.min(start, cleaned.length)); }catch(err){}
+  }
+}
+
 
 
 function ensureDismissedAudit(){
@@ -478,6 +519,7 @@ function normalizeDayDetailForMigration(d){
   if(!Array.isArray(out.changeRows)) out.changeRows = [];
   out.pageStatus = out.pageStatus || "active";
   out.pageStatusReason = out.pageStatusReason || "";
+  out.pageNo = cleanPageNumberInput(out.pageNo);
   out.twoUpScheme = out.twoUpScheme || "BFM";
   out.numberPlate = (out.numberPlate || "").toUpperCase();
   out.twoUpLicenceNumber = (out.twoUpLicenceNumber || "").replace(/\D+/g, "");
@@ -2755,7 +2797,7 @@ function saveSelectedPageOnly(){
   detail.licenceNumberSnapshot = $("pageLicenceNumber").value.replace(/\D+/g, "");
   detail.baseStateSnapshot = $("pageBaseState").value;
   detail.workDiaryNo = $("pageWorkDiaryNo").value.trim();
-  detail.pageNo = $("pagePageNo").value.trim();
+  detail.pageNo = cleanPageNumberInput($("pagePageNo").value);
   detail.numberPlate = $("pageNumberPlate").value.trim().toUpperCase();
 
   detail.workDiaryNoManual = true;
@@ -2815,11 +2857,12 @@ function updateDayDetailFromGraphForm(){
   });
   detail.numberPlate = (detail.numberPlate || "").toUpperCase();
   detail.twoUpLicenceNumber = (detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  detail.pageNo = cleanPageNumberInput(detail.pageNo);
   if((detail.pageStatus || "active") !== oldPageStatus){
     addAuditLog("Page status changed", `${state.selectedDate}: ${oldPageStatus} -> ${detail.pageStatus || "active"}. ${detail.pageStatusReason || ""}`);
   }
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
-  detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
+  detail.pageNoManual = !!(pageNumberDigits(detail.pageNo) && !samePageNumber(detail.pageNo, calcPage));
   recomputeAutoPageNumbers();
   saveSoon();
   renderDiaryFast();
@@ -2893,13 +2936,14 @@ function usedBookPageDatesUpTo(key){
 function calculatedPageNumberForDate(key){
   ensureBookSettings();
   if(!state.bookSettings.autoPageNumber) return "";
-  const first = parseInt(state.bookSettings.firstPageNumber, 10);
+  const firstDigits = pageNumberDigits(state.bookSettings.firstPageNumber);
+  const first = Number(firstDigits);
   if(!first || !state.bookSettings.firstPageDate) return "";
   if(!pageUsesBookPage(key)) return "";
   const usedDates = usedBookPageDatesUpTo(key);
   const index = usedDates.indexOf(key);
   if(index < 0) return "";
-  return String(first + index);
+  return formatPageNumberLikeTemplate(String(first + index), state.bookSettings.firstPageNumber);
 }
 
 function recomputeAutoPageNumbers(){
@@ -3075,7 +3119,7 @@ function saveBookSettings(){
   state.bookSettings.autoPageNumber = $("autoPageNumber").checked;
   state.bookSettings.carryForwardTwoUp = $("carryForwardTwoUp").checked;
   state.bookSettings.firstPageDate = $("firstPageDate").value || state.selectedDate;
-  state.bookSettings.firstPageNumber = $("firstPageNumber").value.replace(/\D+/g, "");
+  state.bookSettings.firstPageNumber = cleanPageNumberInput($("firstPageNumber").value);
   state.bookSettings.defaultWorkDiaryNo = $("defaultWorkDiaryNo").value.trim();
   state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
   saveSettingsRecord(effectiveDate);
@@ -3873,7 +3917,74 @@ function stopTimer(){
   renderAll();
 }
 
+
+function collectKnownDiaryDates(){
+  const dates = new Set();
+  Object.keys(state.dayDetails || {}).forEach(k => dates.add(k));
+  Object.keys(state.slots || {}).forEach(k => dates.add(k));
+  (state.entries || []).forEach(e => {
+    if(e.start) dates.add(String(e.start).slice(0,10));
+    if(e.end) dates.add(String(e.end).slice(0,10));
+  });
+  dates.add(state.selectedDate);
+  return [...dates].filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+}
+function goToDiaryDate(key, message="Opened"){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(key)){
+    alert("Please select a valid date.");
+    return;
+  }
+  state.selectedDate = key;
+  applyAutoDefaultsToDay(key);
+  saveSoon();
+  renderDiaryFast();
+  const active = document.querySelector(".screen.active");
+  if(active && active.id === "graphScreen") renderGraphPage();
+  if($("jumpDateInput")) $("jumpDateInput").value = key;
+  if($("jumpStatus")) $("jumpStatus").textContent = `${message}: ${fmtDateLong(key)} • Page ${pageNoForDate(key)}`;
+  if(typeof showToast === "function") showToast(message);
+}
+function jumpToDateValue(){
+  const key = $("jumpDateInput") ? $("jumpDateInput").value : "";
+  goToDiaryDate(key, "Opened date");
+}
+function findDateByPageNumber(pageNo){
+  const target = cleanPageNumberInput(pageNo);
+  if(!target) return null;
+  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
+  const dates = collectKnownDiaryDates();
+  for(const key of dates){
+    const d = ensureDayDetail(key);
+    const stored = d.pageNo || "";
+    const calc = calculatedPageNumberForDate(key) || "";
+    if((stored && samePageNumber(stored, target)) || (calc && samePageNumber(calc, target))){
+      return {key, stored: stored || calc};
+    }
+  }
+  return null;
+}
+function jumpToPageNumberValue(){
+  const raw = $("jumpPageInput") ? $("jumpPageInput").value : "";
+  const page = cleanPageNumberInput(raw);
+  if($("jumpPageInput")) $("jumpPageInput").value = page;
+  if(!page){
+    alert("Please enter a page number.");
+    return;
+  }
+  const found = findDateByPageNumber(page);
+  if(found){
+    goToDiaryDate(found.key, `Page ${found.stored || page} opened`);
+  }else{
+    const msg = `Page ${page} not found in saved diary records.`;
+    if($("jumpStatus")) $("jumpStatus").textContent = msg;
+    alert(msg);
+  }
+}
+
+
 function setup(){
+  if($("jumpDateBtn")) $("jumpDateBtn").onclick = jumpToDateValue;
+  if($("jumpPageBtn")) $("jumpPageBtn").onclick = jumpToPageNumberValue;
   if($("refreshGraphPageBtn")) $("refreshGraphPageBtn").onclick = refreshGraphPageOnly;
   if($("refreshGraphDefaultsBtn")) $("refreshGraphDefaultsBtn").onclick = reapplyCurrentDefaultsToPage;
   if($("locationPickerEnabled")) $("locationPickerEnabled").onchange = toggleLocationPickerEnabled;
@@ -3881,6 +3992,7 @@ function setup(){
   window.addEventListener("pagehide", flushSaveSoon);
   setupVehicleDriverRegistryButtons();
   document.addEventListener("input", enforceNumericOnly);
+  document.addEventListener("input", enforcePageNumberOnly);
   document.addEventListener("input", enforceUppercaseOnly);
   load();
   $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);saveSoon();renderDiaryFast();}

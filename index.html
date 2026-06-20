@@ -107,6 +107,23 @@
       <div id="alerts" class="alerts"></div>
       <div id="auditFixPanel" class="auditFixPanel"></div>
 
+      <section class="card jumpCard">
+        <h2>Jump to old page/date</h2>
+        <p class="hint">Open an old diary page directly by date or by work diary page number.</p>
+        <div class="jumpGrid">
+          <label>Jump by date
+            <input id="jumpDateInput" type="date">
+          </label>
+          <button id="jumpDateBtn" class="secondary">Go to date</button>
+          <label>Find by page no
+            <input id="jumpPageInput" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 9912 30">
+          </label>
+          <button id="jumpPageBtn" class="secondary">Find page</button>
+        </div>
+        <p id="jumpStatus" class="hint"></p>
+      </section>
+
+
       <div class="legend">
         <span><i class="sw work"></i> Work / Drive</span>
         <span><i class="sw rest"></i> Rest</span>
@@ -130,7 +147,7 @@
         <p class="hint">Fill these details so the graph page matches your paper work diary sheet more closely.</p>
         <div id="graphDetailsForm" class="formGrid graphDetailsForm">
           <label>Work diary no <input id="sheetWorkDiaryNo" data-day-detail="workDiaryNo" placeholder="e.g. VDW"></label>
-          <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="e.g. 491838"></label>
+          <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" placeholder="e.g. 491838" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
           <label>Page status
             <select id="sheetPageStatus" data-day-detail="pageStatus">
               <option value="active">Active / normal page</option>
@@ -198,7 +215,7 @@
             </select>
           </label>
           <label>Work diary no for this page <input id="pageWorkDiaryNo" data-page-override="workDiaryNo" placeholder="Work diary no"></label>
-          <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Page no"></label>
+          <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" placeholder="Page no" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
           <p class="smartTip fullWidth">If you cancelled a paper page and used the next page, mark the cancelled page status above, then manually set the correct page number on the usable page here if needed.</p>
           <label>Truck rego / number plate for this page <input id="pageNumberPlate" data-page-override="numberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="Truck rego"></label>
         </div>
@@ -407,7 +424,7 @@
           </label>
           <div class="formGrid">
             <label>First page date <input id="firstPageDate" type="date"></label>
-            <label>First page number <input id="firstPageNumber" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="e.g. 491838"></label>
+            <label>First page number <input id="firstPageNumber" placeholder="e.g. 491838" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
             <label>Default work diary no <input id="defaultWorkDiaryNo" placeholder="e.g. VDW"></label>
             <label>Default number plate <input id="defaultNumberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           </div>

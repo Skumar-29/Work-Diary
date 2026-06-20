@@ -375,3 +375,14 @@ Precise breach highlighting update:
 - Missing major-rest requirements are shown in the audit/suggestion text instead of colouring the whole work period red.
 - Suggestions now identify the first red block and recommend adding/moving the required rest before continuing from that block.
 - NHVR calculation engine structure and limits were preserved; only focus/highlight selection was refined.
+
+
+Jump to page/date update:
+- Added Jump to old page/date section on Work Diary screen.
+- You can jump directly by date.
+- You can search/open by work diary page number.
+- Page-number search matches both spaced and unspaced formats, e.g. 9912 30 matches 991230.
+- Page number fields now allow digits and spaces, so you can save formats like 9912 30.
+- Licence and odometer fields remain numbers-only.
+- Auto page numbering keeps the spacing pattern from the first page number, e.g. 9912 30, 9912 31, 9912 32.
+- No NHVR calculation engine changes.
