@@ -1388,3 +1388,17 @@ body.location-picker-off .locPickerWrap input{
 .shortBreakBadge{display:inline-block;margin-top:3px;font-size:11px;color:#516b5f;font-weight:800}
 .auditActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.auditActions button{min-height:34px;padding:6px 10px;border-radius:10px}
 @media (prefers-color-scheme:dark){.shortBreakBox{background:#0e1b12;border-color:#244c31}.continuationBadge{background:#17233f;color:#c6d4ff}.shortBreakBadge{color:#aec8bc}}
+
+/* Fatigue short-window repair */
+.slot.bad{
+  background:var(--red)!important;
+  color:#fff!important;
+  border-color:#8b0000!important;
+}
+
+/* Fatigue engine verification */
+.slot.bad{
+  background:var(--red)!important;
+  color:#fff!important;
+  border-color:#8b0000!important;
+}

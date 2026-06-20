@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 26;
-const APP_BUILD_NAME = "smart-nd-breaks";
+const APP_SCHEMA_VERSION = 28;
+const APP_BUILD_NAME = "fatigue-engine-verified";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1054,8 +1054,11 @@ function load(){
 }
 function isWork(key, idx){ return getSlot(key, idx) === "work"; }
 function isRestType(type){ return type === "rest"; }
-function restTypeForSlot(key, idx){
-  const detail = ensureDayDetail(key);
+function restTypeForSlot(key, idx, seen=new Set()){
+  if(getSlot(key, idx) !== "rest") return "";
+  const guardKey = `${key}:${idx}`;
+  if(seen.has(guardKey)) return "";
+  seen.add(guardKey);
   const rows = syncChangeRowsForDay(key);
   const mins = idx*SLOT;
   let current = null;
@@ -1065,9 +1068,11 @@ function restTypeForSlot(key, idx){
     else break;
   }
   if(current && current.activity === "rest"){
-    if(isAutoContinuationRow(current)){
+    if(typeof isAutoContinuationRow === "function" && isAutoContinuationRow(current)){
       const prevKey = previousDateKey(key);
-      return restTypeForSlot(prevKey, SLOTS_PER_DAY - 1);
+      if(!hasExplicitDiaryDataForDate(prevKey)) return "";
+      if(typeof calculationHistoryStartAbs === "function" && fromKey(prevKey).getTime() < calculationHistoryStartAbs()) return "";
+      return restTypeForSlot(prevKey, SLOTS_PER_DAY - 1, seen);
     }
     return current.restType || "";
   }
@@ -1822,6 +1827,48 @@ function nhvrLongNightSlotCounter(abs){
 }
 
 
+
+function nhvrRollingShortWindowFindings(key, profile, rule, dayStart, dayEnd){
+  const slotSet = new Set();
+  const startsBySlot = {};
+  const messagesBySlot = {};
+  const stepMs = SLOT * 60000;
+  for(let endAbs = dayStart + stepMs; endAbs <= dayEnd; endAbs += stepMs){
+    const startAbs = endAbs - rule.minutes * 60000;
+    const work = nhvrWorkBetween(startAbs, endAbs);
+    if(work > rule.maxWork){
+      const precise = nhvrOverLimitSlotsForDate(key, startAbs, endAbs, rule.maxWork);
+      precise.slots.forEach(s => {
+        if(!Number.isNaN(Number(s))){
+          slotSet.add(Number(s));
+          startsBySlot[s] = startAbs;
+          messagesBySlot[s] = `${profile.name}: ${formatMinsShort(work)} work in a rolling ${rule.label} period ending ${formatDateTimeForStats(endAbs)}. Limit is ${formatMinsShort(rule.maxWork)}.`;
+        }
+      });
+    }
+  }
+  const slots = [...slotSet].sort((a,b)=>a-b);
+  if(!slots.length) return [];
+  const firstSlot = slots[0];
+  const firstTime = fmtHM(firstSlot * SLOT);
+  const firstStart = startsBySlot[firstSlot] || dayStart;
+  return [nhvrFinding(
+    "error", key, `${rule.label} short-rest breach`,
+    messagesBySlot[firstSlot] || `${profile.name}: rolling ${rule.label} short-rest limit exceeded.`,
+    slots,
+    `First red block starts at ${firstTime}. Add or move ${rule.rest || "the required rest"} before this point, or change incorrectly selected Work blocks to Rest.`,
+    firstStart
+  )];
+}
+
+function nhvrAddRollingShortRestChecks(key, profile, dayStart, dayEnd, addFinding){
+  if(!profile || !Array.isArray(profile.short)) return;
+  profile.short.forEach(rule => {
+    nhvrRollingShortWindowFindings(key, profile, rule, dayStart, dayEnd).forEach(addFinding);
+  });
+}
+
+
 function nhvrBreachesForDate(key){
   const profile = nhvrProfileForDate(key);
   if(profile.afm) return [nhvrFinding("error", key, "AFM conditions required", "AFM is selected. Enter your operator's AFM certificate limits before using fatigue calculations.", [], "Use AFM as record-only until the exact AFM certificate conditions are entered.")];
@@ -1839,6 +1886,9 @@ function nhvrBreachesForDate(key){
     seen.add(k); findings.push(f);
   };
   const restEnds = nhvrRestBreakEnds(scanStart, dayEnd + 15*DAY_MS);
+
+  // Rolling short-rest checks catch continuous work even if there is no saved prior rest anchor.
+  nhvrAddRollingShortRestChecks(key, profile, dayStart, dayEnd, addFinding);
 
   // Short-rest rules: count forward from the end of every rest break for periods under 24h.
   // Red highlights now mark only the over-limit work blocks, not the full counted period.
@@ -1945,11 +1995,14 @@ function nhvrActiveWindows(asOfAbs){
   const restEnds = nhvrRestBreakEnds(scanStart, asOfAbs);
   const windows = [];
   profile.short.forEach(rule => {
+    const s = asOfAbs - rule.minutes*60000;
+    const work = nhvrWorkBetween(s, asOfAbs);
+    windows.push({label:`${rule.label} rolling`, startAbs:s, endAbs:asOfAbs, maxWork:rule.maxWork, work, rest:rule.rest, type:"short"});
     restEnds.forEach(e => {
-      const s = e.abs, end = s + rule.minutes*60000;
-      if(s <= asOfAbs && asOfAbs < end){
-        const work = nhvrWorkBetween(s, asOfAbs);
-        windows.push({label:rule.label, startAbs:s, endAbs:end, maxWork:rule.maxWork, work, rest:rule.rest, type:"short"});
+      const rs = e.abs, end = rs + rule.minutes*60000;
+      if(rs <= asOfAbs && asOfAbs < end){
+        const anchoredWork = nhvrWorkBetween(rs, asOfAbs);
+        windows.push({label:rule.label, startAbs:rs, endAbs:end, maxWork:rule.maxWork, work:anchoredWork, rest:rule.rest, type:"short"});
       }
     });
   });
@@ -1978,6 +2031,31 @@ function nhvrCanWorkStatus(asOfAbs){
     if(rem < can){ can = rem; reason = `${w.label} window ending ${formatDateTimeForStats(w.endAbs)}`; }
   });
   return {minutes:can, reason, windows};
+}
+
+function nhvrEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  try{
+    const run = (name, scheme, workSlots, expectBreach) => {
+      const key = "2026-06-18";
+      state.selectedDate = key;
+      state.scheme = scheme;
+      state.ruleHistory = [{effectiveDate:key, scheme, mode:"solo", coDriverScheme:""}];
+      state.slots = {}; state.dayDetails = {}; state.entries = [];
+      state.calculationHistory = {startDate:key, mode:"noWorkBeforeStart"};
+      for(let i=0;i<workSlots;i++) setSlot(key, i, "work");
+      const findings = nhvrBreachesForDate(key).filter(f => (f.severity || "error") === "error");
+      const ok = expectBreach ? findings.length > 0 : findings.length === 0;
+      results.push({name, ok, count:findings.length, titles:findings.map(f=>f.title).slice(0,4)});
+    };
+    run("Standard solo 10h continuous should breach", "Standard", 40, true);
+    run("BFM solo 10h continuous should breach short-rest", "BFM", 40, true);
+    run("Standard solo 4h continuous should not breach", "Standard", 16, false);
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
 }
 function nhvrRuleCardsForDate(key){
   const profile = nhvrProfileForDate(key);
@@ -2391,15 +2469,30 @@ function saveShortBreakSettings(){
 function compactChangeActivityLabel(a){
   return a === "work" ? "Work" : "Rest";
 }
+
+function hasExplicitDiaryDataForDate(key){
+  if(!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
+  if(state.slots && Array.isArray(state.slots[key])) return true;
+  if(state.dayDetails && state.dayDetails[key]) return true;
+  if(Array.isArray(state.entries)){
+    return state.entries.some(e => String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key);
+  }
+  return false;
+}
 function previousDateKey(key){
   return addDays(key, -1);
 }
 function isMidnightContinuationSegment(key, seg){
   if(!seg || seg.startMins !== 0) return false;
   const prevKey = previousDateKey(key);
+  if(!hasExplicitDiaryDataForDate(prevKey)) return false;
+  if(typeof calculationHistoryStartAbs === "function" && fromKey(prevKey).getTime() < calculationHistoryStartAbs()) return false;
   const prevLast = getSlot(prevKey, SLOTS_PER_DAY - 1);
   const curFirst = getSlot(key, 0);
-  return prevLast === curFirst && curFirst === seg.activity;
+  if(prevLast !== curFirst || curFirst !== seg.activity) return false;
+  // Avoid treating a completely blank all-rest day as a continuation.
+  if(curFirst === "rest" && !dayHasAnyWork(prevKey) && !dayHasAnyWork(key)) return false;
+  return true;
 }
 function rowDetailsNotRequired(row){
   return !!(row && (row.noDetails || row.autoNoDetails));

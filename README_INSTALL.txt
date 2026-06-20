@@ -492,3 +492,19 @@ Smart N/D breaks update:
 - Smart mode auto-ticks N/D on the return-to-work row after a short break, while the rest-start row still requires odometer/location.
 - Optional odometer/location audit button wording is now Skip.
 - NHVR slot-based work/rest and fatigue limit calculations were not changed.
+
+
+Fatigue short-window repair:
+- Added rolling short-rest window checks to catch continuous work even when there is no saved previous rest-end anchor.
+- A 10-hour continuous Work selection should now trigger red breach blocks and Driving screen errors under Standard/BFM short-rest rules as applicable.
+- This fixes the case where a fresh app/history start allowed long continuous work to stay green.
+- Saved diary data, diary book history, N/D logic, and user settings are not reset.
+- NHVR rule limits were not weakened; this adds a safer detection path for the existing short-rest limits.
+
+
+Fatigue engine verification update:
+- Fixed a recursion/stale-history problem in rest-type inheritance for automatic midnight continuation rows. This could stop the fatigue checker and leave continuous work green.
+- Added/verified rolling short-rest window checks for Standard solo, Standard two-up, and BFM solo short-rest limits.
+- Strengthened next-break/active-window calculations so fresh history still shows due-break status.
+- Added guarded NHVR engine self-test function for console/debug checks.
+- No diary data, N/D smart options, diary book history, page numbering, or UI settings were reset.
