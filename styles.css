@@ -869,3 +869,15 @@ body.location-picker-off .locPickerWrap input{
     -webkit-text-fill-color:#111!important;
   }
 }
+
+/* Graph refresh controls */
+.graphRefreshRow{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:8px 0 12px;
+}
+.graphRefreshRow button{
+  flex:1;
+  min-width:140px;
+}

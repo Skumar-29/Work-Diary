@@ -236,7 +236,11 @@
         <h2>Paper sheet preview</h2>
         <p class="hint">This preview is designed to help you match your paper daily sheet. It also updates for two-up driver details when enabled.</p>
         <div class="graphWrap">
-          <div id="paperSheetPreview"></div>
+          <div class="graphRefreshRow">
+          <button id="refreshGraphPageBtn" class="secondary">Refresh page</button>
+          <button id="refreshGraphDefaultsBtn" class="secondary">Re-apply current defaults</button>
+        </div>
+        <div id="paperSheetPreview"></div>
         <button id="graphExportPdf" class="primary full graphPdfBtn">Export this page as PDF</button>
         </div>
       </section>

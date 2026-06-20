@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 12;
-const APP_BUILD_NAME = "change-table-visibility-fix";
+const APP_SCHEMA_VERSION = 13;
+const APP_BUILD_NAME = "graph-refresh-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -2977,6 +2977,7 @@ function saveRuleHistorySetting(){
   applyAutoDefaultsToDay(state.selectedDate);
   addAuditLog("Work option changed", `From ${effectiveDate}: ${rec.scheme} ${rec.mode}${rec.coDriverScheme ? ", co-driver "+rec.coDriverScheme : ""}`);
   save();
+  refreshCurrentPageData({forceDefaults:false});
   renderAll();
   showToast("Saved");
 }
@@ -3004,9 +3005,66 @@ function saveBookSettings(){
   applyAutoDefaultsToDay(state.selectedDate);
   addAuditLog("Book setup changed", `Effective from ${effectiveDate}`);
   save();
+  refreshCurrentPageData({forceDefaults:false});
   renderAll();
   showToast("Saved");
 }
+
+
+function refreshCurrentPageData(opts={}){
+  const key = state.selectedDate;
+  flushSaveSoon && flushSaveSoon();
+  ensureProfile();
+  ensureBookSettings && ensureBookSettings();
+  if(typeof ensureSettingsHistorySafe === "function") ensureSettingsHistorySafe();
+  if(typeof ensureRuleHistory === "function") ensureRuleHistory();
+
+  const detail = ensureDayDetail(key);
+
+  if(opts.forceDefaults){
+    detail.selectedPageManual = false;
+    detail.workDiaryNoManual = false;
+    detail.numberPlateManual = false;
+    detail.ruleManual = false;
+    detail.twoUpManual = false;
+    detail.pageNoManual = false;
+  }
+
+  applyAutoDefaultsToDay(key);
+  if(typeof syncChangeRowsForDay === "function") syncChangeRowsForDay(key);
+  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
+  applyAutoDefaultsToDay(key);
+  save();
+
+  renderDate();
+  renderGrid();
+  renderTotals();
+  if(typeof renderGraphPage === "function"){
+    const active = document.querySelector(".screen.active");
+    if(active && active.id === "graphScreen") renderGraphPage();
+  }
+  if(typeof renderDriverSettings === "function"){
+    const active = document.querySelector(".screen.active");
+    if(active && active.id === "settingsScreen") renderDriverSettings();
+  }
+  if(typeof renderVehicleDriverRegistry === "function"){
+    const active = document.querySelector(".screen.active");
+    if(active && active.id === "vehiclesScreen") renderVehicleDriverRegistry();
+  }
+}
+
+function refreshGraphPageOnly(){
+  refreshCurrentPageData({forceDefaults:false});
+  if(typeof showToast === "function") showToast("Refreshed");
+}
+
+function reapplyCurrentDefaultsToPage(){
+  if(confirm("Re-apply current defaults to this page? This will update driver/base/truck/work-option defaults on this page unless you edit them again.")){
+    refreshCurrentPageData({forceDefaults:true});
+    if(typeof showToast === "function") showToast("Defaults applied");
+  }
+}
+
 
 function renderGraphPage(){
   ensureProfile();
@@ -3690,6 +3748,7 @@ function saveDriverSettings(){
   applyAutoDefaultsToDay(state.selectedDate);
   addAuditLog("Driver/base details changed", `Effective from ${effectiveDate}`);
   save();
+  refreshCurrentPageData({forceDefaults:false});
   renderDriverSettings();
   renderDate();
   renderGrid();
@@ -3737,6 +3796,8 @@ function stopTimer(){
 }
 
 function setup(){
+  if($("refreshGraphPageBtn")) $("refreshGraphPageBtn").onclick = refreshGraphPageOnly;
+  if($("refreshGraphDefaultsBtn")) $("refreshGraphDefaultsBtn").onclick = reapplyCurrentDefaultsToPage;
   if($("locationPickerEnabled")) $("locationPickerEnabled").onchange = toggleLocationPickerEnabled;
   document.addEventListener("visibilitychange", () => { if(document.hidden) flushSaveSoon(); });
   window.addEventListener("pagehide", flushSaveSoon);
@@ -3809,6 +3870,7 @@ function setup(){
           renderDiaryFast();
         }
         if(btn.dataset.tab === "graphScreen"){
+          refreshCurrentPageData({forceDefaults:false});
           renderGraphPage();
         }
         if(btn.dataset.tab === "statsScreen"){

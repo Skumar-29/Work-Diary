@@ -358,3 +358,11 @@ Change details table visibility fix:
 - Sticky columns now stay light with readable black text in both light and dark iPhone modes.
 - Added table visibility/stability safeguards so the Work/Rest change details table does not collapse or disappear leaving only the scrollbar.
 - No NHVR calculation engine changes.
+
+
+Graph refresh/update fix:
+- Graph screen now refreshes the selected page data every time Graph is opened.
+- Added Refresh page button on Graph screen.
+- Added Re-apply current defaults button on Graph screen for when you want the selected page to use current driver/base/truck/work-option defaults.
+- Saving driver/base details, book setup, or work option now refreshes the current page immediately so base state and graph details do not stay stale until Safari refresh.
+- No NHVR calculation engine changes.
