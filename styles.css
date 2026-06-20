@@ -1381,3 +1381,10 @@ body.location-picker-off .locPickerWrap input{
     color:#111!important;
   }
 }
+
+/* Smart N/D short-break settings and continuation rows */
+.shortBreakBox{margin:14px 0;padding:12px;border:1px solid #d7e8df;border-radius:16px;background:#f7fcf9}
+.continuationBadge{display:inline-block;padding:6px 8px;border-radius:10px;background:#eef3ff;color:#274379;font-weight:900;font-size:12px;white-space:nowrap}
+.shortBreakBadge{display:inline-block;margin-top:3px;font-size:11px;color:#516b5f;font-weight:800}
+.auditActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.auditActions button{min-height:34px;padding:6px 10px;border-radius:10px}
+@media (prefers-color-scheme:dark){.shortBreakBox{background:#0e1b12;border-color:#244c31}.continuationBadge{background:#17233f;color:#c6d4ff}.shortBreakBadge{color:#aec8bc}}

@@ -462,7 +462,32 @@
         </label>
 
         
-        <div class="calculationHistoryBox">
+        
+        <div class="shortBreakBox">
+          <h3>Short break details</h3>
+          <p class="smartTip">Controls when the app can auto-use N/D for odometer/location on short breaks between work periods.</p>
+          <div class="formGrid">
+            <label>Short break detail rule
+              <select id="shortBreakDetailMode">
+                <option value="manual">Manual only</option>
+                <option value="smart">Smart short-break mode</option>
+                <option value="strict">Strict: always ask details</option>
+              </select>
+            </label>
+            <label>Short break limit
+              <select id="shortBreakMaxMinutes">
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">Smart mode: rest-start row still needs odometer/location, but the return-to-work row after a short break is N/D automatically. Short rest rows auto-select Rest.</p>
+          <button id="saveShortBreakSettings" class="secondary full" type="button">Save short break settings</button>
+        </div>
+
+<div class="calculationHistoryBox">
           <h3>Calculation history</h3>
           <p class="smartTip">Use this to avoid false long-period warnings when the app does not contain older work diary history.</p>
           <div class="formGrid">

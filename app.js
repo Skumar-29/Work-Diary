@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 25;
-const APP_BUILD_NAME = "no-details-refresh-fix";
+const APP_SCHEMA_VERSION = 26;
+const APP_BUILD_NAME = "smart-nd-breaks";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -105,7 +105,8 @@ let state = {
   registrySettings: {autoSaveFromDiary:true},
   uiSettings: {locationPickerEnabled:true},
   diaryBooks: [],
-  calculationHistory: {startDate:"", mode:"noWorkBeforeStart"}
+  calculationHistory: {startDate:"", mode:"noWorkBeforeStart"},
+  shortBreakSettings: {mode:"smart", maxMinutes:60}
 };
 
 const $ = id => document.getElementById(id);
@@ -556,6 +557,7 @@ function normalizeDayDetailForMigration(d){
     activity: r.activity || "rest",
     noDetails: !!r.noDetails,
     autoNoDetails: !!r.autoNoDetails,
+    autoReason: r.autoReason || "",
     odometer: String(r.odometer || "").replace(/\D+/g, ""),
     location: r.location || "",
     note: r.note || "",
@@ -584,6 +586,7 @@ function migrateImportedBackup(backup){
     uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true},
     diaryBooks: Array.isArray(b.diaryBooks) ? b.diaryBooks : [],
     calculationHistory: b.calculationHistory && typeof b.calculationHistory === "object" ? b.calculationHistory : {},
+    shortBreakSettings: b.shortBreakSettings && typeof b.shortBreakSettings === "object" ? b.shortBreakSettings : {mode:"smart", maxMinutes:60},
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -614,6 +617,9 @@ function migrateImportedBackup(backup){
   migrated.calculationHistory = migrated.calculationHistory && typeof migrated.calculationHistory === "object" ? migrated.calculationHistory : {};
   migrated.calculationHistory.startDate = migrated.calculationHistory.startDate || migrated.bookSettings.firstPageDate || migrated.selectedDate;
   migrated.calculationHistory.mode = ["noWorkBeforeStart","unknown","imported"].includes(migrated.calculationHistory.mode) ? migrated.calculationHistory.mode : "noWorkBeforeStart";
+  migrated.shortBreakSettings = migrated.shortBreakSettings && typeof migrated.shortBreakSettings === "object" ? migrated.shortBreakSettings : {mode:"smart", maxMinutes:60};
+  migrated.shortBreakSettings.mode = ["manual","smart","strict"].includes(migrated.shortBreakSettings.mode) ? migrated.shortBreakSettings.mode : "smart";
+  migrated.shortBreakSettings.maxMinutes = [15,30,45,60].includes(Number(migrated.shortBreakSettings.maxMinutes)) ? Number(migrated.shortBreakSettings.maxMinutes) : 60;
   migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
   migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
   migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
@@ -1058,7 +1064,13 @@ function restTypeForSlot(key, idx){
     if(rm <= mins) current = r;
     else break;
   }
-  if(current && current.activity === "rest") return current.restType || "";
+  if(current && current.activity === "rest"){
+    if(isAutoContinuationRow(current)){
+      const prevKey = previousDateKey(key);
+      return restTypeForSlot(prevKey, SLOTS_PER_DAY - 1);
+    }
+    return current.restType || "";
+  }
   return "";
 }
 function isStationary(key, idx){
@@ -2064,7 +2076,7 @@ function auditDate(key){
   if(!detail.numberPlate) add("warn","Missing truck rego","Truck rego / number plate is empty.",{type:"field", field:"pageNumberPlate"},"Enter the truck rego for this selected page. If this truck continues from this date, update Default number plate with the correct effective date.");
   if(!detail.fitForDuty && !isAuditDismissed("fit_for_duty", key, "fit")){
     const beforeLen = errors.length;
-    add("info","Fit for Duty not ticked","Fit for Duty is not ticked on this page.",{type:"field", field:"sheetFitForDuty"},"If this is not required for this page, mark it Not required. If you were fit for duty and want it shown on the sheet, tick Fit for Duty.");
+    add("info","Fit for Duty not ticked","Fit for Duty is not ticked on this page.",{type:"field", field:"sheetFitForDuty"},"If this is not required for this page, tap Skip. If you were fit for duty and want it shown on the sheet, tick Fit for Duty.");
     errors[beforeLen].optionalDismiss = {kind:"fit_for_duty", date:key, extra:"fit", label:"Fit for Duty not ticked"};
   }
   const confidence = complianceIssuesForDate(key);
@@ -2199,7 +2211,7 @@ function renderAuditList(){
     return;
   }
   holder.innerHTML = errors.slice(0,60).map((e,idx)=>{
-    const opt = e.optionalDismiss ? `<button type="button" class="auditOptionalBtn" data-audit-dismiss="${idx}">Not required</button>` : "";
+    const opt = e.optionalDismiss ? `<button type="button" class="auditOptionalBtn" data-audit-dismiss="${idx}">Skip</button>` : "";
     return `
     <div class="auditItem ${e.severity}" data-audit-card="${idx}">
       <strong>${escapeHtml(e.title)}</strong>
@@ -2353,6 +2365,29 @@ function formatDisplayDateShort(key){
   return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
 }
 
+
+function ensureShortBreakSettings(){
+  if(!state.shortBreakSettings || typeof state.shortBreakSettings !== "object") state.shortBreakSettings = {mode:"smart", maxMinutes:60};
+  if(!["manual","smart","strict"].includes(state.shortBreakSettings.mode)) state.shortBreakSettings.mode = "smart";
+  const mins = Number(state.shortBreakSettings.maxMinutes || 60);
+  state.shortBreakSettings.maxMinutes = [15,30,45,60].includes(mins) ? mins : 60;
+}
+function renderShortBreakSettings(){
+  ensureShortBreakSettings();
+  if($("shortBreakDetailMode")) $("shortBreakDetailMode").value = state.shortBreakSettings.mode;
+  if($("shortBreakMaxMinutes")) $("shortBreakMaxMinutes").value = String(state.shortBreakSettings.maxMinutes);
+}
+function saveShortBreakSettings(){
+  ensureShortBreakSettings();
+  state.shortBreakSettings.mode = $("shortBreakDetailMode") ? $("shortBreakDetailMode").value : "smart";
+  state.shortBreakSettings.maxMinutes = $("shortBreakMaxMinutes") ? Number($("shortBreakMaxMinutes").value || 60) : 60;
+  addAuditLog("Short break details changed", `${state.shortBreakSettings.mode}; max ${state.shortBreakSettings.maxMinutes} minutes`);
+  rebuildDerivedDiaryData();
+  save();
+  renderAll();
+  if(typeof showToast === "function") showToast("Saved");
+}
+
 function compactChangeActivityLabel(a){
   return a === "work" ? "Work" : "Rest";
 }
@@ -2369,6 +2404,37 @@ function isMidnightContinuationSegment(key, seg){
 function rowDetailsNotRequired(row){
   return !!(row && (row.noDetails || row.autoNoDetails));
 }
+
+function isAutoContinuationRow(row){
+  return !!(row && row.autoNoDetails && row.autoReason === "continuation");
+}
+function isAutoShortReturnRow(row){
+  return !!(row && row.autoNoDetails && row.autoReason === "shortBreakReturn");
+}
+function isShortRestBetweenWork(key, seg, segs){
+  ensureShortBreakSettings();
+  if(state.shortBreakSettings.mode === "strict" || state.shortBreakSettings.mode === "manual") return false;
+  if(!seg || seg.activity !== "rest") return false;
+  const idx = segs.indexOf(seg);
+  const prev = segs[idx-1];
+  const next = segs[idx+1];
+  if(!prev || !next || prev.activity !== "work" || next.activity !== "work") return false;
+  const dur = Math.max(0, seg.endMins - seg.startMins);
+  return dur > 0 && dur <= Number(state.shortBreakSettings.maxMinutes || 60);
+}
+function isReturnToWorkAfterShortRest(key, seg, segs){
+  ensureShortBreakSettings();
+  if(state.shortBreakSettings.mode !== "smart") return false;
+  if(!seg || seg.activity !== "work") return false;
+  const idx = segs.indexOf(seg);
+  const prev = segs[idx-1];
+  const beforePrev = segs[idx-2];
+  if(!prev || !beforePrev) return false;
+  if(prev.activity !== "rest" || beforePrev.activity !== "work") return false;
+  const dur = Math.max(0, prev.endMins - prev.startMins);
+  return dur > 0 && dur <= Number(state.shortBreakSettings.maxMinutes || 60);
+}
+
 function rowDetailsLockLabel(row){
   if(row && row.autoNoDetails) return "Auto continuation";
   return "N/D";
@@ -2383,17 +2449,37 @@ function syncChangeRowsForDay(key){
   detail.changeRows = segs.map(seg => {
     const time = fmtHM(seg.startMins);
     const prev = keep[`${time}|${seg.activity}`] || {};
-    const autoNoDetails = isMidnightContinuationSegment(key, seg);
+    const continuation = isMidnightContinuationSegment(key, seg);
+    const shortRest = isShortRestBetweenWork(key, seg, segs);
+    const returnAfterShortRest = isReturnToWorkAfterShortRest(key, seg, segs);
+    let autoNoDetails = false;
+    let autoReason = "";
+    if(continuation){
+      autoNoDetails = true;
+      autoReason = "continuation";
+    }else if(returnAfterShortRest){
+      autoNoDetails = true;
+      autoReason = "shortBreakReturn";
+    }
     const noDetails = autoNoDetails || !!prev.noDetails;
+    let restType = prev.restType || (seg.activity === "rest" ? "" : "work");
+    if(continuation){
+      restType = "";
+    }else if(shortRest && !prev.restType){
+      restType = "rest";
+    }else if(seg.activity === "work"){
+      restType = "work";
+    }
     return {
       time,
       activity: seg.activity,
       noDetails,
       autoNoDetails,
+      autoReason,
       odometer: noDetails ? "" : (prev.odometer || ""),
       location: noDetails ? "" : (prev.location || ""),
-      note: prev.note || "",
-      restType: prev.restType || (seg.activity === "rest" ? "" : "work")
+      note: prev.note || (continuation ? "Continuation from previous day" : (returnAfterShortRest ? "Return after short break" : "")),
+      restType
     };
   });
   return detail.changeRows;
@@ -2536,15 +2622,35 @@ function renderChangeDetailsEditor(){
   if(!holder) return;
   const rows = syncChangeRowsForDay(state.selectedDate);
   if(!rows.length){
-    holder.innerHTML = "<p class=\"hint\">No work/rest changes yet.</p>";
+    holder.innerHTML = `<p class="hint">No work/rest changes yet.</p>`;
     return;
   }
   const htmlRows = rows.map((r, i) => {
     const locked = rowDetailsNotRequired(r);
+    const continuation = isAutoContinuationRow(r);
+    const returnShort = isAutoShortReturnRow(r);
     const disabled = locked ? "disabled" : "";
-    const lockTitle = r.autoNoDetails ? "Continuous activity from previous day — odometer/location not required for this split row" : "Tick if odometer/location are not required for this row";
+    const lockTitle = continuation ? "Continuation from previous day — not a new details/rest-type row" :
+      (returnShort ? "Return to work after short break — odometer/location not required" :
+      "Tick if odometer/location are not required for this row");
+    let restCell = "";
+    if(continuation){
+      restCell = `<span class="continuationBadge">Continuation</span>`;
+    }else if(r.activity === "rest"){
+      restCell = `
+          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
+            <option value="" ${!r.restType ? "selected" : ""}>Select rest type</option>
+            <option value="rest" ${r.restType==="rest" ? "selected" : ""}>Rest</option>
+            <option value="stationary" ${r.restType==="stationary" ? "selected" : ""}>Stationary rest</option>
+            <option value="sleeper" ${r.restType==="sleeper" ? "selected" : ""}>Sleeper berth rest</option>
+            <option value="night" ${r.restType==="night" ? "selected" : ""}>Night rest</option>
+            <option value="24h" ${r.restType==="24h" ? "selected" : ""}>24h rest</option>
+          </select>${r.restType === "rest" ? `<span class="shortBreakBadge">Rest</span>` : ""}`;
+    }else{
+      restCell = `<span class="readonlyCell">Work</span>`;
+    }
     return `
-    <tr class="${locked ? "detailsLockedRow" : ""}">
+    <tr class="${locked ? "detailsLockedRow" : ""} ${continuation ? "continuationRow" : ""}">
       <td class="ndCell" title="${escapeHtml(lockTitle)}">
         <input type="checkbox" class="ndCheck" data-change-index="${i}" data-change-field="noDetails" ${r.noDetails ? "checked" : ""} ${r.autoNoDetails ? "disabled" : ""}>
       </td>
@@ -2557,18 +2663,8 @@ function renderChangeDetailsEditor(){
           <button type="button" class="locBtn" data-location-index="${i}" title="Use current location" ${disabled}>📍</button>
         </div>
       </td>
-      <td>
-        ${r.activity === "rest" ? `
-          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
-            <option value="" ${!r.restType ? "selected" : ""}>Select rest type</option>
-            <option value="rest" ${r.restType==="rest" ? "selected" : ""}>Rest</option>
-            <option value="stationary" ${r.restType==="stationary" ? "selected" : ""}>Stationary rest</option>
-            <option value="sleeper" ${r.restType==="sleeper" ? "selected" : ""}>Sleeper berth rest</option>
-            <option value="night" ${r.restType==="night" ? "selected" : ""}>Night rest</option>
-            <option value="24h" ${r.restType==="24h" ? "selected" : ""}>24h rest</option>
-          </select>` : `<span class="readonlyCell">Work</span>`}
-      </td>
-      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note)}" placeholder="${locked ? "Reason optional" : "Optional"}"></td>
+      <td>${restCell}</td>
+      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note)}" placeholder="${continuation ? "Continuation" : (locked ? "Reason optional" : "Optional")}"></td>
     </tr>`;
   }).join("");
   holder.innerHTML = `
@@ -3721,10 +3817,10 @@ function complianceIssuesForDate(key){
 
   const rows = syncChangeRowsForDay(key);
   rows.forEach(r => {
-    if(r.activity === "rest" && !r.restType){
+    if(r.activity === "rest" && !r.restType && !isAutoContinuationRow(r)){
       issues.push(`Rest type missing at ${r.time}.`);
     }
-    if(!r.location && !r.note && rows.length > 1){
+    if(!rowDetailsNotRequired(r) && !r.location && !r.note && rows.length > 1){
       issues.push(`Location/note missing at ${r.time}.`);
     }
   });
@@ -3889,6 +3985,7 @@ function renderDriverSettings(){
   renderBookSettings();
   renderRuleHistorySettings();
   renderCalculationHistorySettings();
+  renderShortBreakSettings();
 }
 function renderAll(){
   renderDate();
@@ -3962,6 +4059,7 @@ function clearAll(){
     state.ruleHistory=[];
     state.diaryBooks=[];
     state.calculationHistory={startDate:state.selectedDate || toKey(new Date()), mode:"noWorkBeforeStart"};
+    state.shortBreakSettings={mode:"smart", maxMinutes:60};
     save(); renderAll();
   }
 }
@@ -4106,6 +4204,7 @@ function buildJsonBackup(){
     uiSettings: state.uiSettings || {locationPickerEnabled:true},
     diaryBooks: state.diaryBooks || [],
     calculationHistory: state.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"},
+    shortBreakSettings: state.shortBreakSettings || {mode:"smart", maxMinutes:60},
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -4194,6 +4293,7 @@ function importJsonBackupFromFile(file){
       state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
       state.diaryBooks = migrated.diaryBooks || [];
       state.calculationHistory = migrated.calculationHistory || {};
+      state.shortBreakSettings = migrated.shortBreakSettings || {mode:"smart", maxMinutes:60};
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
@@ -4507,6 +4607,7 @@ function setup(){
   $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;saveSoon();renderDiaryFast();}
   if($("saveRuleHistory")) $("saveRuleHistory").onclick=saveRuleHistorySetting;
   if($("saveCalculationHistory")) $("saveCalculationHistory").onclick = saveCalculationHistorySettings;
+  if($("saveShortBreakSettings")) $("saveShortBreakSettings").onclick = saveShortBreakSettings;
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
   if($("graphExportPdf")) $("graphExportPdf").onclick=exportPdf;

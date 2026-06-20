@@ -480,3 +480,15 @@ No details + refresh/recalculation fix:
 - Activity wording in the change table now uses Work instead of Work / Driving to save space.
 - Added derived-data rebuild/repair to clear stale auto page numbers after blocks are removed and refresh audit/table/page data more reliably.
 - NHVR fatigue calculation limits/formulas were not changed.
+
+
+Smart N/D breaks update:
+- Added Short break details settings: Manual only, Smart short-break mode, or Strict.
+- Added short break limit: 15/30/45/60 minutes.
+- Midnight continuation rows now show Continuation instead of asking for rest type.
+- Continuation rows do not create missing rest-type, odometer, or location errors.
+- Rest continuation across midnight inherits the previous rest type for major-rest calculations.
+- Smart mode auto-selects Rest for short rest rows between work periods.
+- Smart mode auto-ticks N/D on the return-to-work row after a short break, while the rest-start row still requires odometer/location.
+- Optional odometer/location audit button wording is now Skip.
+- NHVR slot-based work/rest and fatigue limit calculations were not changed.
