@@ -351,3 +351,139 @@ input[data-uppercase-only="true"]{text-transform:uppercase}
   .realBookSheet{padding:0!important;border-radius:0!important}
   .realDiarySvg{width:100%!important;height:auto!important;max-height:184mm!important}
 }
+
+.engineBadge{display:inline-block;border:1px solid #cfe8ff;background:#eef7ff;color:#17415f;border-radius:999px;padding:3px 8px;font-size:12px;font-weight:800;margin:4px 4px 4px 0}
+.statLimit .anchorNote{font-size:12px;color:#666;margin-top:4px}
+
+/* Compact app header update */
+.topbar{
+  padding-top:env(safe-area-inset-top);
+  box-shadow:0 1px 0 rgba(0,0,0,.18);
+}
+.iosline{
+  display:none!important;
+}
+.titleRow{
+  padding:8px 14px 4px!important;
+  min-height:42px;
+  gap:10px;
+}
+.titleRow h1,
+#screenTitle{
+  font-size:21px!important;
+  line-height:1.1!important;
+  white-space:nowrap;
+}
+.dateNav{
+  border-radius:20px!important;
+  min-width:142px;
+  height:36px;
+  flex-shrink:0;
+}
+.dateNav button{
+  height:36px!important;
+  font-size:30px!important;
+  padding:0 14px!important;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.dateNav button:nth-child(2){
+  font-size:17px!important;
+  width:44px;
+  padding:0!important;
+}
+.dateRow{
+  display:flex!important;
+  grid-template-columns:none!important;
+  align-items:center!important;
+  gap:8px!important;
+  padding:2px 14px 8px!important;
+  font-size:18px!important;
+  line-height:1.1!important;
+  min-height:34px;
+}
+.dateText{
+  font-size:20px!important;
+  line-height:1.1!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  flex:1 1 auto;
+  min-width:0;
+  padding:0!important;
+}
+.dateRow span{
+  font-size:15px!important;
+  opacity:.95;
+  white-space:nowrap;
+}
+.dateRow strong{
+  font-size:22px!important;
+  padding-right:0!important;
+  white-space:nowrap;
+}
+main{
+  min-height:calc(100vh - 94px)!important;
+}
+@media (max-width:380px){
+  .titleRow{padding-left:10px!important;padding-right:10px!important}
+  .dateRow{padding-left:10px!important;padding-right:10px!important}
+  .dateText{font-size:18px!important}
+  .dateRow span{font-size:14px!important}
+  .dateRow strong{font-size:20px!important}
+  .dateNav{min-width:128px}
+  .dateNav button{font-size:28px!important;padding:0 11px!important}
+  .dateNav button:nth-child(2){width:40px;font-size:16px!important}
+}
+
+/* Location picker */
+.locPickerWrap{display:flex;gap:6px;align-items:center}
+.locPickerWrap input{flex:1;min-width:0}
+.locBtn{
+  border:1px solid #b7d7ff;
+  background:#eef7ff;
+  color:#064b87;
+  border-radius:10px;
+  min-width:42px;
+  height:42px;
+  font-size:18px;
+  font-weight:900;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  touch-action:manipulation;
+}
+.locBtn:disabled{opacity:.55}
+.locStatus{
+  display:block;
+  font-size:11px;
+  color:#666;
+  margin-top:3px;
+}
+
+/* Vehicle / driver registry */
+.screenHeaderRow{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.miniBtnRow{display:flex;gap:8px;flex-wrap:wrap}
+.registryList{display:grid;gap:8px}
+.registryItem{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:13px 12px;
+  border:1px solid #e2e2e2;
+  border-radius:14px;
+  background:#fff;
+  text-align:left;
+}
+.registryItem strong{display:block;font-size:18px}
+.registryItem small{display:block;color:#666;margin-top:3px;line-height:1.35}
+.registryChevron{font-size:24px;color:#777}
+.buttonRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.buttonRow button{flex:1;min-width:130px}
+@media (prefers-color-scheme:dark){
+  .registryItem{background:#151515;border-color:#333;color:#fff}
+  .registryItem small{color:#aaa}
+}

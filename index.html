@@ -79,6 +79,7 @@
           <button id="statsNowBtn" class="primary full">Calculate Statistics As Of Now</button>
         </div>
         <div id="canDriveCard" class="canDriveCard"></div>
+        <p id="nhvrEngineNote" class="hint">NHVR guide counting engine active.</p>
       </section>
 
       <section class="card">
@@ -235,6 +236,119 @@
       <section class="card">
         <h2>Diary line summary</h2>
         <div id="graphSummaryTable"></div>
+      </section>
+    </section>
+
+
+
+    <section id="vehiclesScreen" class="screen">
+      <section class="card">
+        <div class="screenHeaderRow">
+          <h2>Vehicles / Drivers</h2>
+          <div class="miniBtnRow">
+            <button id="addVehicleBtn" class="secondary">+ Vehicle</button>
+            <button id="addSavedDriverBtn" class="secondary">+ Driver</button>
+          </div>
+        </div>
+        <p class="hint">Save trucks and two-up drivers here. You can select them later to apply to the current diary page, useful for checking past fines/incidents or matching who was driving.</p>
+      </section>
+
+      <section class="card">
+        <h2>Active trucks</h2>
+        <div id="vehicleList" class="registryList"></div>
+      </section>
+
+      <section class="card">
+        <h2>Saved drivers</h2>
+        <div id="savedDriverList" class="registryList"></div>
+      </section>
+
+      <section class="card" id="vehicleEditCard" hidden>
+        <h2 id="vehicleEditTitle">Vehicle details</h2>
+        <div class="formGrid">
+          <label>Rego no
+            <input id="vehicleRego" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ">
+          </label>
+          <label>Fleet / truck name
+            <input id="vehicleName" placeholder="Optional">
+          </label>
+          <label>Company / operator
+            <input id="vehicleCompany" placeholder="Optional">
+          </label>
+          <label>State
+            <select id="vehicleState">
+              <option value="">Not recorded</option>
+              <option>ACT</option><option>NSW</option><option>NT</option><option>QLD</option>
+              <option>SA</option><option>TAS</option><option>VIC</option><option>WA</option>
+            </select>
+          </label>
+          <label>Start date
+            <input id="vehicleStartDate" type="date">
+          </label>
+          <label>End date
+            <input id="vehicleEndDate" type="date">
+          </label>
+          <label class="fullWidth">Notes
+            <textarea id="vehicleNotes" rows="3" placeholder="Example: trailer, company, incident/fine reference, maintenance note"></textarea>
+          </label>
+        </div>
+        <div class="buttonRow">
+          <button id="saveVehicleBtn" class="primary">Save vehicle</button>
+          <button id="applyVehicleBtn" class="secondary">Use on current page</button>
+          <button id="cancelVehicleBtn" class="secondary">Cancel</button>
+          <button id="deleteVehicleBtn" class="danger">Delete</button>
+        </div>
+      </section>
+
+      <section class="card" id="driverEditCard" hidden>
+        <h2 id="driverEditTitle">Driver details</h2>
+        <div class="formGrid">
+          <label>Name
+            <input id="savedDriverName" placeholder="Driver name">
+          </label>
+          <label>Licence no
+            <input id="savedDriverLicence" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" placeholder="Licence number">
+          </label>
+          <label>Licence state
+            <select id="savedDriverState">
+              <option value="">Not recorded</option>
+              <option>ACT</option><option>NSW</option><option>NT</option><option>QLD</option>
+              <option>SA</option><option>TAS</option><option>VIC</option><option>WA</option>
+            </select>
+          </label>
+          <label>Work option
+            <select id="savedDriverScheme">
+              <option value="Standard">Standard</option>
+              <option value="BFM">BFM</option>
+              <option value="AFM">AFM</option>
+            </select>
+          </label>
+          <label>BFM/AFM accreditation no
+            <input id="savedDriverAccred" placeholder="Optional">
+          </label>
+          <label>Role
+            <select id="savedDriverRole">
+              <option value="twoUp">Two-up driving partner</option>
+              <option value="main">Main driver information</option>
+              <option value="other">Other / relief driver</option>
+            </select>
+          </label>
+          <label>Start date
+            <input id="savedDriverStartDate" type="date">
+          </label>
+          <label>End date
+            <input id="savedDriverEndDate" type="date">
+          </label>
+          <label class="fullWidth">Notes
+            <textarea id="savedDriverNotes" rows="3" placeholder="Example: company, phone, incident/fine reference, shift notes"></textarea>
+          </label>
+        </div>
+        <div class="buttonRow">
+          <button id="saveSavedDriverBtn" class="primary">Save driver</button>
+          <button id="applyTwoUpDriverBtn" class="secondary">Use as two-up driver</button>
+          <button id="cancelSavedDriverBtn" class="secondary">Cancel</button>
+          <button id="deleteSavedDriverBtn" class="danger">Delete</button>
+        </div>
       </section>
     </section>
 
@@ -396,7 +510,8 @@
     <button data-tab="statsScreen">📊<span>Stats</span></button>
     <button data-tab="diaryScreen" class="active">👥<span>Work Diary</span></button>
     <button data-tab="graphScreen">📈<span>Graph</span></button>
-    <button data-tab="settingsScreen">▣<span>Settings</span></button>
+    <button data-tab="vehiclesScreen"><span class="ico">🚛</span><span>Vehicles</span></button>
+      <button data-tab="settingsScreen">▣<span>Settings</span></button>
     <button data-tab="helpScreen">ⓘ<span>Help</span></button>
   </nav>
 </div>

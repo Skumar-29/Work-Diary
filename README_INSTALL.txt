@@ -252,3 +252,42 @@ Header spacing tightening update:
 - Reduced spacing further in the top-right pattern:
   WORK DIARY NO.  NFV  9912  03
 - Kept the rest of the graph/PDF layout and all rule calculations unchanged.
+
+
+NHVR guide calculation redesign:
+- Added NHVR Work Diary Guide v1.3 counting engine.
+- Short rest rules are counted forward from the end of every rest break.
+- 24h and longer periods are counted from relevant major rest-break ends.
+- A second relevant major rest inside an existing 24h window does not reset the earlier 24h window; the earlier window remains active until its full end time.
+- Added anchored 24h, 7d, 14d and two-up helper checks based on Standard/BFM solo/two-up profiles.
+- AFM remains record-only until exact certificate conditions are entered.
+- Removed NFV from the Graph/PDF header to match the NHVR daily sheet design.
+- Existing visual layout and settings carry-forward preserved.
+
+
+Compact header update:
+- Removed the duplicate/fake iPhone status/time row from the app header.
+- Reduced Work Diary header height significantly.
+- Kept screen title, selected date, scheme, and previous/today/next date buttons.
+- UI-only change; fatigue calculations and NHVR engine unchanged.
+
+
+Location picker update:
+- Added a 📍 current-location button beside Work/Rest change location fields.
+- Manual typing remains available.
+- Uses iPhone/browser GPS plus online reverse-location lookup to fill a compact NHVR-style place name:
+  suburb/town, fuel station/truck stop/rest area name where available, or nearby road/place in remote areas.
+- Requires location permission and data connection for automatic lookup.
+- If lookup fails, the app leaves the manual box unchanged.
+- No NHVR calculation/rule logic changed.
+
+
+Vehicle / driver registry update:
+- Added a new Vehicles screen/tab.
+- You can save vehicle rego, fleet/truck name, company/operator, state, start/end date and notes.
+- You can save driver/two-up partner name, licence number, licence state, work option, BFM/AFM accreditation number, role, dates and notes.
+- Vehicle records can be applied to the current diary page number plate.
+- Saved driver records can be applied as the current page's two-up driver.
+- Registry data is included in JSON backups/imports.
+- Useful for checking past road fines/incidents against the vehicle or two-up driver recorded at that time.
+- No NHVR calculation/rule logic changed.

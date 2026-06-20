@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 4;
-const APP_BUILD_NAME = "nav-fix-optional-audit";
+const APP_SCHEMA_VERSION = 6;
+const APP_BUILD_NAME = "vehicle-driver-registry";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -99,7 +99,9 @@ let state = {
   settingsHistory: [],
   ruleHistory: [],
   auditLog: [],
-  dismissedAudit: {}
+  dismissedAudit: {},
+  vehicles: [],
+  savedDrivers: []
 };
 
 const $ = id => document.getElementById(id);
@@ -174,6 +176,7 @@ function auditIgnoreKey(kind, date, extra){
 }
 function isAuditDismissed(kind, date, extra){
   ensureDismissedAudit();
+  ensureRegistries();
   return !!state.dismissedAudit[auditIgnoreKey(kind,date,extra)];
 }
 function dismissOptionalAudit(kind, date, extra, label){
@@ -501,6 +504,8 @@ function migrateImportedBackup(backup){
     ruleHistory: Array.isArray(b.ruleHistory) ? b.ruleHistory : [],
     auditLog: Array.isArray(b.auditLog) ? b.auditLog : [],
     dismissedAudit: b.dismissedAudit && typeof b.dismissedAudit === "object" ? b.dismissedAudit : {},
+    vehicles: Array.isArray(b.vehicles) ? b.vehicles : [],
+    savedDrivers: Array.isArray(b.savedDrivers) ? b.savedDrivers : [],
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -553,6 +558,234 @@ function checkDataHealth(){
   const msg = `Data OK. Schema v${APP_SCHEMA_VERSION}. Saved block days: ${dates}. Detail pages: ${detailDates}. Older backups will be migrated on import.`;
   if(status) status.textContent = msg;
   alert(msg);
+}
+
+
+
+function ensureRegistries(){
+  if(!Array.isArray(state.vehicles)) state.vehicles = [];
+  if(!Array.isArray(state.savedDrivers)) state.savedDrivers = [];
+}
+function makeId(prefix){
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+}
+let editingVehicleId = null;
+let editingDriverId = null;
+
+function activeVehicleRecords(){
+  ensureRegistries();
+  return state.vehicles.filter(v => !v.deleted).sort((a,b)=>String(a.rego||"").localeCompare(String(b.rego||"")));
+}
+function activeSavedDriverRecords(){
+  ensureRegistries();
+  return state.savedDrivers.filter(d => !d.deleted).sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
+}
+function renderVehicleDriverRegistry(){
+  ensureRegistries();
+  const vehicleList = $("vehicleList");
+  if(vehicleList){
+    const vehicles = activeVehicleRecords();
+    vehicleList.innerHTML = vehicles.length ? vehicles.map(v => `
+      <button class="registryItem" data-edit-vehicle="${escapeHtml(v.id)}">
+        <span>
+          <strong>${escapeHtml(v.rego || "No rego")}</strong>
+          <small>${escapeHtml([v.name, v.company, v.state].filter(Boolean).join(" • ") || "Vehicle details")}</small>
+        </span>
+        <span class="registryChevron">›</span>
+      </button>`).join("") : `<p class="hint">No vehicles saved yet. Tap + Vehicle.</p>`;
+    vehicleList.querySelectorAll("[data-edit-vehicle]").forEach(btn=>{
+      btn.onclick = () => openVehicleEditor(btn.dataset.editVehicle);
+    });
+  }
+  const driverList = $("savedDriverList");
+  if(driverList){
+    const drivers = activeSavedDriverRecords();
+    driverList.innerHTML = drivers.length ? drivers.map(d => `
+      <button class="registryItem" data-edit-driver="${escapeHtml(d.id)}">
+        <span>
+          <strong>${escapeHtml(d.name || "No name")}</strong>
+          <small>${escapeHtml([d.role === "twoUp" ? "Two-up driving partner" : d.role === "main" ? "Main driver information" : "Driver", d.scheme, d.licence ? "Licence "+d.licence : "", d.licenceState].filter(Boolean).join(" • "))}</small>
+        </span>
+        <span class="registryChevron">›</span>
+      </button>`).join("") : `<p class="hint">No drivers saved yet. Tap + Driver.</p>`;
+    driverList.querySelectorAll("[data-edit-driver]").forEach(btn=>{
+      btn.onclick = () => openSavedDriverEditor(btn.dataset.editDriver);
+    });
+  }
+}
+function openVehicleEditor(id=null){
+  ensureRegistries();
+  editingVehicleId = id;
+  const v = id ? state.vehicles.find(x=>x.id===id) : null;
+  $("vehicleEditTitle").textContent = id ? "Edit vehicle" : "Add vehicle";
+  $("vehicleRego").value = (v && v.rego || "").toUpperCase();
+  $("vehicleName").value = v && v.name || "";
+  $("vehicleCompany").value = v && v.company || "";
+  $("vehicleState").value = v && v.state || "";
+  $("vehicleStartDate").value = v && v.startDate || state.selectedDate || "";
+  $("vehicleEndDate").value = v && v.endDate || "";
+  $("vehicleNotes").value = v && v.notes || "";
+  $("deleteVehicleBtn").style.display = id ? "" : "none";
+  $("vehicleEditCard").hidden = false;
+  $("vehicleEditCard").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function closeVehicleEditor(){
+  editingVehicleId = null;
+  if($("vehicleEditCard")) $("vehicleEditCard").hidden = true;
+}
+function saveVehicleRecord(){
+  ensureRegistries();
+  const rec = {
+    id: editingVehicleId || makeId("veh"),
+    rego: $("vehicleRego").value.trim().toUpperCase(),
+    name: $("vehicleName").value.trim(),
+    company: $("vehicleCompany").value.trim(),
+    state: $("vehicleState").value,
+    startDate: $("vehicleStartDate").value,
+    endDate: $("vehicleEndDate").value,
+    notes: $("vehicleNotes").value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if(!rec.rego){
+    alert("Please enter vehicle rego.");
+    return;
+  }
+  const idx = state.vehicles.findIndex(x=>x.id===rec.id);
+  if(idx >= 0) state.vehicles[idx] = {...state.vehicles[idx], ...rec};
+  else state.vehicles.push(rec);
+  addAuditLog("Vehicle saved", rec.rego);
+  save();
+  renderVehicleDriverRegistry();
+  closeVehicleEditor();
+  if(typeof showToast === "function") showToast("Saved");
+}
+function applyVehicleToCurrentPage(){
+  ensureRegistries();
+  const rego = $("vehicleRego").value.trim().toUpperCase();
+  if(!rego){
+    alert("Please enter vehicle rego first.");
+    return;
+  }
+  const detail = ensureDayDetail(state.selectedDate);
+  detail.numberPlate = rego;
+  detail.numberPlateManual = true;
+  addAuditLog("Vehicle applied to page", `${state.selectedDate}: ${rego}`);
+  save();
+  renderAll();
+  closeVehicleEditor();
+  if(typeof showToast === "function") showToast("Vehicle applied");
+}
+function deleteVehicleRecord(){
+  if(!editingVehicleId) return;
+  const v = state.vehicles.find(x=>x.id===editingVehicleId);
+  if(!v) return;
+  if(confirm(`Delete vehicle ${v.rego || ""}?`)){
+    v.deleted = true;
+    v.updatedAt = new Date().toISOString();
+    addAuditLog("Vehicle deleted", v.rego || editingVehicleId);
+    save();
+    renderVehicleDriverRegistry();
+    closeVehicleEditor();
+    if(typeof showToast === "function") showToast("Deleted");
+  }
+}
+
+function openSavedDriverEditor(id=null){
+  ensureRegistries();
+  editingDriverId = id;
+  const d = id ? state.savedDrivers.find(x=>x.id===id) : null;
+  $("driverEditTitle").textContent = id ? "Edit driver" : "Add driver";
+  $("savedDriverName").value = d && d.name || "";
+  $("savedDriverLicence").value = d && d.licence || "";
+  $("savedDriverState").value = d && d.licenceState || "";
+  $("savedDriverScheme").value = d && d.scheme || "Standard";
+  $("savedDriverAccred").value = d && d.accreditationNo || "";
+  $("savedDriverRole").value = d && d.role || "twoUp";
+  $("savedDriverStartDate").value = d && d.startDate || state.selectedDate || "";
+  $("savedDriverEndDate").value = d && d.endDate || "";
+  $("savedDriverNotes").value = d && d.notes || "";
+  $("deleteSavedDriverBtn").style.display = id ? "" : "none";
+  $("driverEditCard").hidden = false;
+  $("driverEditCard").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function closeSavedDriverEditor(){
+  editingDriverId = null;
+  if($("driverEditCard")) $("driverEditCard").hidden = true;
+}
+function saveSavedDriverRecord(){
+  ensureRegistries();
+  const rec = {
+    id: editingDriverId || makeId("drv"),
+    name: $("savedDriverName").value.trim(),
+    licence: $("savedDriverLicence").value.replace(/\D+/g, ""),
+    licenceState: $("savedDriverState").value,
+    scheme: $("savedDriverScheme").value || "Standard",
+    accreditationNo: $("savedDriverAccred").value.trim(),
+    role: $("savedDriverRole").value || "twoUp",
+    startDate: $("savedDriverStartDate").value,
+    endDate: $("savedDriverEndDate").value,
+    notes: $("savedDriverNotes").value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if(!rec.name){
+    alert("Please enter driver name.");
+    return;
+  }
+  const idx = state.savedDrivers.findIndex(x=>x.id===rec.id);
+  if(idx >= 0) state.savedDrivers[idx] = {...state.savedDrivers[idx], ...rec};
+  else state.savedDrivers.push(rec);
+  addAuditLog("Driver saved", rec.name);
+  save();
+  renderVehicleDriverRegistry();
+  closeSavedDriverEditor();
+  if(typeof showToast === "function") showToast("Saved");
+}
+function applySavedDriverAsTwoUp(){
+  ensureRegistries();
+  const name = $("savedDriverName").value.trim();
+  if(!name){
+    alert("Please enter driver name first.");
+    return;
+  }
+  const detail = ensureDayDetail(state.selectedDate);
+  detail.twoUpEnabled = true;
+  detail.driverMode = "twoUp";
+  detail.twoUpDriverName = name;
+  detail.twoUpLicenceNumber = $("savedDriverLicence").value.replace(/\D+/g, "");
+  detail.twoUpBaseState = $("savedDriverState").value || detail.twoUpBaseState || detail.baseStateSnapshot || "";
+  detail.twoUpScheme = $("savedDriverScheme").value || "Standard";
+  detail.twoUpManual = true;
+  addAuditLog("Two-up driver applied to page", `${state.selectedDate}: ${name}`);
+  save();
+  renderAll();
+  closeSavedDriverEditor();
+  if(typeof showToast === "function") showToast("Two-up driver applied");
+}
+function deleteSavedDriverRecord(){
+  if(!editingDriverId) return;
+  const d = state.savedDrivers.find(x=>x.id===editingDriverId);
+  if(!d) return;
+  if(confirm(`Delete driver ${d.name || ""}?`)){
+    d.deleted = true;
+    d.updatedAt = new Date().toISOString();
+    addAuditLog("Driver deleted", d.name || editingDriverId);
+    save();
+    renderVehicleDriverRegistry();
+    closeSavedDriverEditor();
+    if(typeof showToast === "function") showToast("Deleted");
+  }
+}
+function setupVehicleDriverRegistryButtons(){
+  if($("addVehicleBtn")) $("addVehicleBtn").onclick = () => openVehicleEditor();
+  if($("addSavedDriverBtn")) $("addSavedDriverBtn").onclick = () => openSavedDriverEditor();
+  if($("saveVehicleBtn")) $("saveVehicleBtn").onclick = saveVehicleRecord;
+  if($("applyVehicleBtn")) $("applyVehicleBtn").onclick = applyVehicleToCurrentPage;
+  if($("cancelVehicleBtn")) $("cancelVehicleBtn").onclick = closeVehicleEditor;
+  if($("deleteVehicleBtn")) $("deleteVehicleBtn").onclick = deleteVehicleRecord;
+  if($("saveSavedDriverBtn")) $("saveSavedDriverBtn").onclick = saveSavedDriverRecord;
+  if($("applyTwoUpDriverBtn")) $("applyTwoUpDriverBtn").onclick = applySavedDriverAsTwoUp;
+  if($("cancelSavedDriverBtn")) $("cancelSavedDriverBtn").onclick = closeSavedDriverEditor;
+  if($("deleteSavedDriverBtn")) $("deleteSavedDriverBtn").onclick = deleteSavedDriverRecord;
 }
 
 
@@ -625,8 +858,7 @@ function maxContinuousStationary(endAbs, windowMins){
 }
 function slotBreaches(key, idx){
   if(!isWork(key,idx)) return false;
-  const endAbs = minuteAbs(key, idx+1);
-  return activeRules().windows.some(r => countWorkBetween(endAbs, r.minutes) > r.maxWork);
+  return nhvrBreachesForDate(key).some(f => f.focus && Array.isArray(f.focus.slots) && f.focus.slots.includes(idx) && f.severity === "error");
 }
 function activityLabel(a){
   if(a === "work") return "Work / Driving";
@@ -959,25 +1191,9 @@ function renderAlerts(){
   });
 }
 function renderRuleCards(){
-  const div=$("ruleCards"); div.innerHTML=twoUpRuleWarningHtml();
-  const startAbs = fromKey(state.selectedDate).getTime();
-  const endAbs = startAbs + DAY_MS;
-  if(!activeRules().windows.length){ div.innerHTML += `<div class="alert warn">No fixed rule windows configured for this mode. Enter AFM conditions or select Standard/BFM.</div>`; return; }
-  activeRules().windows.forEach(r=>{
-    let max=0;
-    for(let t=startAbs+SLOT*60000; t<=endAbs; t+=SLOT*60000){
-      max=Math.max(max, countWorkBetween(t, r.minutes));
-    }
-    const bad = max > r.maxWork;
-    const card=document.createElement("div");
-    card.className=`rule ${bad?"bad":""}`;
-    const pct=Math.min(100, (max/r.maxWork)*100);
-    card.innerHTML = `<h3>${r.label} window</h3>
-      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-      <p>${Math.floor(max/60)}h ${max%60}m / max ${Math.floor(r.maxWork/60)}h ${r.maxWork%60}m</p>
-      <p>${r.rest}</p>`;
-    div.appendChild(card);
-  });
+  const div=$("ruleCards");
+  if(!div) return;
+  div.innerHTML = twoUpRuleWarningHtml() + nhvrRuleCardsForDate(state.selectedDate);
 }
 function findLastWorkSlotAbs(){
   let best = null;
@@ -1003,23 +1219,18 @@ function lastQualifyingRestEndAbs(beforeAbs){
 }
 function renderNextBreak(){
   const box=$("nextBreak");
-  const lastWork = findLastWorkSlotAbs();
-  if(lastWork===null){ box.textContent="No work entered for this day."; return; }
-  const afterLastWork = lastWork + SLOT*60000;
-  const restEnd = lastQualifyingRestEndAbs(afterLastWork) || (afterLastWork - 6*60*60000);
-  let work=0;
-  for(let t=restEnd; t<afterLastWork; t+=SLOT*60000){
-    const {key,slot}=absToKeySlot(t);
-    if(isWork(key,slot)) work+=SLOT;
+  if(!box) return;
+  const now = new Date();
+  const asOfAbs = now.getTime();
+  const status = nhvrCanWorkStatus(asOfAbs);
+  if(status.minutes <= 0){
+    box.innerHTML = `<strong>Rest required now.</strong> Limiting rule: ${escapeHtml(status.reason)}.`;
+  } else if(status.minutes >= 24*60){
+    box.innerHTML = `No active counted window found in saved history. Check that your previous rest/work blocks are entered.`;
+  } else {
+    const latest = asOfAbs + status.minutes*60000;
+    box.innerHTML = `Estimated work remaining: <strong>${formatMinsShort(status.minutes)}</strong>. Limiting rule: <strong>${escapeHtml(status.reason)}</strong>. Latest work-limit time if you keep working: <strong>${escapeHtml(formatDateTimeForStats(latest))}</strong>.`;
   }
-  const firstRule = activeRules().windows[0];
-  if(!firstRule){ box.textContent="No work-limit window is configured for this rule mode. Check AFM conditions/rule history."; return; }
-  const remain = Math.max(0, firstRule.maxWork - work);
-  const latest = restEnd + firstRule.maxWork*60000;
-  const latestD = new Date(latest);
-  box.innerHTML = remain>0
-    ? `After your last 15-minute rest, you have about <strong>${Math.floor(remain/60)}h ${remain%60}m</strong> work left before another 15-minute rest is due. Latest rest start: <strong>${pad(latestD.getHours())}:${pad(latestD.getMinutes())}</strong>.`
-    : `<strong>Take 15 minutes rest now before more work.</strong>`;
 }
 
 
@@ -1038,6 +1249,298 @@ function allKnownDiaryDates(){
 function pageNoForDate(key){
   const d = ensureDayDetail(key);
   return d.pageNo || calculatedPageNumberForDate(key) || "No page no";
+}
+
+
+const NHVR_ENGINE_VERSION = "NHVR Work Diary Guide v1.3 counting engine";
+
+function nhvrProfileForDate(key){
+  const rk = activeRuleKeyForDate(key);
+  if(rk === "AFM") return {key:"AFM", name:"AFM record-only", afm:true, short:[], periods:[]};
+  if(rk === "StandardTwoUp") return {
+    key:rk, name:"Standard two-up",
+    short:[{label:"5½h", minutes:330, maxWork:315, rest:"15 min continuous rest"},{label:"8h", minutes:480, maxWork:450, rest:"30 min rest in 15-min blocks"},{label:"11h", minutes:660, maxWork:600, rest:"60 min rest in 15-min blocks"}],
+    anchor24:{label:"5h stationary/sleeper rest", mins:300, kind:"stationaryOrSleeper"},
+    periods:[{label:"24h", minutes:1440, maxWork:720, restCheck:{mins:300, kind:"stationaryOrSleeper", label:"5h stationary or approved sleeper-berth rest"}},
+             {label:"52h", minutes:3120, maxWork:null, restCheck:{mins:600, kind:"stationary", label:"10h continuous stationary rest"}},
+             {label:"7d", minutes:10080, maxWork:3600, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest"}},
+             {label:"14d", minutes:20160, maxWork:7200, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}]
+  };
+  if(rk === "BFMTwoUp") return {
+    key:rk, name:"BFM two-up",
+    short:[],
+    anchor24:{label:"any rest break", mins:15, kind:"anyRest"},
+    periods:[{label:"24h", minutes:1440, maxWork:840, restCheck:null},
+             {label:"82h", minutes:4920, maxWork:null, restCheck:{mins:600, kind:"stationary", label:"10h continuous stationary rest"}},
+             {label:"7d", minutes:10080, maxWork:4200, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest"}},
+             {label:"14d", minutes:20160, maxWork:8400, nightRest:{count:4, consecutive:false, label:"4 night rests"}}]
+  };
+  if(rk === "BFM") return {
+    key:rk, name:"BFM solo",
+    short:[{label:"6¼h", minutes:375, maxWork:360, rest:"15 min continuous rest"},{label:"9h", minutes:540, maxWork:510, rest:"30 min rest in 15-min blocks"},{label:"12h", minutes:720, maxWork:660, rest:"60 min rest in 15-min blocks"}],
+    anchor24:{label:"7h stationary rest", mins:420, kind:"stationary", note:"Split rest break support is not automatic; use expert review if relying on a 6h split rest."},
+    periods:[{label:"24h", minutes:1440, maxWork:840, restCheck:{mins:420, kind:"stationary", label:"7h continuous stationary rest"}},
+             {label:"7d long/night", minutes:10080, maxLongNight:2160, longNight:true, note:"Long/night helper uses base-time diary blocks."},
+             {label:"14d", minutes:20160, maxWork:8640, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest"}, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}]
+  };
+  return {
+    key:"Standard", name:"Standard solo",
+    short:[{label:"5½h", minutes:330, maxWork:315, rest:"15 min continuous rest"},{label:"8h", minutes:480, maxWork:450, rest:"30 min rest in 15-min blocks"},{label:"11h", minutes:660, maxWork:600, rest:"60 min rest in 15-min blocks"}],
+    anchor24:{label:"7h stationary rest", mins:420, kind:"stationary"},
+    periods:[{label:"24h", minutes:1440, maxWork:720, restCheck:{mins:420, kind:"stationary", label:"7h continuous stationary rest"}},
+             {label:"7d", minutes:10080, maxWork:4320, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest"}},
+             {label:"14d", minutes:20160, maxWork:8640, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}]
+  };
+}
+
+function nhvrSlotFlagsAtAbs(abs){
+  const {key, slot} = absToKeySlot(abs);
+  const rest = activityAtAbs(abs) !== "work";
+  const rt = rest ? restTypeForSlot(key, slot) : "work";
+  const stationary = rest && (isStationary(key, slot) || rt === "stationary" || rt === "night" || rt === "24h");
+  const sleeper = rest && rt === "sleeper";
+  return {key, slot, rest, rt, stationary, sleeper, stationaryOrSleeper: stationary || sleeper};
+}
+function nhvrPredicateForKind(kind){
+  if(kind === "anyRest") return abs => nhvrSlotFlagsAtAbs(abs).rest;
+  if(kind === "stationaryOrSleeper") return abs => nhvrSlotFlagsAtAbs(abs).stationaryOrSleeper;
+  return abs => nhvrSlotFlagsAtAbs(abs).stationary;
+}
+function nhvrMaxContinuousBetween(startAbs, endAbs, predicate){
+  let best = 0, cur = 0;
+  for(let t=startAbs; t<endAbs; t+=SLOT*60000){
+    if(predicate(t)){ cur += SLOT; best = Math.max(best, cur); }
+    else cur = 0;
+  }
+  return best;
+}
+function nhvrFindRestPeriods(startAbs, endAbs){
+  const periods = [];
+  let active = null;
+  for(let t=startAbs; t<endAbs; t+=SLOT*60000){
+    const f = nhvrSlotFlagsAtAbs(t);
+    if(f.rest){
+      if(!active) active = {startAbs:t, endAbs:t, minutes:0, bestStationary:0, bestStationaryOrSleeper:0, curStationary:0, curStationaryOrSleeper:0};
+      active.minutes += SLOT;
+      active.endAbs = t + SLOT*60000;
+      if(f.stationary){ active.curStationary += SLOT; active.bestStationary = Math.max(active.bestStationary, active.curStationary); }
+      else active.curStationary = 0;
+      if(f.stationaryOrSleeper){ active.curStationaryOrSleeper += SLOT; active.bestStationaryOrSleeper = Math.max(active.bestStationaryOrSleeper, active.curStationaryOrSleeper); }
+      else active.curStationaryOrSleeper = 0;
+    } else if(active){
+      periods.push(active); active = null;
+    }
+  }
+  if(active) periods.push(active);
+  return periods;
+}
+function nhvrRestPeriodQualifies(period, req){
+  if(!period || !req) return false;
+  if(req.kind === "anyRest") return period.minutes >= (req.mins || 15);
+  if(req.kind === "stationaryOrSleeper") return period.bestStationaryOrSleeper >= req.mins;
+  return period.bestStationary >= req.mins;
+}
+function nhvrRestBreakEnds(startAbs, endAbs){
+  return nhvrFindRestPeriods(startAbs, endAbs).filter(p => p.minutes >= 15).map(p => ({abs:p.endAbs, period:p}));
+}
+function nhvrAnchorEndsForPeriod(profile, startAbs, endAbs, periodRule){
+  const restEnds = nhvrRestBreakEnds(startAbs, endAbs);
+  if(periodRule && periodRule.label === "24h" && profile.anchor24){
+    return restEnds.filter(e => nhvrRestPeriodQualifies(e.period, profile.anchor24));
+  }
+  if(periodRule && periodRule.label === "52h"){
+    return restEnds.filter(e => nhvrRestPeriodQualifies(e.period, {mins:300, kind:"stationaryOrSleeper"}));
+  }
+  if(periodRule && periodRule.label === "82h"){
+    return restEnds.filter(e => e.period.minutes >= 15);
+  }
+  if(periodRule && (periodRule.label === "7d" || periodRule.label === "7d long/night")){
+    return restEnds.filter(e => nhvrRestPeriodQualifies(e.period, {mins:1440, kind:"stationary"}) || nhvrRestPeriodQualifies(e.period, profile.anchor24 || {mins:420, kind:"stationary"}));
+  }
+  if(periodRule && periodRule.label === "14d"){
+    return restEnds.filter(e => nhvrIsNightRestPeriod(e.period) || nhvrRestPeriodQualifies(e.period, {mins:1440, kind:"stationary"}) || nhvrRestPeriodQualifies(e.period, profile.anchor24 || {mins:420, kind:"stationary"}));
+  }
+  return restEnds;
+}
+function nhvrWorkBetween(startAbs, endAbs){ return countWorkBetweenAbs(startAbs, endAbs); }
+function nhvrLongNightWorkBetween(startAbs, endAbs){
+  let total = 0;
+  const dayExtra = {};
+  for(let t=startAbs; t<endAbs; t+=SLOT*60000){
+    if(activityAtAbs(t) === "work"){
+      const d = new Date(t);
+      const h = d.getHours();
+      if(h < 6) total += SLOT;
+      const k = toKey(d);
+      dayExtra[k] = (dayExtra[k] || 0) + SLOT;
+    }
+  }
+  Object.values(dayExtra).forEach(m => { if(m > 720) total += (m - 720); });
+  return total;
+}
+function nhvrIsNightRestPeriod(period){
+  if(!period) return false;
+  if(period.bestStationary >= 1440) return true;
+  const startKey = toKey(new Date(period.startAbs - DAY_MS));
+  const endKey = toKey(new Date(period.endAbs));
+  for(let key=startKey; key<=endKey; key=addDays(key,1)){
+    const ns = fromKey(key).getTime() + 22*60*60000;
+    const ne = fromKey(addDays(key,1)).getTime() + 8*60*60000;
+    const s = Math.max(ns, period.startAbs);
+    const e = Math.min(ne, period.endAbs);
+    if(e > s && nhvrMaxContinuousBetween(s,e,nhvrPredicateForKind("stationary")) >= 420) return true;
+  }
+  return false;
+}
+function nhvrNightRestDates(startAbs, endAbs){
+  const dates = new Set();
+  nhvrFindRestPeriods(startAbs, endAbs).forEach(p => {
+    if(nhvrIsNightRestPeriod(p)) dates.add(toKey(new Date(p.endAbs - 60000)));
+  });
+  return [...dates].sort();
+}
+function nhvrHasConsecutiveDates(dates){
+  const set = new Set(dates);
+  return dates.some(d => set.has(addDays(d,1)));
+}
+function nhvrSlotsInDateWindow(key, startAbs, endAbs){
+  const slots = [];
+  const ds = fromKey(key).getTime();
+  for(let i=0;i<SLOTS_PER_DAY;i++){
+    const s = ds + i*SLOT*60000;
+    if(s >= startAbs && s < endAbs && getSlot(key,i) === "work") slots.push(i);
+  }
+  return slots;
+}
+function nhvrFinding(severity, key, title, message, slots, suggestion, anchorAbs){
+  return {severity, title, message, focus:{type:"slot", slots:slots || []}, suggestion, anchorAbs};
+}
+function nhvrBreachesForDate(key){
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return [nhvrFinding("error", key, "AFM conditions required", "AFM is selected. Enter your operator's AFM certificate limits before using fatigue calculations.", [], "Use AFM as record-only until the exact AFM certificate conditions are entered.")];
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const lookback = 30*DAY_MS;
+  const scanStart = dayStart - lookback;
+  const findings = [];
+  const seen = new Set();
+  const addFinding = (f) => {
+    const k = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${f.message}`;
+    if(seen.has(k)) return;
+    seen.add(k); findings.push(f);
+  };
+  const restEnds = nhvrRestBreakEnds(scanStart, dayEnd + 15*DAY_MS);
+
+  // Short-rest rules: count forward from the end of every rest break for periods under 24h.
+  profile.short.forEach(rule => {
+    restEnds.forEach(e => {
+      const s = e.abs, winEnd = s + rule.minutes*60000;
+      if(winEnd <= dayStart || s >= dayEnd) return;
+      const work = nhvrWorkBetween(s, winEnd);
+      if(work > rule.maxWork){
+        const slots = nhvrSlotsInDateWindow(key, s, winEnd);
+        addFinding(nhvrFinding("error", key, `${rule.label} short-rest breach`, `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`, slots, `Count from the end of the rest break at ${formatDateTimeForStats(s)}. Add/move rest or correct Work blocks so this ${rule.label} period has ${rule.rest}.`, s));
+      }
+    });
+  });
+
+  // 24h and longer rules: count from the end of relevant major rest breaks. Do not reset earlier 24h windows when another major rest occurs inside them.
+  profile.periods.forEach(rule => {
+    const anchors = nhvrAnchorEndsForPeriod(profile, scanStart, dayEnd, rule);
+    anchors.forEach(e => {
+      const s = e.abs, winEnd = s + rule.minutes*60000;
+      if(winEnd <= dayStart || s >= dayEnd) return;
+      const slots = nhvrSlotsInDateWindow(key, s, winEnd);
+      if(rule.maxWork !== null && rule.maxWork !== undefined){
+        const work = nhvrWorkBetween(s, winEnd);
+        if(work > rule.maxWork){
+          addFinding(nhvrFinding("error", key, `${rule.label} work limit breach`, `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`, slots, `This period remains active until ${formatDateTimeForStats(winEnd)}. A later major rest inside this period does not reset this ${rule.label} count. Review all Work blocks inside the highlighted period.`, s));
+        }
+      }
+      if(rule.restCheck){
+        const got = nhvrMaxContinuousBetween(s, winEnd, nhvrPredicateForKind(rule.restCheck.kind));
+        if(got < rule.restCheck.mins){
+          addFinding(nhvrFinding("error", key, `${rule.label} rest requirement missing`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`, slots, `Select correct Rest Type for qualifying rest blocks or add the required rest inside this ${rule.label} period.`, s));
+        }
+      }
+      if(rule.nightRest){
+        const nights = nhvrNightRestDates(s, winEnd);
+        if(nights.length < rule.nightRest.count || (rule.nightRest.consecutive && !nhvrHasConsecutiveDates(nights))){
+          addFinding(nhvrFinding("warn", key, `${rule.label} night rest check`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`, slots, `Check night rests using your base time zone. A 24h stationary rest can count as a night rest.`, s));
+        }
+      }
+      if(rule.longNight){
+        const ln = nhvrLongNightWorkBetween(s, winEnd);
+        if(ln > rule.maxLongNight){
+          addFinding(nhvrFinding("warn", key, `${rule.label} long/night work limit`, `${profile.name}: ${formatMinsShort(ln)} long/night work in the ${rule.label} period from ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxLongNight)}.`, slots, `Review night work between midnight and 6am and work above 12h in a 24h period.`, s));
+        }
+      }
+    });
+  });
+  return findings.slice(0, 12);
+}
+function nhvrActiveWindows(asOfAbs){
+  const key = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return [];
+  const scanStart = asOfAbs - 30*DAY_MS;
+  const restEnds = nhvrRestBreakEnds(scanStart, asOfAbs);
+  const windows = [];
+  profile.short.forEach(rule => {
+    restEnds.forEach(e => {
+      const s = e.abs, end = s + rule.minutes*60000;
+      if(s <= asOfAbs && asOfAbs < end){
+        const work = nhvrWorkBetween(s, asOfAbs);
+        windows.push({label:rule.label, startAbs:s, endAbs:end, maxWork:rule.maxWork, work, rest:rule.rest, type:"short"});
+      }
+    });
+  });
+  profile.periods.forEach(rule => {
+    const anchors = nhvrAnchorEndsForPeriod(profile, scanStart, asOfAbs, rule);
+    anchors.forEach(e => {
+      const s = e.abs, end = s + rule.minutes*60000;
+      if(s <= asOfAbs && asOfAbs < end){
+        const work = rule.longNight ? nhvrLongNightWorkBetween(s, asOfAbs) : nhvrWorkBetween(s, asOfAbs);
+        const maxWork = rule.longNight ? rule.maxLongNight : rule.maxWork;
+        windows.push({label:rule.label, startAbs:s, endAbs:end, maxWork, work, rest: rule.restCheck ? rule.restCheck.label : (rule.nightRest ? rule.nightRest.label : "Work limit only"), type:"period"});
+      }
+    });
+  });
+  return windows.filter(w => w.maxWork !== null && w.maxWork !== undefined).sort((a,b)=>a.endAbs-b.endAbs);
+}
+function nhvrCanWorkStatus(asOfAbs){
+  const key = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return {minutes:0, reason:"AFM record-only: enter certificate conditions", windows:[]};
+  const windows = nhvrActiveWindows(asOfAbs);
+  if(!windows.length) return {minutes:24*60, reason:"No active counted window found in saved history", windows:[]};
+  let can = 24*60, reason = "";
+  windows.forEach(w => {
+    const rem = Math.max(0, w.maxWork - w.work);
+    if(rem < can){ can = rem; reason = `${w.label} window ending ${formatDateTimeForStats(w.endAbs)}`; }
+  });
+  return {minutes:can, reason, windows};
+}
+function nhvrRuleCardsForDate(key){
+  const profile = nhvrProfileForDate(key);
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  if(profile.afm) return `<div class="alert warn">AFM is selected. Enter AFM certificate conditions before relying on fatigue calculations.</div>`;
+  const findings = nhvrBreachesForDate(key);
+  const active = nhvrActiveWindows(dayEnd - SLOT*60000).slice(0,8);
+  let html = `<span class="engineBadge">${escapeHtml(NHVR_ENGINE_VERSION)}</span><span class="engineBadge">${escapeHtml(profile.name)}</span>`;
+  if(findings.length){
+    html += findings.slice(0,4).map(f=>`<div class="rule bad"><h3>${escapeHtml(f.title)}</h3><p>${escapeHtml(f.message)}</p><p>${escapeHtml(f.suggestion)}</p></div>`).join("");
+  } else {
+    html += `<div class="rule"><h3>No NHVR helper breach found on this page</h3><p>Uses rest-break anchored counting for short, 24h and longer periods.</p></div>`;
+  }
+  if(active.length){
+    html += active.map(w=>{
+      const pct = Math.min(100, (w.work/w.maxWork)*100);
+      return `<div class="rule ${w.work>w.maxWork ? "bad" : ""}"><h3>${escapeHtml(w.label)} active window</h3><div class="bar"><div class="fill" style="width:${pct}%"></div></div><p>${formatMinsShort(w.work)} / max ${formatMinsShort(w.maxWork)}</p><p class="anchorNote">From ${escapeHtml(formatDateTimeForStats(w.startAbs))} to ${escapeHtml(formatDateTimeForStats(w.endAbs))}</p></div>`;
+    }).join("");
+  }
+  return html;
 }
 
 function breachDetailForSlot(key, idx){
@@ -1128,13 +1631,10 @@ function auditDate(key){
     if(!detail.twoUpScheme) add("warn","Missing two-up scheme","Two-up is selected but work/rest scheme is empty.",{type:"field", field:"sheetTwoUpScheme"},"Select the correct two-up scheme. If unsure, verify your work option/accreditation before relying on the helper calculation.");
   }
 
-  const badSlots = [];
-  for(let i=0;i<SLOTS_PER_DAY;i++){
-    if(slotBreaches(key,i)) badSlots.push(i);
-  }
-  if(badSlots.length){
-    add("error","Possible work/rest rule breach",`There are ${badSlots.length} red 15-minute work block(s) that may exceed ${activeSchemeLabel()} limits.`,{type:"slot", slots:badSlots},suggestRuleFixForSlots(key,badSlots));
-  }
+  const nhvrFindings = nhvrBreachesForDate(key);
+  nhvrFindings.forEach(f => {
+    add(f.severity || "error", f.title, f.message, f.focus || {type:"slot", slots:[]}, f.suggestion);
+  });
 
   // Work/rest change rows: locations are important for matching paper diary.
   const changes = syncChangeRowsForDay(key);
@@ -1425,6 +1925,105 @@ function syncChangeRowsForDay(key){
   });
   return detail.changeRows;
 }
+
+function compactNHVRPlaceFromAddress(data){
+  const addr = data && data.address ? data.address : {};
+  const named = (data && data.name) ? String(data.name).trim() : "";
+  const type = data && data.type ? String(data.type).toLowerCase() : "";
+  const cls = data && data.class ? String(data.class).toLowerCase() : "";
+
+  const poiTypes = ["fuel","service_station","rest_area","parking","truck_stop","services"];
+  const looksLikeUsefulStop = named && (
+    poiTypes.includes(type) ||
+    poiTypes.includes(cls) ||
+    /fuel|service|truck|rest|road house|roadhouse|bp|caltex|ampol|shell|mobil|liberty|united/i.test(named)
+  );
+  if(looksLikeUsefulStop) return named;
+
+  const suburb = addr.suburb || addr.city_district || addr.neighbourhood;
+  const town = addr.town || addr.city || addr.village || addr.hamlet || addr.locality || addr.municipality;
+  if(suburb) return suburb;
+  if(town) return town;
+
+  const road = addr.road || addr.highway || addr.state_district || "";
+  const near = addr.county || addr.region || addr.state || "";
+  if(road && near) return `${road} near ${near}`;
+  if(road) return road;
+  if(near) return near;
+
+  if(data && data.display_name){
+    return String(data.display_name).split(",").slice(0,2).join(",").trim();
+  }
+  return "";
+}
+
+function reverseGeocodeNHVR(lat, lon){
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&extratags=1&namedetails=1`;
+  return fetch(url, {
+    headers: {
+      "Accept": "application/json"
+    }
+  }).then(r => {
+    if(!r.ok) throw new Error("Location lookup failed");
+    return r.json();
+  }).then(data => compactNHVRPlaceFromAddress(data));
+}
+
+function getCurrentNHVRLocation(){
+  return new Promise((resolve, reject) => {
+    if(!navigator.geolocation){
+      reject(new Error("Location is not supported on this device/browser."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const {latitude, longitude, accuracy} = pos.coords;
+        reverseGeocodeNHVR(latitude, longitude)
+          .then(place => {
+            if(place) resolve({place, accuracy});
+            else reject(new Error("Could not find a suitable suburb/town/rest-area name. Please type manually."));
+          })
+          .catch(err => reject(err));
+      },
+      err => {
+        let msg = "Location permission was not allowed.";
+        if(err && err.code === 2) msg = "Current location is unavailable. Please check GPS/data and try again.";
+        if(err && err.code === 3) msg = "Location request timed out. Please try again or type manually.";
+        reject(new Error(msg));
+      },
+      {enableHighAccuracy:true, timeout:12000, maximumAge:60000}
+    );
+  });
+}
+
+function setChangeRowLocationFromCurrent(index, btn){
+  const detail = ensureDayDetail(state.selectedDate);
+  if(!detail.changeRows || !detail.changeRows[index]) return;
+  const oldText = btn ? btn.textContent : "";
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = "…";
+  }
+  getCurrentNHVRLocation()
+    .then(({place, accuracy}) => {
+      detail.changeRows[index].location = place;
+      addAuditLog("Location filled from current position", `${state.selectedDate}: ${place}${accuracy ? " ("+Math.round(accuracy)+"m accuracy)" : ""}`);
+      save();
+      renderAll();
+      showToast ? showToast("Location added") : alert("Location added");
+    })
+    .catch(err => {
+      alert((err && err.message) ? err.message : "Could not get location. Please type manually.");
+    })
+    .finally(() => {
+      if(btn){
+        btn.disabled = false;
+        btn.textContent = oldText || "📍";
+      }
+    });
+}
+
+
 function renderChangeDetailsEditor(){
   const holder = $("changeDetailsEditor");
   if(!holder) return;
@@ -1438,7 +2037,12 @@ function renderChangeDetailsEditor(){
       <td class="readonlyCell">${escapeHtml(r.time)}</td>
       <td class="readonlyCell">${escapeHtml(activityLabel(r.activity))}</td>
       <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${escapeHtml(r.odometer)}" placeholder="Odometer"></td>
-      <td><input data-change-index="${i}" data-change-field="location" value="${escapeHtml(r.location)}" placeholder="Town / suburb / rest area"></td>
+      <td>
+        <div class="locPickerWrap">
+          <input data-change-index="${i}" data-change-field="location" value="${escapeHtml(r.location)}" placeholder="Suburb/town/rest area">
+          <button type="button" class="locBtn" data-location-index="${i}" title="Use current location">📍</button>
+        </div>
+      </td>
       <td>
         ${r.activity === "rest" ? `
           <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
@@ -1664,9 +2268,8 @@ function buildPaperSheetHtml(){
     <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
 
     ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
-    ${svgText(770,39,"WORK DIARY NO.",10,"#111","700")}
-    ${svgText(890,39,"NFV",18,"#111","900")}
-    ${svgText(940,39,workDiaryNo,18,red,"700")}
+    ${svgText(790,39,"WORK DIARY NO.",10,"#111","700")}
+    ${svgText(925,39,workDiaryNo,18,red,"700")}
     ${svgText(990,39,pageNo,18,red,"700")}
 
     <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
@@ -2235,47 +2838,14 @@ function findLastMajorRestEndAbs(asOfAbs, majorMins){
   return null;
 }
 function findNextRequiredRestDue(asOfAbs){
-  const oldStatsDate = state.selectedDate;
-  state.selectedDate = toKey(asOf);
-  const scheme = activeRules();
-  let earliest = null;
-  let reason = "";
-  for(const r of scheme.windows){
-    let work = countWorkBetweenAbs(asOfAbs - r.minutes*60000, asOfAbs);
-    if(work >= r.maxWork){
-      return {dueAbs: asOfAbs, reason: `${r.label} work limit reached`};
-    }
-    let projected = 0;
-    for(let t=asOfAbs; t<asOfAbs + 36*60*60000; t+=SLOT*60000){
-      const w = countWorkBetweenAbs(t - r.minutes*60000, t) + projected;
-      if(w >= r.maxWork){
-        if(earliest === null || t < earliest){
-          earliest = t;
-          reason = `${r.label} limit`;
-        }
-        break;
-      }
-      projected += SLOT;
-    }
-  }
-  return {dueAbs: earliest, reason};
+  const status = nhvrCanWorkStatus(asOfAbs);
+  if(status.minutes <= 0) return {dueAbs: asOfAbs, reason: status.reason || "Work limit reached"};
+  if(status.minutes >= 24*60) return {dueAbs: null, reason: "No active counted window found"};
+  return {dueAbs: asOfAbs + status.minutes*60000, reason: status.reason};
 }
 function calculateCanDriveMinutes(asOfAbs){
-  const oldSelectedForCanDrive = state.selectedDate;
-  state.selectedDate = absToKeySlot(asOfAbs).key;
-  const scheme = activeRules();
-  let can = 24*60;
-  let limiting = "No limit found in current saved history";
-  for(const r of scheme.windows){
-    const workNow = countWorkBetweenAbs(asOfAbs - r.minutes*60000, asOfAbs);
-    const rem = Math.max(0, r.maxWork - workNow);
-    if(rem < can){
-      can = rem;
-      limiting = `${r.label} window`;
-    }
-  }
-  state.selectedDate = oldSelectedForCanDrive;
-  return {minutes: can, reason: limiting};
+  const status = nhvrCanWorkStatus(asOfAbs);
+  return {minutes: status.minutes, reason: status.reason, windows: status.windows};
 }
 function formatDateTimeForStats(abs){
   if(abs === null || abs === undefined) return "Not found";
@@ -2362,64 +2932,68 @@ function renderComplianceConfidence(){
 function renderStatistics(){
   const asOf = parseStatsAsOf();
   const asOfAbs = asOf.getTime();
-  const scheme = activeRules();
+  const oldStatsDate = state.selectedDate;
+  state.selectedDate = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(state.selectedDate);
   const input = $("statsAsOf");
   if(input && !input.value) input.value = makeLocalDateTimeValue(asOf);
 
-  const can = calculateCanDriveMinutes(asOfAbs);
+  const status = nhvrCanWorkStatus(asOfAbs);
   const canCard = $("canDriveCard");
   if(canCard){
-    canCard.className = "canDriveCard " + (can.minutes <= 0 ? "bad" : can.minutes <= 30 ? "warn" : "ok");
+    canCard.className = "canDriveCard " + (status.minutes <= 0 ? "bad" : status.minutes <= 30 ? "warn" : "ok");
     canCard.innerHTML = `
-      <p class="big">${can.minutes > 0 ? `You can work about ${formatMinsShort(can.minutes)}` : "Rest required now"}</p>
-      <p class="sub">Limiting rule: ${escapeHtml(can.reason)}. Based on saved diary blocks up to ${escapeHtml(formatDateTimeForStats(asOfAbs))}.</p>
+      <p class="big">${status.minutes > 0 ? `You can work about ${formatMinsShort(status.minutes)}` : "Rest required now"}</p>
+      <p class="sub">Limiting rule: ${escapeHtml(status.reason)}. Based on saved diary blocks up to ${escapeHtml(formatDateTimeForStats(asOfAbs))}.</p>
+      <span class="engineBadge">${escapeHtml(NHVR_ENGINE_VERSION)}</span><span class="engineBadge">${escapeHtml(profile.name)}</span>
       ${selectedDayIsTwoUp() ? twoUpRuleWarningHtml() : ""}`;
   }
+  const note = $("nhvrEngineNote");
+  if(note) note.textContent = "Counts from rest-break ends. 24h+ periods stay active until their full end time; a later major rest does not reset an earlier 24h period.";
 
   const limitCards = $("statsLimitCards");
   if(limitCards){
-    limitCards.innerHTML = scheme.windows.map(r => {
-      const work = countWorkBetweenAbs(asOfAbs - r.minutes*60000, asOfAbs);
-      const rem = Math.max(0, r.maxWork - work);
-      const pct = Math.min(100, (work/r.maxWork)*100);
-      const bad = work >= r.maxWork;
-      return `<div class="statLimit ${bad ? "bad" : ""}">
-        <h3><span>${escapeHtml(r.label)} window</span><span>${formatMinsShort(work)} / ${formatMinsShort(r.maxWork)}</span></h3>
-        <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
-        <p>Remaining: <strong>${formatMinsShort(rem)}</strong> • Required rest: ${escapeHtml(r.rest)}</p>
-      </div>`;
-    }).join("");
+    const active = status.windows || [];
+    if(!active.length){
+      limitCards.innerHTML = `<div class="statLimit"><h3><span>No active counted windows</span></h3><p>Enter earlier work/rest blocks if this looks wrong.</p></div>`;
+    } else {
+      limitCards.innerHTML = active.slice(0,10).map(w => {
+        const rem = Math.max(0, w.maxWork - w.work);
+        const pct = Math.min(100, (w.work/w.maxWork)*100);
+        const bad = w.work >= w.maxWork;
+        return `<div class="statLimit ${bad ? "bad" : ""}">
+          <h3><span>${escapeHtml(w.label)} window</span><span>${formatMinsShort(w.work)} / ${formatMinsShort(w.maxWork)}</span></h3>
+          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+          <p>Remaining: <strong>${formatMinsShort(rem)}</strong> • Required/rest rule: ${escapeHtml(w.rest || "Check work option table")}</p>
+          <p class="anchorNote">Counted from ${escapeHtml(formatDateTimeForStats(w.startAbs))} until ${escapeHtml(formatDateTimeForStats(w.endAbs))}</p>
+        </div>`;
+      }).join("");
+    }
   }
 
   const restSinceBreak = continuousRestBeforeAbs(asOfAbs);
   const workSinceBreak = continuousWorkBeforeAbs(asOfAbs);
-  const lastMajor = findLastMajorRestEndAbs(asOfAbs, scheme.majorRest);
-  const workSinceMajor = lastMajor ? countWorkBetweenAbs(lastMajor, asOfAbs) : countWorkBetweenAbs(asOfAbs-DAY_MS, asOfAbs);
-  const next7HrDue = lastMajor ? lastMajor + 24*60*60000 : null;
-  const next24Due = lastMajor ? lastMajor + 14*DAY_MS : null;  // helper estimate only
   const nextRestDue = findNextRequiredRestDue(asOfAbs);
-
   const breaks = $("statsBreaksDue");
   if(breaks){
+    const active24 = (status.windows || []).filter(w => w.label === "24h").sort((a,b)=>a.endAbs-b.endAbs)[0];
     breaks.innerHTML = `
       <div class="statRow"><strong>Work since last break</strong><span>${formatMinsShort(workSinceBreak)}</span></div>
       <div class="statRow"><strong>Rest since break</strong><span>${formatMinsShort(restSinceBreak)}</span></div>
-      <div class="statRow"><strong>Next short rest due</strong><span>${formatDateTimeForStats(nextRestDue.dueAbs)}<small>${escapeHtml(nextRestDue.reason || "Estimated from rolling windows")}</small></span></div>
-      <div class="statRow"><strong>Next 7h major rest due</strong><span>${formatDateTimeForStats(next7HrDue)}<small>Helper estimate from last 7h rest block</small></span></div>
-      <div class="statRow"><strong>Next 24h break due</strong><span>${formatDateTimeForStats(next24Due)}<small>Approximate long-cycle helper; verify with full legal records</small></span></div>`;
+      <div class="statRow"><strong>Next rest / stop-work due</strong><span>${formatDateTimeForStats(nextRestDue.dueAbs)}<small>${escapeHtml(nextRestDue.reason || "Estimated from NHVR counted windows")}</small></span></div>
+      <div class="statRow"><strong>Current 24h period ends</strong><span>${active24 ? formatDateTimeForStats(active24.endAbs) : "Not found"}<small>${active24 ? "This 24h count does not reset early if another major rest occurs inside it." : "Enter previous major rest/work blocks if needed."}</small></span></div>`;
   }
 
   const work7 = countWorkBetweenAbs(asOfAbs - 7*DAY_MS, asOfAbs);
   const work14 = countWorkBetweenAbs(asOfAbs - 14*DAY_MS, asOfAbs);
-  const bfm14Limit = activeRules().max14Work || 144*60; // helper display only
+  const nights14 = nhvrNightRestDates(asOfAbs - 14*DAY_MS, asOfAbs);
   const longRange = $("statsLongRange");
   if(longRange){
     longRange.innerHTML = `
       <div class="statRow"><strong>Last 24h work</strong><span>${formatMinsShort(countWorkBetweenAbs(asOfAbs-DAY_MS, asOfAbs))}</span></div>
       <div class="statRow"><strong>Last 7 days work</strong><span>${formatMinsShort(work7)}</span></div>
       <div class="statRow"><strong>Last 14 days work</strong><span>${formatMinsShort(work14)}</span></div>
-      <div class="statRow"><strong>14-day helper remaining</strong><span>${formatMinsShort(Math.max(0, bfm14Limit-work14))}<small>Uses a simple 144h/14d helper cap; verify against your official record and work option</small></span></div>
-      <div class="statRow"><strong>Night/long hours week</strong><span>Coming later<small>Needs exact night/rest history rules and complete records</small></span></div>`;
+      <div class="statRow"><strong>Night rests found in last 14 days</strong><span>${nights14.length}<small>${escapeHtml(nights14.join(", ") || "None found")}</small></span></div>`;
   }
 
   const lastFinished = findLastFinishedDrivingAbs(asOfAbs);
@@ -2647,6 +3221,8 @@ function buildJsonBackup(){
     ruleHistory: state.ruleHistory || [],
     auditLog: state.auditLog || [],
     dismissedAudit: state.dismissedAudit || {},
+    vehicles: state.vehicles || [],
+    savedDrivers: state.savedDrivers || [],
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -2729,6 +3305,8 @@ function importJsonBackupFromFile(file){
       state.ruleHistory = migrated.ruleHistory || [];
       state.auditLog = migrated.auditLog || [];
       state.dismissedAudit = migrated.dismissedAudit || {};
+      state.vehicles = migrated.vehicles || [];
+      state.savedDrivers = migrated.savedDrivers || [];
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
@@ -2799,6 +3377,7 @@ function stopTimer(){
 }
 
 function setup(){
+  setupVehicleDriverRegistryButtons();
   document.addEventListener("input", enforceNumericOnly);
   document.addEventListener("input", enforceUppercaseOnly);
   load();
@@ -2858,6 +3437,9 @@ function setup(){
         }
         if(btn.dataset.tab === "drivingScreen"){
           renderAuditList();
+        }
+        if(btn.dataset.tab === "vehiclesScreen"){
+          renderVehicleDriverRegistry();
         }
         renderTimer();
       }catch(e){

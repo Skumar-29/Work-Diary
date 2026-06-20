@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v38-tight-header-spacing";
+const CACHE = "truck-work-diary-v41-vehicle-driver-registry";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
