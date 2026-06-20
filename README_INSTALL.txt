@@ -343,3 +343,11 @@ Work/Rest change details table scroll update:
 - Gave proper space to Location, Rest type, Notes and current-location picker button.
 - Kept manual typing, location picker ON/OFF, and fast mode.
 - No NHVR calculation engine changes.
+
+
+Breach highlight, sticky columns and comment layout update:
+- Restored red breach highlighting on the Work/Rest grid using one NHVR scan per grid render, not one scan per block.
+- Time and Activity columns in the Work/Rest change details table now stay frozen/sticky while scrolling left/right.
+- Comments / number plate change notes now print inside the correct comments writing area on the Graph/PDF, not over the left label box.
+- Long comments are wrapped and safely shortened on the sheet preview/PDF to avoid overlap.
+- NHVR fatigue calculation engine unchanged.

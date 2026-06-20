@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 10;
-const APP_BUILD_NAME = "fast-mode-v2-header-base-location";
+const APP_SCHEMA_VERSION = 11;
+const APP_BUILD_NAME = "breach-sticky-comments-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1037,9 +1037,28 @@ function warningsText(){
   return checkDayWarnings().map(w => w.text).join(" | ");
 }
 
+
+function breachSlotSetForGrid(key){
+  const set = new Set();
+  try{
+    if(typeof dayHasAnyWork === "function" && !dayHasAnyWork(key)) return set;
+    const findings = typeof nhvrBreachesForDate === "function" ? nhvrBreachesForDate(key) : [];
+    findings.forEach(f=>{
+      if((f.severity || "error") !== "error") return;
+      if(f.focus && Array.isArray(f.focus.slots)){
+        f.focus.slots.forEach(s => set.add(Number(s)));
+      }
+    });
+  }catch(err){
+    console.warn("Breach highlight skipped", err);
+  }
+  return set;
+}
+
 function renderGrid(){
   const grid = $("diaryGrid");
   grid.innerHTML = "";
+  const breachSlots = breachSlotSetForGrid(state.selectedDate);
   const sections = [
     {start:0, labels:["midnight","1am","2am","3am","4am","5am"]},
     {start:6, labels:["6am","7am","8am","9am","10am","11am"]},
@@ -1078,7 +1097,7 @@ function renderGrid(){
         const t = getSlot(state.selectedDate, slotIndex);
 
         if(row.action === "work"){
-          if(t === "work") cell.classList.add("work");
+          if(t === "work") cell.classList.add(breachSlots.has(slotIndex) ? "bad" : "work");
           else cell.classList.add("empty");
         } else {
           if(t === "rest") cell.classList.add("rest");
@@ -2263,6 +2282,28 @@ function renderChangeDetailsEditor(){
 function svgText(x, y, text, size=12, fill="#111", weight="400", extra=""){
   return `<text x="${x}" y="${y}" font-size="${size}" fill="${fill}" font-weight="${weight}" font-family="Arial, Helvetica, sans-serif" ${extra}>${escapeHtml(text || "")}</text>`;
 }
+function wrapSvgTextLines(text, maxChars=74, maxLines=4){
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  if(!raw) return [];
+  const words = raw.split(" ");
+  const lines = [];
+  let line = "";
+  words.forEach(w=>{
+    if((line + " " + w).trim().length <= maxChars){
+      line = (line + " " + w).trim();
+    }else{
+      if(line) lines.push(line);
+      line = w;
+    }
+  });
+  if(line) lines.push(line);
+  if(lines.length > maxLines){
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines-1] = kept[maxLines-1].slice(0, Math.max(0, maxChars-1)).replace(/\s+$/,"") + "…";
+    return kept;
+  }
+  return lines;
+}
 function svgRect(x, y, w, h, fill="none", stroke="#111", sw=1, extra=""){
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
 }
@@ -2458,7 +2499,7 @@ function buildPaperSheetHtml(){
     svgCheckbox(950,661,"BFM",detail.twoUpEnabled && twoUpScheme==="BFM",12) +
     svgCheckbox(1000,661,"AFM",detail.twoUpEnabled && twoUpScheme==="AFM",12);
 
-  const comments = (detail.comments || "").split("\n").slice(0,4).map((line,i)=>svgText(78,194+i*12,line,9,"#111","400")).join("");
+  const comments = wrapSvgTextLines(detail.comments || "", 74, 4).map((line,i)=>svgText(gridX+8,194+i*13,line,10,blue,"700")).join("");
 
   const svg = `
   <svg class="realDiarySvg" viewBox="0 0 ${W} ${H}" width="100%" height="auto" role="img" aria-label="National Work Diary Daily Sheet">
