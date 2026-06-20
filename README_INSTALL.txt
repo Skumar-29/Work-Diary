@@ -420,3 +420,14 @@ Page-number spaces fix:
 - Page number search still matches spaced and unspaced versions.
 - Licence and odometer fields remain numbers-only.
 - No NHVR calculation engine changes.
+
+
+Diary Book History update:
+- Added Diary Book History inside Settings.
+- Added Close current diary book option with close date, last page number and notes.
+- Added Start new diary book option with new diary number, first page number, start date and notes.
+- Auto page numbering now uses the diary book active for that date, so old pages stay linked to the old book and new pages start from the new book.
+- Starting a new book automatically closes the previous active book on the day before the new start date.
+- JSON backup/import includes diary book history.
+- Find page/date works across old and new diary books because calculated page numbers use the correct book period.
+- No NHVR fatigue calculation engine changes.

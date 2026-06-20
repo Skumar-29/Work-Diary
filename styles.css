@@ -1063,3 +1063,25 @@ body.location-picker-off .locPickerWrap input{
   cursor:pointer!important;
   touch-action:manipulation!important;
 }
+
+/* Diary Book History */
+.diaryBookHistoryBox{
+  margin-top:16px;
+  padding:12px;
+  border:1px solid #cfe7da;
+  border-radius:16px;
+  background:#f5fbf7;
+}
+.bookHistoryList{display:grid;gap:8px;margin:10px 0}
+.bookHistoryItem{border:1px solid #d8e7de;border-radius:14px;padding:10px;background:#fff}
+.bookHistoryItem strong{display:block;font-size:16px}
+.bookHistoryItem small{display:block;color:#666;margin-top:3px;line-height:1.35}
+.bookStatus{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:800;margin-left:6px;background:#e8f5ee;color:#116234}
+.bookStatus.closed{background:#f1f1f1;color:#555}
+.bookActionBox{margin-top:10px;border:1px solid #d8e7de;border-radius:14px;padding:10px;background:#fff}
+.bookActionBox summary{cursor:pointer;font-weight:900}
+@media (prefers-color-scheme:dark){
+  .diaryBookHistoryBox{background:#0e1b12;border-color:#244c31}
+  .bookHistoryItem,.bookActionBox{background:#151515;border-color:#333}
+  .bookHistoryItem small{color:#aaa}
+}

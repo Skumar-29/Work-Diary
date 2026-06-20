@@ -414,6 +414,35 @@
           <p class="hint">Example: if first used page is 491838, the next used work/cancelled/skipped page gets 491839 automatically. Full rest days with no page use do not consume a page number. You can still override a specific day on the Graph page.</p>
           <p class="smartTip">Default work diary no, truck rego and two-up defaults also follow the effective date above, so old pages are protected.</p>
           <button id="saveBookSettings" class="secondary full">Save book setup</button>
+
+          <div class="diaryBookHistoryBox">
+            <h3>Diary Book History</h3>
+            <p class="smartTip">Use this when one real work diary book is full and you start a new book. Old pages stay linked to the old book.</p>
+
+            <div id="bookHistoryList" class="bookHistoryList"></div>
+
+            <details class="bookActionBox">
+              <summary>Close current diary book</summary>
+              <div class="formGrid">
+                <label>Close date <input id="closeBookDate" type="date"></label>
+                <label>Last page no <input id="closeBookLastPage" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 3333 99"></label>
+                <label class="fullWidth">Notes <input id="closeBookNotes" placeholder="Optional note"></label>
+              </div>
+              <button id="closeCurrentBookBtn" class="secondary full" type="button">Close current diary book</button>
+            </details>
+
+            <details class="bookActionBox">
+              <summary>Start new diary book</summary>
+              <div class="formGrid">
+                <label>New book start date <input id="newBookStartDate" type="date"></label>
+                <label>New work diary no <input id="newBookDiaryNo" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 4444"></label>
+                <label>New first page no <input id="newBookFirstPageNo" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 4444 01"></label>
+                <label class="fullWidth">Notes <input id="newBookNotes" placeholder="Optional note"></label>
+              </div>
+              <button id="startNewBookBtn" class="primary full" type="button">Start new diary book</button>
+            </details>
+          </div>
+
         </div>
       </section>
 

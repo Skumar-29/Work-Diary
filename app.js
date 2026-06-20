@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 19;
-const APP_BUILD_NAME = "page-number-spaces-fix";
+const APP_SCHEMA_VERSION = 20;
+const APP_BUILD_NAME = "diary-book-history";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -103,8 +103,8 @@ let state = {
   vehicles: [],
   savedDrivers: [],
   registrySettings: {autoSaveFromDiary:true},
-  registrySettings: {autoSaveFromDiary:true},
-  uiSettings: {locationPickerEnabled:true}
+  uiSettings: {locationPickerEnabled:true},
+  diaryBooks: []
 };
 
 const $ = id => document.getElementById(id);
@@ -559,6 +559,7 @@ function migrateImportedBackup(backup){
     savedDrivers: Array.isArray(b.savedDrivers) ? b.savedDrivers : [],
     registrySettings: b.registrySettings && typeof b.registrySettings === "object" ? b.registrySettings : {autoSaveFromDiary:true},
     uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true},
+    diaryBooks: Array.isArray(b.diaryBooks) ? b.diaryBooks : [],
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -585,6 +586,7 @@ function migrateImportedBackup(backup){
     defaultTwoUp: migrated.bookSettings.defaultTwoUp || {enabled:false, twoUpDriverName:"", twoUpLicenceNumber:"", twoUpScheme:"BFM", twoUpBaseState:""}
   };
   migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber = (migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  migrated.diaryBooks = migrated.diaryBooks.map(normalizeDiaryBook);
   migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
   migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
   migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
@@ -597,6 +599,7 @@ function migrateCurrentState(){
   ensureBackupReminder();
   ensureDayDetailsContainer();
   ensureBookSettings();
+  ensureDiaryBooks();
   if(typeof ensureSettingsHistory === "function") ensureSettingsHistory();
   if(typeof ensureRuleHistory === "function") ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog = [];
@@ -2918,6 +2921,152 @@ function dayHasAnyWork(key){
   if(arr.some(v => v === "work")) return true;
   return (state.entries || []).some(e => (e.activity === "work") && (String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key));
 }
+
+function bookId(){
+  return `book_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+}
+function normalizeDiaryBook(b){
+  return {
+    id: b && b.id || bookId(),
+    diaryNo: cleanPageNumberInput(b && (b.diaryNo || b.defaultWorkDiaryNo) || ""),
+    firstPageNumber: cleanPageNumberInput(b && (b.firstPageNumber || b.firstPageNo) || ""),
+    startDate: b && (b.startDate || b.firstPageDate) || state.selectedDate || toKey(new Date()),
+    endDate: b && b.endDate || "",
+    lastPageNumber: cleanPageNumberInput(b && b.lastPageNumber || ""),
+    status: b && b.status === "closed" ? "closed" : "active",
+    notes: b && b.notes || "",
+    createdAt: b && b.createdAt || new Date().toISOString(),
+    updatedAt: b && b.updatedAt || new Date().toISOString()
+  };
+}
+function ensureDiaryBooks(){
+  if(!Array.isArray(state.diaryBooks)) state.diaryBooks = [];
+  ensureBookSettings();
+  if(!state.diaryBooks.length){
+    const startDate = state.bookSettings.firstPageDate || state.selectedDate || toKey(new Date());
+    state.diaryBooks.push(normalizeDiaryBook({
+      diaryNo: state.bookSettings.defaultWorkDiaryNo || "",
+      firstPageNumber: state.bookSettings.firstPageNumber || "",
+      startDate,
+      status: "active",
+      notes: "Created from existing book setup."
+    }));
+  }else{
+    state.diaryBooks = state.diaryBooks.map(normalizeDiaryBook);
+  }
+  state.diaryBooks.sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)));
+}
+function diaryBookForDate(key){
+  ensureDiaryBooks();
+  let chosen = null;
+  for(const b of state.diaryBooks){
+    if(b.startDate && b.startDate <= key) chosen = b;
+  }
+  return chosen || state.diaryBooks[0] || null;
+}
+function activeDiaryBook(){
+  ensureDiaryBooks();
+  const active = [...state.diaryBooks].reverse().find(b => b.status !== "closed");
+  return active || diaryBookForDate(state.selectedDate);
+}
+function syncBookSettingsFromBook(book){
+  if(!book) return;
+  ensureBookSettings();
+  state.bookSettings.firstPageDate = book.startDate || state.bookSettings.firstPageDate || state.selectedDate;
+  state.bookSettings.firstPageNumber = cleanPageNumberInput(book.firstPageNumber || state.bookSettings.firstPageNumber || "");
+  state.bookSettings.defaultWorkDiaryNo = cleanPageNumberInput(book.diaryNo || state.bookSettings.defaultWorkDiaryNo || "");
+}
+function usedBookPageDatesUpToInBook(key, book){
+  const firstDate = book && book.startDate || state.bookSettings.firstPageDate || key;
+  const endDate = book && book.endDate || key;
+  const dates = new Set();
+  Object.keys(state.dayDetails || {}).forEach(d => dates.add(d));
+  Object.keys(state.slots || {}).forEach(d => dates.add(d));
+  (state.entries || []).forEach(e => {
+    if(e.start) dates.add(String(e.start).slice(0,10));
+    if(e.end) dates.add(String(e.end).slice(0,10));
+  });
+  dates.add(key);
+  return [...dates].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= firstDate && d <= key && (!book || !book.endDate || d <= endDate) && pageUsesBookPage(d)).sort();
+}
+function renderDiaryBookHistory(){
+  ensureDiaryBooks();
+  const list = $("bookHistoryList");
+  if(!list) return;
+  const rows = [...state.diaryBooks].sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate))).map(b => {
+    const status = b.status === "closed" ? "Closed" : "Active";
+    const end = b.endDate ? ` to ${escapeHtml(b.endDate)}` : " onward";
+    const last = b.lastPageNumber ? ` • Last page ${escapeHtml(b.lastPageNumber)}` : "";
+    const notes = b.notes ? `<small>${escapeHtml(b.notes)}</small>` : "";
+    return `<div class="bookHistoryItem">
+      <strong>${escapeHtml(b.diaryNo || "No diary no")} <span class="bookStatus ${b.status === "closed" ? "closed" : ""}">${status}</span></strong>
+      <small>Starts ${escapeHtml(b.startDate)} at page ${escapeHtml(b.firstPageNumber || "not set")}${end}${last}</small>
+      ${notes}
+    </div>`;
+  }).join("");
+  list.innerHTML = rows || `<p class="hint">No diary books recorded yet.</p>`;
+  if($("closeBookDate")) $("closeBookDate").value = $("closeBookDate").value || state.selectedDate;
+  if($("newBookStartDate")) $("newBookStartDate").value = $("newBookStartDate").value || state.selectedDate;
+}
+function closeCurrentDiaryBook(){
+  ensureDiaryBooks();
+  const closeDate = $("closeBookDate") ? $("closeBookDate").value || state.selectedDate : state.selectedDate;
+  const book = diaryBookForDate(closeDate) || activeDiaryBook();
+  if(!book){ alert("No diary book found to close."); return; }
+  if(!confirm(`Close diary book ${book.diaryNo || ""} on ${closeDate}?`)) return;
+  book.endDate = closeDate;
+  book.lastPageNumber = cleanPageNumberInput($("closeBookLastPage") ? $("closeBookLastPage").value : "");
+  book.notes = ($("closeBookNotes") ? $("closeBookNotes").value.trim() : "") || book.notes || "";
+  book.status = "closed";
+  book.updatedAt = new Date().toISOString();
+  addAuditLog("Diary book closed", `${book.diaryNo || ""} closed on ${closeDate}${book.lastPageNumber ? " at page "+book.lastPageNumber : ""}`);
+  save();
+  renderBookSettings();
+  recomputeAutoPageNumbers();
+  refreshCurrentPageData({forceDefaults:false});
+  showToast("Book closed");
+}
+function startNewDiaryBook(){
+  ensureDiaryBooks();
+  const startDate = $("newBookStartDate") ? $("newBookStartDate").value || state.selectedDate : state.selectedDate;
+  const diaryNo = cleanPageNumberInput($("newBookDiaryNo") ? $("newBookDiaryNo").value : "");
+  const firstPage = cleanPageNumberInput($("newBookFirstPageNo") ? $("newBookFirstPageNo").value : "");
+  const notes = $("newBookNotes") ? $("newBookNotes").value.trim() : "";
+  if(!startDate || !firstPage){ alert("Please enter the new book start date and first page number."); return; }
+  const prevDay = addDays(startDate, -1);
+  state.diaryBooks.forEach(b => {
+    if(b.status !== "closed" && b.startDate < startDate){
+      b.endDate = b.endDate || prevDay;
+      b.status = "closed";
+      b.updatedAt = new Date().toISOString();
+    }
+  });
+  const existingIdx = state.diaryBooks.findIndex(b => b.startDate === startDate);
+  const rec = normalizeDiaryBook({
+    id: existingIdx >= 0 ? state.diaryBooks[existingIdx].id : bookId(),
+    diaryNo,
+    firstPageNumber: firstPage,
+    startDate,
+    endDate: "",
+    status: "active",
+    notes,
+    createdAt: existingIdx >= 0 ? state.diaryBooks[existingIdx].createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  if(existingIdx >= 0) state.diaryBooks[existingIdx] = rec;
+  else state.diaryBooks.push(rec);
+  state.diaryBooks.sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)));
+  syncBookSettingsFromBook(rec);
+  saveSettingsRecord(startDate);
+  recomputeAutoPageNumbers();
+  updateFutureDailyDetailsFromEffectiveDate(startDate);
+  addAuditLog("New diary book started", `${diaryNo || "No diary no"} starts ${startDate} at page ${firstPage}`);
+  save();
+  renderBookSettings();
+  refreshCurrentPageData({forceDefaults:false});
+  showToast("New book started");
+}
+
 function pageUsesBookPage(key){
   const d = ensureDayDetail(key);
   const status = d.pageStatus || "active";
@@ -2928,29 +3077,24 @@ function pageUsesBookPage(key){
   return false;
 }
 function usedBookPageDatesUpTo(key){
-  ensureBookSettings();
-  const firstDate = state.bookSettings.firstPageDate || key;
-  const dates = new Set();
-  Object.keys(state.dayDetails || {}).forEach(d => dates.add(d));
-  Object.keys(state.slots || {}).forEach(d => dates.add(d));
-  (state.entries || []).forEach(e => {
-    if(e.start) dates.add(String(e.start).slice(0,10));
-    if(e.end) dates.add(String(e.end).slice(0,10));
-  });
-  dates.add(key);
-  return [...dates].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= firstDate && d <= key && pageUsesBookPage(d)).sort();
+  const book = diaryBookForDate(key);
+  return usedBookPageDatesUpToInBook(key, book);
 }
 function calculatedPageNumberForDate(key){
   ensureBookSettings();
+  ensureDiaryBooks();
   if(!state.bookSettings.autoPageNumber) return "";
-  const firstDigits = pageNumberDigits(state.bookSettings.firstPageNumber);
+  const book = diaryBookForDate(key);
+  if(!book) return "";
+  if(book.endDate && key > book.endDate) return "";
+  const firstDigits = pageNumberDigits(book.firstPageNumber || state.bookSettings.firstPageNumber);
   const first = Number(firstDigits);
-  if(!first || !state.bookSettings.firstPageDate) return "";
+  if(!first || !book.startDate) return "";
   if(!pageUsesBookPage(key)) return "";
-  const usedDates = usedBookPageDatesUpTo(key);
+  const usedDates = usedBookPageDatesUpToInBook(key, book);
   const index = usedDates.indexOf(key);
   if(index < 0) return "";
-  return formatPageNumberLikeTemplate(String(first + index), state.bookSettings.firstPageNumber);
+  return formatPageNumberLikeTemplate(String(first + index), book.firstPageNumber || state.bookSettings.firstPageNumber);
 }
 
 function recomputeAutoPageNumbers(){
@@ -2999,7 +3143,8 @@ function applyAutoDefaultsToDay(key){
 
   // Effective-date book/truck defaults carry forward unless field is manually overridden.
   if(!detail.workDiaryNoManual){
-    detail.workDiaryNo = rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo || "";
+    const book = diaryBookForDate(key);
+    detail.workDiaryNo = (book && book.diaryNo) || rec.defaultWorkDiaryNo || state.bookSettings.defaultWorkDiaryNo || "";
   }
   if(!detail.numberPlateManual){
     detail.numberPlate = (rec.defaultNumberPlate || state.bookSettings.defaultNumberPlate || "").toUpperCase();
@@ -3119,6 +3264,7 @@ function renderBookSettings(){
   if($("firstPageNumber")) $("firstPageNumber").value = set.firstPageNumber || "";
   if($("defaultWorkDiaryNo")) $("defaultWorkDiaryNo").value = set.defaultWorkDiaryNo || "";
   if($("defaultNumberPlate")) $("defaultNumberPlate").value = set.defaultNumberPlate || "";
+  renderDiaryBookHistory();
 }
 function saveBookSettings(){
   ensureBookSettings();
@@ -3129,6 +3275,19 @@ function saveBookSettings(){
   state.bookSettings.firstPageNumber = cleanPageNumberInput($("firstPageNumber").value);
   state.bookSettings.defaultWorkDiaryNo = cleanPageNumberInput($("defaultWorkDiaryNo").value);
   state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
+  ensureDiaryBooks();
+  const bookStart = state.bookSettings.firstPageDate || effectiveDate;
+  let book = state.diaryBooks.find(b => b.startDate === bookStart);
+  if(!book){
+    book = normalizeDiaryBook({diaryNo: state.bookSettings.defaultWorkDiaryNo, firstPageNumber: state.bookSettings.firstPageNumber, startDate: bookStart, status:"active", notes:"Created from book setup."});
+    state.diaryBooks.push(book);
+  }
+  book.diaryNo = cleanPageNumberInput(state.bookSettings.defaultWorkDiaryNo);
+  book.firstPageNumber = cleanPageNumberInput(state.bookSettings.firstPageNumber);
+  book.startDate = bookStart;
+  if(book.status !== "closed") book.status = "active";
+  book.updatedAt = new Date().toISOString();
+  state.diaryBooks.sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)));
   saveSettingsRecord(effectiveDate);
   updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
   applyAutoDefaultsToDay(state.selectedDate);
@@ -3533,6 +3692,7 @@ function renderAll(){
   if(activeId === "vehiclesScreen") renderVehicleDriverRegistry();
   if(activeId === "settingsScreen"){
     renderDriverSettings();
+    renderDiaryBookHistory();
     renderBackupReminderSettings();
     renderAuditLog();
   }
@@ -3569,6 +3729,7 @@ function clearAll(){
     state.bookSettings={autoPageNumber:true, carryForwardTwoUp:true, firstPageDate:state.selectedDate || toKey(new Date()), firstPageNumber:"", defaultWorkDiaryNo:"", defaultNumberPlate:"", defaultTwoUp:{enabled:false, twoUpDriverName:"", twoUpLicenceNumber:"", twoUpScheme:"BFM", twoUpBaseState:""}};
     state.settingsHistory=[];
     state.ruleHistory=[];
+    state.diaryBooks=[];
     save(); renderAll();
   }
 }
@@ -3711,6 +3872,7 @@ function buildJsonBackup(){
     savedDrivers: state.savedDrivers || [],
     registrySettings: state.registrySettings || {autoSaveFromDiary:true},
     uiSettings: state.uiSettings || {locationPickerEnabled:true},
+    diaryBooks: state.diaryBooks || [],
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -3797,12 +3959,14 @@ function importJsonBackupFromFile(file){
       state.savedDrivers = migrated.savedDrivers || [];
       state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
       state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
+      state.diaryBooks = migrated.diaryBooks || [];
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
       ensureBackupReminder();
       ensureDayDetailsContainer();
       ensureBookSettings();
+      ensureDiaryBooks();
       save();
       renderAll();
       addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); alert("Backup imported successfully.");
@@ -4081,6 +4245,8 @@ function setup(){
   if($("saveSelectedPageOnly")) $("saveSelectedPageOnly").onclick=saveSelectedPageOnly;
   if($("restoreSelectedPageDefaults")) $("restoreSelectedPageDefaults").onclick=restoreSelectedPageDefaults;
   $("saveBookSettings").onclick=saveBookSettings;
+  if($("closeCurrentBookBtn")) $("closeCurrentBookBtn").onclick = closeCurrentDiaryBook;
+  if($("startNewBookBtn")) $("startNewBookBtn").onclick = startNewDiaryBook;
   if($("saveDailySheetDetails")) $("saveDailySheetDetails").onclick = saveDailySheetDetails;
   if($("graphDetailsForm")){
     $("graphDetailsForm").addEventListener("input", updateDayDetailFromGraphForm);
