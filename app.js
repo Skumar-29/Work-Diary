@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 18;
-const APP_BUILD_NAME = "find-modal-action-fix-v3";
+const APP_SCHEMA_VERSION = 19;
+const APP_BUILD_NAME = "page-number-spaces-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -166,10 +166,15 @@ function enforceUppercaseOnly(e){
 function enforceNumericOnly(e){
   const el = e.target;
   if(!el || !el.dataset || el.dataset.numericOnly !== "true") return;
+  if(el.dataset.pageNumberOnly === "true") return;
   const cleaned = String(el.value || "").replace(/\D+/g, "");
   if(el.value !== cleaned) el.value = cleaned;
 }
 
+
+function cleanPageNumberTyping(value){
+  return String(value || "").replace(/[^\d ]+/g, "").replace(/ {2,}/g, " ");
+}
 function cleanPageNumberInput(value){
   return String(value || "").replace(/[^\d ]+/g, "").replace(/\s+/g, " ").trim();
 }
@@ -203,7 +208,7 @@ function enforcePageNumberOnly(e){
   const el = e.target;
   if(!el || !el.dataset || el.dataset.pageNumberOnly !== "true") return;
   const start = el.selectionStart;
-  const cleaned = cleanPageNumberInput(el.value);
+  const cleaned = cleanPageNumberTyping(el.value);
   if(el.value !== cleaned){
     el.value = cleaned;
     try{ el.setSelectionRange(Math.min(start, cleaned.length), Math.min(start, cleaned.length)); }catch(err){}
@@ -520,6 +525,7 @@ function normalizeDayDetailForMigration(d){
   out.pageStatus = out.pageStatus || "active";
   out.pageStatusReason = out.pageStatusReason || "";
   out.pageNo = cleanPageNumberInput(out.pageNo);
+  out.workDiaryNo = cleanPageNumberInput(out.workDiaryNo);
   out.twoUpScheme = out.twoUpScheme || "BFM";
   out.numberPlate = (out.numberPlate || "").toUpperCase();
   out.twoUpLicenceNumber = (out.twoUpLicenceNumber || "").replace(/\D+/g, "");
@@ -2796,7 +2802,7 @@ function saveSelectedPageOnly(){
   detail.driverNameSnapshot = $("pageDriverName").value.trim();
   detail.licenceNumberSnapshot = $("pageLicenceNumber").value.replace(/\D+/g, "");
   detail.baseStateSnapshot = $("pageBaseState").value;
-  detail.workDiaryNo = $("pageWorkDiaryNo").value.trim();
+  detail.workDiaryNo = cleanPageNumberInput($("pageWorkDiaryNo").value);
   detail.pageNo = cleanPageNumberInput($("pagePageNo").value);
   detail.numberPlate = $("pageNumberPlate").value.trim().toUpperCase();
 
@@ -2858,6 +2864,7 @@ function updateDayDetailFromGraphForm(){
   detail.numberPlate = (detail.numberPlate || "").toUpperCase();
   detail.twoUpLicenceNumber = (detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
   detail.pageNo = cleanPageNumberInput(detail.pageNo);
+  detail.workDiaryNo = cleanPageNumberInput(detail.workDiaryNo);
   if((detail.pageStatus || "active") !== oldPageStatus){
     addAuditLog("Page status changed", `${state.selectedDate}: ${oldPageStatus} -> ${detail.pageStatus || "active"}. ${detail.pageStatusReason || ""}`);
   }
@@ -3120,7 +3127,7 @@ function saveBookSettings(){
   state.bookSettings.carryForwardTwoUp = $("carryForwardTwoUp").checked;
   state.bookSettings.firstPageDate = $("firstPageDate").value || state.selectedDate;
   state.bookSettings.firstPageNumber = cleanPageNumberInput($("firstPageNumber").value);
-  state.bookSettings.defaultWorkDiaryNo = $("defaultWorkDiaryNo").value.trim();
+  state.bookSettings.defaultWorkDiaryNo = cleanPageNumberInput($("defaultWorkDiaryNo").value);
   state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
   saveSettingsRecord(effectiveDate);
   updateFutureDailyDetailsFromEffectiveDate(effectiveDate);

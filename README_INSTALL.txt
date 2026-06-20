@@ -411,3 +411,12 @@ Find modal v3 action fix:
 - Find Page now opens the matched page/date, refreshes the diary page, and closes the popup automatically.
 - X close button and outside-tap close now work reliably.
 - No NHVR calculation engine changes.
+
+
+Page-number spaces fix:
+- Settings Start page no. / First page number now accepts digits and spaces, e.g. 9912 30.
+- Diary/page number fields now accept digits and spaces.
+- Work diary number fields also preserve digits and spaces where used for book/page formatting.
+- Page number search still matches spaced and unspaced versions.
+- Licence and odometer fields remain numbers-only.
+- No NHVR calculation engine changes.
