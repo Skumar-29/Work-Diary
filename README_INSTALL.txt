@@ -455,3 +455,10 @@ History-start / refresh / diary-number update:
 - Added a small 🔄 refresh button near Find for all screens.
 - Changed Settings tab icon to ⚙️.
 - NHVR limits and work/rest counting formulas were not changed; this update only improves missing-history handling and UI refresh.
+
+
+Header alignment fix:
+- Aligned Find, Refresh, screen title, and previous/next buttons on one row.
+- Kept Refresh immediately after Find.
+- Center title adjusted slightly to account for the left buttons.
+- UI-only change; no data, page numbering, or NHVR calculation logic changed.

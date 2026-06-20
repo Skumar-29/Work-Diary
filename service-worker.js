@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v58-history-start-refresh-diaryno";
+const CACHE = "truck-work-diary-v59-header-alignment-fix";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

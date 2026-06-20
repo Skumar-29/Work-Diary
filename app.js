@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 22;
-const APP_BUILD_NAME = "history-start-refresh-diaryno";
+const APP_SCHEMA_VERSION = 23;
+const APP_BUILD_NAME = "header-alignment-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
