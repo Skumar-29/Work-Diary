@@ -326,3 +326,12 @@ Fast mode performance update:
 - Heavy screens render only when opened: Graph, Driving audit, Statistics, Vehicles, Settings.
 - Swipe/tap block edits use fast render and debounced save.
 - NHVR fatigue calculation engine unchanged; audit/statistics still run when those screens are opened.
+
+
+Fast mode v2 fix:
+- Fixed Work/Rest change table after location-box enlargement: Rest Type and location picker remain visible via horizontal scroll.
+- Added Show automatic location picker button ON/OFF setting.
+- Fixed base state/base time saving so VIC/QLD/etc does not revert to NSW after save.
+- Saved base state now applies forward to non-manually-edited pages.
+- Made the top header fixed to viewport so date and previous/next buttons stay visible while scrolling.
+- No NHVR fatigue calculation engine changes.

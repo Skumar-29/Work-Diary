@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 9;
-const APP_BUILD_NAME = "fast-mode-rendering";
+const APP_SCHEMA_VERSION = 10;
+const APP_BUILD_NAME = "fast-mode-v2-header-base-location";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -103,7 +103,8 @@ let state = {
   vehicles: [],
   savedDrivers: [],
   registrySettings: {autoSaveFromDiary:true},
-  registrySettings: {autoSaveFromDiary:true}
+  registrySettings: {autoSaveFromDiary:true},
+  uiSettings: {locationPickerEnabled:true}
 };
 
 const $ = id => document.getElementById(id);
@@ -179,6 +180,7 @@ function auditIgnoreKey(kind, date, extra){
 function isAuditDismissed(kind, date, extra){
   ensureDismissedAudit();
   ensureRegistries();
+  ensureUiSettings();
   return !!state.dismissedAudit[auditIgnoreKey(kind,date,extra)];
 }
 function dismissOptionalAudit(kind, date, extra, label){
@@ -508,6 +510,7 @@ function migrateImportedBackup(backup){
     vehicles: Array.isArray(b.vehicles) ? b.vehicles : [],
     savedDrivers: Array.isArray(b.savedDrivers) ? b.savedDrivers : [],
     registrySettings: b.registrySettings && typeof b.registrySettings === "object" ? b.registrySettings : {autoSaveFromDiary:true},
+    uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true},
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -563,6 +566,24 @@ function checkDataHealth(){
 }
 
 
+
+
+function ensureUiSettings(){
+  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {};
+  if(state.uiSettings.locationPickerEnabled === undefined) state.uiSettings.locationPickerEnabled = true;
+}
+function renderUiSettings(){
+  ensureUiSettings();
+  if($("locationPickerEnabled")) $("locationPickerEnabled").checked = !!state.uiSettings.locationPickerEnabled;
+  document.body.classList.toggle("location-picker-off", !state.uiSettings.locationPickerEnabled);
+}
+function toggleLocationPickerEnabled(){
+  ensureUiSettings();
+  state.uiSettings.locationPickerEnabled = !!$("locationPickerEnabled").checked;
+  save();
+  renderUiSettings();
+  if(typeof showToast === "function") showToast("Saved");
+}
 
 function ensureRegistries(){
   if(!Array.isArray(state.vehicles)) state.vehicles = [];
@@ -2780,7 +2801,7 @@ function applyAutoDefaultsToDay(key){
   if(!detail.selectedPageManual){
     detail.driverNameSnapshot = rec.driverName || state.profile.driverName || "";
     detail.licenceNumberSnapshot = (rec.licenceNumber || state.profile.licenceNumber || "").replace(/\D+/g, "");
-    detail.baseStateSnapshot = rec.baseTimeZone || state.profile.baseTimeZone || "NSW";
+    detail.baseStateSnapshot = rec.baseTimeZone || state.profile.baseTimeZone || detail.baseStateSnapshot || "NSW";
   }
 
   // Effective-date work option/rule carries forward unless this page was manually edited.
@@ -3235,7 +3256,7 @@ function renderDriverSettings(){
   const rule = ruleRecordForDate(state.selectedDate);
   if($("driverName")) $("driverName").value = rec.driverName || state.profile.driverName || "";
   if($("licenceNumber")) $("licenceNumber").value = (rec.licenceNumber || state.profile.licenceNumber || "").replace(/\D+/g, "");
-  if($("baseTimeZone")) $("baseTimeZone").value = rec.baseTimeZone || state.profile.baseTimeZone || "NSW";
+  if($("baseTimeZone")) $("baseTimeZone").value = state.profile.baseTimeZone || "NSW";
   if($("settingsEffectiveDate")) $("settingsEffectiveDate").value = $("settingsEffectiveDate").value || state.selectedDate;
   if($("schemeSelect")) $("schemeSelect").value = rule.scheme || state.scheme || "BFM";
   renderBookSettings();
@@ -3447,6 +3468,7 @@ function buildJsonBackup(){
     vehicles: state.vehicles || [],
     savedDrivers: state.savedDrivers || [],
     registrySettings: state.registrySettings || {autoSaveFromDiary:true},
+    uiSettings: state.uiSettings || {locationPickerEnabled:true},
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -3532,6 +3554,7 @@ function importJsonBackupFromFile(file){
       state.vehicles = migrated.vehicles || [];
       state.savedDrivers = migrated.savedDrivers || [];
       state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
+      state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
@@ -3551,19 +3574,76 @@ function importJsonBackupFromFile(file){
   reader.readAsText(file);
 }
 
+
+function ensureSettingsHistorySafe(){
+  if(!Array.isArray(state.settingsHistory)) state.settingsHistory = [];
+}
+function saveSettingsRecordSafe(effectiveDate){
+  ensureSettingsHistorySafe();
+  const rec = {
+    effectiveDate,
+    driverName: state.profile.driverName || "",
+    licenceNumber: (state.profile.licenceNumber || "").replace(/\D+/g,""),
+    baseTimeZone: state.profile.baseTimeZone || "NSW",
+    defaultWorkDiaryNo: state.bookSettings && state.bookSettings.defaultWorkDiaryNo || "",
+    defaultNumberPlate: state.bookSettings && state.bookSettings.defaultNumberPlate || "",
+    defaultTwoUp: state.bookSettings && state.bookSettings.defaultTwoUp || {}
+  };
+  const idx = state.settingsHistory.findIndex(x => x.effectiveDate === effectiveDate);
+  if(idx >= 0) state.settingsHistory[idx] = {...state.settingsHistory[idx], ...rec};
+  else state.settingsHistory.push(rec);
+  state.settingsHistory.sort((a,b)=>String(a.effectiveDate).localeCompare(String(b.effectiveDate)));
+}
+function driverSettingsRecordForDateFixed(key){
+  ensureSettingsHistorySafe();
+  const fallback = {
+    driverName: state.profile.driverName || "",
+    licenceNumber: state.profile.licenceNumber || "",
+    baseTimeZone: state.profile.baseTimeZone || "NSW",
+    defaultWorkDiaryNo: state.bookSettings && state.bookSettings.defaultWorkDiaryNo || "",
+    defaultNumberPlate: state.bookSettings && state.bookSettings.defaultNumberPlate || "",
+    defaultTwoUp: state.bookSettings && state.bookSettings.defaultTwoUp || {}
+  };
+  let found = null;
+  state.settingsHistory.forEach(r=>{
+    if(r && r.effectiveDate && r.effectiveDate <= key) found = r;
+  });
+  return found ? {...fallback, ...found} : fallback;
+}
+
 function saveDriverSettings(){
   ensureProfile();
-  const effectiveDate = $("settingsEffectiveDate") ? $("settingsEffectiveDate").value || state.selectedDate : state.selectedDate;
+  ensureBookSettings();
+  const effectiveDate = $("settingsEffectiveDate") && $("settingsEffectiveDate").value || state.selectedDate || toKey(new Date());
   state.profile.driverName = $("driverName").value.trim();
   state.profile.licenceNumber = $("licenceNumber").value.replace(/\D+/g, "");
   state.profile.baseTimeZone = $("baseTimeZone").value || "NSW";
-  saveSettingsRecord(effectiveDate);
-  updateFutureDailyDetailsFromEffectiveDate(effectiveDate);
+
+  saveSettingsRecordSafe(effectiveDate);
+
+  Object.keys(state.dayDetails || {}).forEach(key => {
+    if(key >= effectiveDate){
+      const d = ensureDayDetail(key);
+      if(!d.selectedPageManual){
+        d.driverNameSnapshot = state.profile.driverName;
+        d.licenceNumberSnapshot = state.profile.licenceNumber;
+        d.baseStateSnapshot = state.profile.baseTimeZone;
+      }
+    }
+  });
+
   applyAutoDefaultsToDay(state.selectedDate);
   addAuditLog("Driver/base details changed", `Effective from ${effectiveDate}`);
   save();
-  renderAll();
-  showToast("Saved");
+  renderDriverSettings();
+  renderDate();
+  renderGrid();
+  renderTotals();
+  if(typeof renderGraphPreviewOnly === "function"){
+    const active = document.querySelector(".screen.active");
+    if(active && active.id === "graphScreen") renderGraphPreviewOnly();
+  }
+  if(typeof showToast === "function") showToast("Saved");
 }
 
 
@@ -3602,6 +3682,7 @@ function stopTimer(){
 }
 
 function setup(){
+  if($("locationPickerEnabled")) $("locationPickerEnabled").onchange = toggleLocationPickerEnabled;
   document.addEventListener("visibilitychange", () => { if(document.hidden) flushSaveSoon(); });
   window.addEventListener("pagehide", flushSaveSoon);
   setupVehicleDriverRegistryButtons();
