@@ -291,3 +291,14 @@ Vehicle / driver registry update:
 - Registry data is included in JSON backups/imports.
 - Useful for checking past road fines/incidents against the vehicle or two-up driver recorded at that time.
 - No NHVR calculation/rule logic changed.
+
+
+Auto-save registry update:
+- Added Auto-save truck rego and two-up driver details from diary pages.
+- New truck regos typed on diary pages are saved to Vehicles automatically when the option is ON.
+- Two-up driver name/licence/state/work option entered on diary pages is saved to Drivers automatically when the option is ON.
+- Duplicate vehicles are matched by rego.
+- Duplicate drivers are matched by licence number first, then name.
+- Existing manually saved records are protected; auto-save only fills missing details and updates first/last seen dates.
+- Registry auto-save setting is included in JSON backup/import.
+- No NHVR calculation/rule logic changed.

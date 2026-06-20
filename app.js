@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 6;
-const APP_BUILD_NAME = "vehicle-driver-registry";
+const APP_SCHEMA_VERSION = 7;
+const APP_BUILD_NAME = "auto-save-registry";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -101,7 +101,9 @@ let state = {
   auditLog: [],
   dismissedAudit: {},
   vehicles: [],
-  savedDrivers: []
+  savedDrivers: [],
+  registrySettings: {autoSaveFromDiary:true},
+  registrySettings: {autoSaveFromDiary:true}
 };
 
 const $ = id => document.getElementById(id);
@@ -506,6 +508,7 @@ function migrateImportedBackup(backup){
     dismissedAudit: b.dismissedAudit && typeof b.dismissedAudit === "object" ? b.dismissedAudit : {},
     vehicles: Array.isArray(b.vehicles) ? b.vehicles : [],
     savedDrivers: Array.isArray(b.savedDrivers) ? b.savedDrivers : [],
+    registrySettings: b.registrySettings && typeof b.registrySettings === "object" ? b.registrySettings : {autoSaveFromDiary:true},
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -582,6 +585,8 @@ function activeSavedDriverRecords(){
 }
 function renderVehicleDriverRegistry(){
   ensureRegistries();
+  ensureRegistrySettings();
+  if($("autoSaveRegistryFromDiary")) $("autoSaveRegistryFromDiary").checked = !!state.registrySettings.autoSaveFromDiary;
   const vehicleList = $("vehicleList");
   if(vehicleList){
     const vehicles = activeVehicleRecords();
@@ -589,7 +594,7 @@ function renderVehicleDriverRegistry(){
       <button class="registryItem" data-edit-vehicle="${escapeHtml(v.id)}">
         <span>
           <strong>${escapeHtml(v.rego || "No rego")}</strong>
-          <small>${escapeHtml([v.name, v.company, v.state].filter(Boolean).join(" • ") || "Vehicle details")}</small>
+          <small>${escapeHtml([v.name, v.company, v.state].filter(Boolean).join(" • ") || "Vehicle details")}</small>${v.firstSeenDate || v.lastSeenDate ? `<small class="autoSavedMeta">Seen: ${escapeHtml(v.firstSeenDate || "?")} to ${escapeHtml(v.lastSeenDate || v.firstSeenDate || "?")}</small>` : ""}
         </span>
         <span class="registryChevron">›</span>
       </button>`).join("") : `<p class="hint">No vehicles saved yet. Tap + Vehicle.</p>`;
@@ -604,7 +609,7 @@ function renderVehicleDriverRegistry(){
       <button class="registryItem" data-edit-driver="${escapeHtml(d.id)}">
         <span>
           <strong>${escapeHtml(d.name || "No name")}</strong>
-          <small>${escapeHtml([d.role === "twoUp" ? "Two-up driving partner" : d.role === "main" ? "Main driver information" : "Driver", d.scheme, d.licence ? "Licence "+d.licence : "", d.licenceState].filter(Boolean).join(" • "))}</small>
+          <small>${escapeHtml([d.role === "twoUp" ? "Two-up driving partner" : d.role === "main" ? "Main driver information" : "Driver", d.scheme, d.licence ? "Licence "+d.licence : "", d.licenceState].filter(Boolean).join(" • "))}</small>${d.firstSeenDate || d.lastSeenDate ? `<small class="autoSavedMeta">Seen: ${escapeHtml(d.firstSeenDate || "?")} to ${escapeHtml(d.lastSeenDate || d.firstSeenDate || "?")}</small>` : ""}
         </span>
         <span class="registryChevron">›</span>
       </button>`).join("") : `<p class="hint">No drivers saved yet. Tap + Driver.</p>`;
@@ -775,7 +780,118 @@ function deleteSavedDriverRecord(){
     if(typeof showToast === "function") showToast("Deleted");
   }
 }
+
+function ensureRegistrySettings(){
+  if(!state.registrySettings || typeof state.registrySettings !== "object"){
+    state.registrySettings = {autoSaveFromDiary:true};
+  }
+  if(state.registrySettings.autoSaveFromDiary === undefined){
+    state.registrySettings.autoSaveFromDiary = true;
+  }
+}
+function normaliseDriverKey(name, licence){
+  const lic = String(licence || "").replace(/\D+/g, "");
+  if(lic) return `lic:${lic}`;
+  return `name:${String(name || "").trim().toLowerCase().replace(/\s+/g," ")}`;
+}
+function upsertVehicleFromDiary(detail, key){
+  ensureRegistries();
+  const rego = String(detail.numberPlate || "").trim().toUpperCase();
+  if(!rego) return false;
+  let v = state.vehicles.find(x => !x.deleted && String(x.rego || "").toUpperCase() === rego);
+  if(!v){
+    v = {
+      id: makeId("veh"),
+      rego,
+      name: "",
+      company: "",
+      state: "",
+      startDate: key,
+      endDate: "",
+      firstSeenDate: key,
+      lastSeenDate: key,
+      notes: "Auto-saved from diary page.",
+      autoSaved: true,
+      updatedAt: new Date().toISOString()
+    };
+    state.vehicles.push(v);
+    addAuditLog("Vehicle auto-saved from diary", `${key}: ${rego}`);
+    return true;
+  }
+  let changed = false;
+  if(!v.firstSeenDate || key < v.firstSeenDate){ v.firstSeenDate = key; changed = true; }
+  if(!v.lastSeenDate || key > v.lastSeenDate){ v.lastSeenDate = key; changed = true; }
+  if(!v.startDate){ v.startDate = key; changed = true; }
+  if(!v.notes){ v.notes = "Auto-saved from diary page."; changed = true; }
+  if(changed) v.updatedAt = new Date().toISOString();
+  return changed;
+}
+function upsertTwoUpDriverFromDiary(detail, key){
+  ensureRegistries();
+  if(!detail.twoUpEnabled) return false;
+  const name = String(detail.twoUpDriverName || "").trim();
+  const licence = String(detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  if(!name && !licence) return false;
+  const keyVal = normaliseDriverKey(name, licence);
+  let d = state.savedDrivers.find(x => {
+    if(x.deleted) return false;
+    return normaliseDriverKey(x.name, x.licence) === keyVal ||
+      (licence && String(x.licence || "").replace(/\D+/g, "") === licence);
+  });
+  if(!d){
+    d = {
+      id: makeId("drv"),
+      name,
+      licence,
+      licenceState: detail.twoUpBaseState || "",
+      scheme: detail.twoUpScheme || "Standard",
+      accreditationNo: "",
+      role: "twoUp",
+      startDate: key,
+      endDate: "",
+      firstSeenDate: key,
+      lastSeenDate: key,
+      notes: "Auto-saved from diary page.",
+      autoSaved: true,
+      updatedAt: new Date().toISOString()
+    };
+    state.savedDrivers.push(d);
+    addAuditLog("Two-up driver auto-saved from diary", `${key}: ${name || licence}`);
+    return true;
+  }
+  let changed = false;
+  // Only fill missing details so manual registry edits stay protected.
+  if(!d.name && name){ d.name = name; changed = true; }
+  if(!d.licence && licence){ d.licence = licence; changed = true; }
+  if(!d.licenceState && detail.twoUpBaseState){ d.licenceState = detail.twoUpBaseState; changed = true; }
+  if(!d.scheme && detail.twoUpScheme){ d.scheme = detail.twoUpScheme; changed = true; }
+  if(!d.role){ d.role = "twoUp"; changed = true; }
+  if(!d.firstSeenDate || key < d.firstSeenDate){ d.firstSeenDate = key; changed = true; }
+  if(!d.lastSeenDate || key > d.lastSeenDate){ d.lastSeenDate = key; changed = true; }
+  if(!d.startDate){ d.startDate = key; changed = true; }
+  if(!d.notes){ d.notes = "Auto-saved from diary page."; changed = true; }
+  if(changed) d.updatedAt = new Date().toISOString();
+  return changed;
+}
+function autoSaveRegistryFromDiaryPage(key=state.selectedDate){
+  ensureRegistrySettings();
+  if(!state.registrySettings.autoSaveFromDiary) return false;
+  const detail = ensureDayDetail(key);
+  let changed = false;
+  changed = upsertVehicleFromDiary(detail, key) || changed;
+  changed = upsertTwoUpDriverFromDiary(detail, key) || changed;
+  return changed;
+}
+function toggleAutoSaveRegistryFromDiary(){
+  ensureRegistrySettings();
+  state.registrySettings.autoSaveFromDiary = !!$("autoSaveRegistryFromDiary").checked;
+  save();
+  if(typeof showToast === "function") showToast("Saved");
+}
+
+
 function setupVehicleDriverRegistryButtons(){
+  if($("autoSaveRegistryFromDiary")) $("autoSaveRegistryFromDiary").onchange = toggleAutoSaveRegistryFromDiary;
   if($("addVehicleBtn")) $("addVehicleBtn").onclick = () => openVehicleEditor();
   if($("addSavedDriverBtn")) $("addSavedDriverBtn").onclick = () => openSavedDriverEditor();
   if($("saveVehicleBtn")) $("saveVehicleBtn").onclick = saveVehicleRecord;
@@ -2493,6 +2609,7 @@ function updateDayDetailFromGraphForm(){
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
   detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
   recomputeAutoPageNumbers();
+  autoSaveRegistryFromDiaryPage(state.selectedDate);
   save();
   renderAlerts();
   renderRuleCards();
@@ -2510,6 +2627,7 @@ function handleChangeDetailsInput(e){
   syncChangeRowsForDay(state.selectedDate);
   if(!detail.changeRows[idx]) return;
   detail.changeRows[idx][field] = target.value;
+  autoSaveRegistryFromDiaryPage(state.selectedDate);
   save();
   renderGraphPreviewOnly();
 }
@@ -3223,6 +3341,7 @@ function buildJsonBackup(){
     dismissedAudit: state.dismissedAudit || {},
     vehicles: state.vehicles || [],
     savedDrivers: state.savedDrivers || [],
+    registrySettings: state.registrySettings || {autoSaveFromDiary:true},
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -3307,6 +3426,7 @@ function importJsonBackupFromFile(file){
       state.dismissedAudit = migrated.dismissedAudit || {};
       state.vehicles = migrated.vehicles || [];
       state.savedDrivers = migrated.savedDrivers || [];
+      state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
