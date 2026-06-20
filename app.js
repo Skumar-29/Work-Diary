@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 17;
-const APP_BUILD_NAME = "find-modal-fix-v2";
+const APP_SCHEMA_VERSION = 18;
+const APP_BUILD_NAME = "find-modal-action-fix-v3";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -4150,3 +4150,151 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
 }
 setup();
+
+
+/* Robust Find modal controller v3 */
+(function(){
+  function byId(id){ return document.getElementById(id); }
+  function cleanPage(value){
+    if(typeof cleanPageNumberInput === "function") return cleanPageNumberInput(value);
+    return String(value || "").replace(/[^\d ]+/g, "").replace(/\s+/g, " ").trim();
+  }
+  function digits(value){
+    if(typeof pageNumberDigits === "function") return pageNumberDigits(value);
+    return String(value || "").replace(/\D+/g, "");
+  }
+  function samePage(a,b){
+    const ad = digits(a), bd = digits(b);
+    return !!ad && !!bd && ad === bd;
+  }
+  window.openFindModal = function(){
+    const modal = byId("findModal");
+    if(!modal) return;
+    const dateInput = byId("jumpDateInput");
+    const status = byId("jumpStatus");
+    if(dateInput) dateInput.value = state.selectedDate || toKey(new Date());
+    if(status) status.textContent = "";
+    modal.hidden = false;
+    modal.classList.add("show");
+    setTimeout(()=>{ const page = byId("jumpPageInput"); if(page) page.focus(); }, 60);
+  };
+  window.closeFindModal = function(){
+    const modal = byId("findModal");
+    if(!modal) return;
+    modal.classList.remove("show");
+    modal.hidden = true;
+  };
+  window.goToDiaryDateFromFind = function(key, message){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(key || "")){
+      alert("Please select a valid date.");
+      return false;
+    }
+    state.selectedDate = key;
+    try{ applyAutoDefaultsToDay(key); }catch(e){ console.warn(e); }
+    try{
+      if(typeof refreshCurrentPageData === "function") refreshCurrentPageData({forceDefaults:false});
+      else {
+        if(typeof saveSoon === "function") saveSoon(); else save();
+        if(typeof renderDiaryFast === "function") renderDiaryFast(); else renderAll();
+      }
+    }catch(e){
+      console.warn("Jump render fallback", e);
+      try{ save(); renderAll(); }catch(err){ console.error(err); }
+    }
+    const dateInput = byId("jumpDateInput");
+    if(dateInput) dateInput.value = key;
+    const status = byId("jumpStatus");
+    if(status) status.textContent = `${message || "Opened"}: ${key}`;
+    closeFindModal();
+    if(typeof showToast === "function") showToast(message || "Opened");
+    return true;
+  };
+  window.jumpToDateValue = function(){
+    const input = byId("jumpDateInput");
+    const key = input ? input.value : "";
+    return goToDiaryDateFromFind(key, "Opened date");
+  };
+  window.findDateByPageNumber = function(pageNo){
+    const target = cleanPage(pageNo);
+    if(!target) return null;
+    try{ if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers(); }catch(e){}
+    const dates = new Set();
+    try{ Object.keys(state.dayDetails || {}).forEach(k => dates.add(k)); }catch(e){}
+    try{ Object.keys(state.slots || {}).forEach(k => dates.add(k)); }catch(e){}
+    try{
+      (state.entries || []).forEach(e => {
+        if(e.start) dates.add(String(e.start).slice(0,10));
+        if(e.end) dates.add(String(e.end).slice(0,10));
+      });
+    }catch(e){}
+    if(state.selectedDate) dates.add(state.selectedDate);
+
+    const sorted = [...dates].filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+    for(const key of sorted){
+      let detail = null;
+      try{ detail = ensureDayDetail(key); }catch(e){ detail = (state.dayDetails || {})[key]; }
+      const stored = detail && detail.pageNo ? detail.pageNo : "";
+      let calc = "";
+      try{ calc = calculatedPageNumberForDate(key) || ""; }catch(e){}
+      if((stored && samePage(stored, target)) || (calc && samePage(calc, target))){
+        return {key, page: stored || calc};
+      }
+    }
+    return null;
+  };
+  window.jumpToPageNumberValue = function(){
+    const input = byId("jumpPageInput");
+    const status = byId("jumpStatus");
+    const page = cleanPage(input ? input.value : "");
+    if(input) input.value = page;
+    if(!page){
+      alert("Please enter a page number.");
+      return false;
+    }
+    const found = findDateByPageNumber(page);
+    if(found){
+      return goToDiaryDateFromFind(found.key, `Page ${found.page || page} opened`);
+    }
+    const msg = `Page ${page} not found in saved diary records.`;
+    if(status) status.textContent = msg;
+    alert(msg);
+    return false;
+  };
+  window.bindFindModalControls = function(){
+    const openBtn = byId("openFindModalBtn");
+    const modal = byId("findModal");
+    const pageInput = byId("jumpPageInput");
+    if(openBtn) openBtn.onclick = (e)=>{ e.preventDefault(); openFindModal(); };
+    if(modal){
+      modal.onclick = (e)=>{
+        const actionEl = e.target && e.target.closest ? e.target.closest("[data-find-action]") : null;
+        if(actionEl){
+          const action = actionEl.getAttribute("data-find-action");
+          e.preventDefault();
+          e.stopPropagation();
+          if(action === "close") closeFindModal();
+          if(action === "date") jumpToDateValue();
+          if(action === "page") jumpToPageNumberValue();
+          if(action === "open") openFindModal();
+          return;
+        }
+        if(e.target === modal) closeFindModal();
+      };
+    }
+    if(pageInput && !pageInput.dataset.findEnterBound){
+      pageInput.dataset.findEnterBound = "true";
+      pageInput.addEventListener("keydown", (e)=>{
+        if(e.key === "Enter"){
+          e.preventDefault();
+          jumpToPageNumberValue();
+        }
+      });
+    }
+  };
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bindFindModalControls);
+  }else{
+    bindFindModalControls();
+  }
+})();
+

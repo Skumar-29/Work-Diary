@@ -1044,3 +1044,22 @@ body.location-picker-off .locPickerWrap input{
     font-size:19px!important;
   }
 }
+
+/* Find modal v3 action fix */
+.modalOverlay[hidden]{
+  display:none!important;
+}
+.modalOverlay.show{
+  display:flex!important;
+}
+.findModalCard,
+.findModalCard *{
+  pointer-events:auto!important;
+}
+.modalClose,
+#jumpDateBtn,
+#jumpPageBtn,
+#openFindModalBtn{
+  cursor:pointer!important;
+  touch-action:manipulation!important;
+}

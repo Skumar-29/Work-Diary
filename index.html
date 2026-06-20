@@ -19,7 +19,7 @@
       <span class="right">▥ ))) 🔋</span>
     </div>
     <div class="titleRow">
-      <button id="openFindModalBtn" class="findBtn" type="button" title="Find old page/date">🔎 Find</button>
+<button id="openFindModalBtn" class="findBtn" type="button" data-find-action="open" title="Find old page/date">🔎 Find</button>
           <h1 id="screenTitle">Work Diary</h1>
       <div class="dateNav">
         <button id="prevDay" aria-label="Previous day">‹</button>
@@ -542,18 +542,18 @@
     <div class="findModalCard" role="dialog" aria-modal="true" aria-labelledby="findModalTitle">
       <div class="modalHeader">
         <h2 id="findModalTitle">Find old page/date</h2>
-        <button id="closeFindModalBtn" class="modalClose" type="button" aria-label="Close">×</button>
+        <button id="closeFindModalBtn" class="modalClose" type="button" data-find-action="close" aria-label="Close">×</button>
       </div>
       <p class="hint">Jump directly to an old diary page by date or page number.</p>
       <div class="findModalGrid">
         <label>Jump by date
           <input id="jumpDateInput" type="date">
         </label>
-        <button id="jumpDateBtn" class="secondary" type="button">Go to date</button>
+        <button id="jumpDateBtn" class="secondary" type="button" data-find-action="date">Go to date</button>
         <label>Find by page no
           <input id="jumpPageInput" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 9912 30">
         </label>
-        <button id="jumpPageBtn" class="secondary" type="button">Find page</button>
+        <button id="jumpPageBtn" class="secondary" type="button" data-find-action="page">Find page</button>
       </div>
       <p id="jumpStatus" class="hint"></p>
     </div>

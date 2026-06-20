@@ -403,3 +403,11 @@ Find modal v2 fix:
 - Centered Work Diary title in the header.
 - Reduced Find button font weight/size so it matches the header style better.
 - No NHVR calculation engine changes.
+
+
+Find modal v3 action fix:
+- Rebuilt Find popup button handling with event delegation so Safari reliably receives button taps.
+- Go to Date now sets the selected date, refreshes the diary page, and closes the popup automatically.
+- Find Page now opens the matched page/date, refreshes the diary page, and closes the popup automatically.
+- X close button and outside-tap close now work reliably.
+- No NHVR calculation engine changes.
