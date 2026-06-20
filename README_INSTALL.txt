@@ -386,3 +386,11 @@ Jump to page/date update:
 - Licence and odometer fields remain numbers-only.
 - Auto page numbering keeps the spacing pattern from the first page number, e.g. 9912 30, 9912 31, 9912 32.
 - No NHVR calculation engine changes.
+
+
+Find modal update:
+- Replaced the large Jump to old page/date card with a compact 🔎 Find button near previous/next date controls.
+- Find opens a popup/modal with the same jump-by-date and find-by-page-number options.
+- Page number spaces like 9912 30 remain supported.
+- This saves screen space on the Work Diary page.
+- No NHVR calculation engine changes.

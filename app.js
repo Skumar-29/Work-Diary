@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 15;
-const APP_BUILD_NAME = "jump-page-date";
+const APP_SCHEMA_VERSION = 16;
+const APP_BUILD_NAME = "find-modal-jump";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -3942,8 +3942,23 @@ function goToDiaryDate(key, message="Opened"){
   if(active && active.id === "graphScreen") renderGraphPage();
   if($("jumpDateInput")) $("jumpDateInput").value = key;
   if($("jumpStatus")) $("jumpStatus").textContent = `${message}: ${fmtDateLong(key)} • Page ${pageNoForDate(key)}`;
+  closeFindModal();
   if(typeof showToast === "function") showToast(message);
 }
+
+function openFindModal(){
+  const modal = $("findModal");
+  if(!modal) return;
+  if($("jumpDateInput")) $("jumpDateInput").value = state.selectedDate || toKey(new Date());
+  if($("jumpStatus")) $("jumpStatus").textContent = "";
+  modal.hidden = false;
+  setTimeout(()=>{ if($("jumpPageInput")) $("jumpPageInput").focus(); }, 80);
+}
+function closeFindModal(){
+  const modal = $("findModal");
+  if(modal) modal.hidden = true;
+}
+
 function jumpToDateValue(){
   const key = $("jumpDateInput") ? $("jumpDateInput").value : "";
   goToDiaryDate(key, "Opened date");
@@ -3983,8 +3998,12 @@ function jumpToPageNumberValue(){
 
 
 function setup(){
+  if($("openFindModalBtn")) $("openFindModalBtn").onclick = openFindModal;
+  if($("closeFindModalBtn")) $("closeFindModalBtn").onclick = closeFindModal;
+  if($("findModal")) $("findModal").onclick = (e)=>{ if(e.target === $("findModal")) closeFindModal(); };
   if($("jumpDateBtn")) $("jumpDateBtn").onclick = jumpToDateValue;
   if($("jumpPageBtn")) $("jumpPageBtn").onclick = jumpToPageNumberValue;
+  if($("jumpPageInput")) $("jumpPageInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") jumpToPageNumberValue(); });
   if($("refreshGraphPageBtn")) $("refreshGraphPageBtn").onclick = refreshGraphPageOnly;
   if($("refreshGraphDefaultsBtn")) $("refreshGraphDefaultsBtn").onclick = reapplyCurrentDefaultsToPage;
   if($("locationPickerEnabled")) $("locationPickerEnabled").onchange = toggleLocationPickerEnabled;
