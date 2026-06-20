@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 21;
-const APP_BUILD_NAME = "book-history-display-format";
+const APP_SCHEMA_VERSION = 22;
+const APP_BUILD_NAME = "history-start-refresh-diaryno";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -104,7 +104,8 @@ let state = {
   savedDrivers: [],
   registrySettings: {autoSaveFromDiary:true},
   uiSettings: {locationPickerEnabled:true},
-  diaryBooks: []
+  diaryBooks: [],
+  calculationHistory: {startDate:"", mode:"noWorkBeforeStart"}
 };
 
 const $ = id => document.getElementById(id);
@@ -204,6 +205,25 @@ function formatPageNumberLikeTemplate(value, template){
   groups.unshift(digits.slice(0, pos));
   return groups.filter(Boolean).join(" ");
 }
+
+function cleanWorkDiaryNoTyping(value){
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9 ]+/g, "").replace(/ {2,}/g, " ");
+}
+function cleanWorkDiaryNoInput(value){
+  return cleanWorkDiaryNoTyping(value).replace(/\s+/g, " ").trim();
+}
+function enforceWorkDiaryNoOnly(e){
+  const el = e.target;
+  if(!el || !el.dataset || el.dataset.workDiaryNo !== "true") return;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const cleaned = cleanWorkDiaryNoTyping(el.value);
+  if(el.value !== cleaned){
+    el.value = cleaned;
+    try{ el.setSelectionRange(Math.min(start, cleaned.length), Math.min(end, cleaned.length)); }catch(err){}
+  }
+}
+
 function enforcePageNumberOnly(e){
   const el = e.target;
   if(!el || !el.dataset || el.dataset.pageNumberOnly !== "true") return;
@@ -525,7 +545,7 @@ function normalizeDayDetailForMigration(d){
   out.pageStatus = out.pageStatus || "active";
   out.pageStatusReason = out.pageStatusReason || "";
   out.pageNo = cleanPageNumberInput(out.pageNo);
-  out.workDiaryNo = cleanPageNumberInput(out.workDiaryNo);
+  out.workDiaryNo = cleanWorkDiaryNoInput(out.workDiaryNo);
   out.twoUpScheme = out.twoUpScheme || "BFM";
   out.numberPlate = (out.numberPlate || "").toUpperCase();
   out.twoUpLicenceNumber = (out.twoUpLicenceNumber || "").replace(/\D+/g, "");
@@ -560,6 +580,7 @@ function migrateImportedBackup(backup){
     registrySettings: b.registrySettings && typeof b.registrySettings === "object" ? b.registrySettings : {autoSaveFromDiary:true},
     uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true},
     diaryBooks: Array.isArray(b.diaryBooks) ? b.diaryBooks : [],
+    calculationHistory: b.calculationHistory && typeof b.calculationHistory === "object" ? b.calculationHistory : {},
     backupReminder: b.backupReminder || {},
     schemaVersion: b.schemaVersion || b.backupVersion || 1
   };
@@ -581,12 +602,15 @@ function migrateImportedBackup(backup){
     carryForwardTwoUp: migrated.bookSettings.carryForwardTwoUp !== undefined ? !!migrated.bookSettings.carryForwardTwoUp : true,
     firstPageDate: migrated.bookSettings.firstPageDate || migrated.selectedDate,
     firstPageNumber: migrated.bookSettings.firstPageNumber || "",
-    defaultWorkDiaryNo: migrated.bookSettings.defaultWorkDiaryNo || "",
+    defaultWorkDiaryNo: cleanWorkDiaryNoInput(migrated.bookSettings.defaultWorkDiaryNo || ""),
     defaultNumberPlate: (migrated.bookSettings.defaultNumberPlate || "").toUpperCase(),
     defaultTwoUp: migrated.bookSettings.defaultTwoUp || {enabled:false, twoUpDriverName:"", twoUpLicenceNumber:"", twoUpScheme:"BFM", twoUpBaseState:""}
   };
   migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber = (migrated.bookSettings.defaultTwoUp.twoUpLicenceNumber || "").replace(/\D+/g, "");
   migrated.diaryBooks = migrated.diaryBooks.map(normalizeDiaryBook);
+  migrated.calculationHistory = migrated.calculationHistory && typeof migrated.calculationHistory === "object" ? migrated.calculationHistory : {};
+  migrated.calculationHistory.startDate = migrated.calculationHistory.startDate || migrated.bookSettings.firstPageDate || migrated.selectedDate;
+  migrated.calculationHistory.mode = ["noWorkBeforeStart","unknown","imported"].includes(migrated.calculationHistory.mode) ? migrated.calculationHistory.mode : "noWorkBeforeStart";
   migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
   migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
   migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
@@ -600,6 +624,7 @@ function migrateCurrentState(){
   ensureDayDetailsContainer();
   ensureBookSettings();
   ensureDiaryBooks();
+  ensureCalculationHistory();
   if(typeof ensureSettingsHistory === "function") ensureSettingsHistory();
   if(typeof ensureRuleHistory === "function") ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog = [];
@@ -1501,6 +1526,79 @@ function pageNoForDate(key){
 }
 
 
+
+function earliestRecordedDiaryDate(){
+  const dates = new Set();
+  Object.keys(state.slots || {}).forEach(k => dates.add(k));
+  Object.keys(state.dayDetails || {}).forEach(k => dates.add(k));
+  (state.entries || []).forEach(e => {
+    if(e.start) dates.add(String(e.start).slice(0,10));
+    if(e.end) dates.add(String(e.end).slice(0,10));
+  });
+  if(state.bookSettings && state.bookSettings.firstPageDate) dates.add(state.bookSettings.firstPageDate);
+  if(Array.isArray(state.diaryBooks) && state.diaryBooks.length){
+    state.diaryBooks.forEach(b => { if(b.startDate) dates.add(b.startDate); });
+  }
+  const sorted = [...dates].filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+  return sorted[0] || state.selectedDate || toKey(new Date());
+}
+function ensureCalculationHistory(){
+  if(!state.calculationHistory || typeof state.calculationHistory !== "object"){
+    state.calculationHistory = {startDate:"", mode:"noWorkBeforeStart"};
+  }
+  if(!state.calculationHistory.startDate){
+    state.calculationHistory.startDate = earliestRecordedDiaryDate();
+  }
+  if(!["noWorkBeforeStart","unknown","imported"].includes(state.calculationHistory.mode)){
+    state.calculationHistory.mode = "noWorkBeforeStart";
+  }
+}
+function calculationHistoryStartAbs(){
+  ensureCalculationHistory();
+  const key = state.calculationHistory.startDate || earliestRecordedDiaryDate();
+  return fromKey(key).getTime();
+}
+function calculationHistoryMode(){
+  ensureCalculationHistory();
+  return state.calculationHistory.mode || "noWorkBeforeStart";
+}
+function longPeriodRestCheckIsDue(winEnd, dayEnd){
+  // Work-limit breaches can be known immediately, but a 7d/14d rest/night-rest requirement
+  // should not be shown as a breach before that full period has actually ended.
+  return winEnd <= dayEnd;
+}
+function shouldSkipLongRestCheckForMissingHistory(startAbs){
+  const histStart = calculationHistoryStartAbs();
+  const mode = calculationHistoryMode();
+  return startAbs < histStart && mode === "noWorkBeforeStart";
+}
+function missingHistoryFinding(key, rule, profile, startAbs){
+  return nhvrFinding(
+    "warn",
+    key,
+    `${rule.label} previous history needed`,
+    `${profile.name}: ${rule.label} period starts before the app's calculation history start date. The app cannot confirm this long-period rest check from saved data only.`,
+    [],
+    `Set Calculation History to “No work / full rest” only if that is true, or import/add earlier diary pages before relying on this ${rule.label} check.`,
+    startAbs
+  );
+}
+function renderCalculationHistorySettings(){
+  ensureCalculationHistory();
+  if($("calculationHistoryStartDate")) $("calculationHistoryStartDate").value = state.calculationHistory.startDate || earliestRecordedDiaryDate();
+  if($("calculationHistoryMode")) $("calculationHistoryMode").value = state.calculationHistory.mode || "noWorkBeforeStart";
+}
+function saveCalculationHistorySettings(){
+  ensureCalculationHistory();
+  state.calculationHistory.startDate = $("calculationHistoryStartDate") ? $("calculationHistoryStartDate").value || earliestRecordedDiaryDate() : earliestRecordedDiaryDate();
+  state.calculationHistory.mode = $("calculationHistoryMode") ? $("calculationHistoryMode").value || "noWorkBeforeStart" : "noWorkBeforeStart";
+  addAuditLog("Calculation history changed", `Start ${state.calculationHistory.startDate}; before start: ${state.calculationHistory.mode}`);
+  save();
+  refreshCurrentPageData({forceDefaults:false});
+  renderAll();
+  showToast("Saved");
+}
+
 const NHVR_ENGINE_VERSION = "NHVR Work Diary Guide v1.3 counting engine";
 
 function nhvrProfileForDate(key){
@@ -1714,6 +1812,8 @@ function nhvrBreachesForDate(key){
   if(profile.afm) return [nhvrFinding("error", key, "AFM conditions required", "AFM is selected. Enter your operator's AFM certificate limits before using fatigue calculations.", [], "Use AFM as record-only until the exact AFM certificate conditions are entered.")];
   const dayStart = fromKey(key).getTime();
   const dayEnd = dayStart + DAY_MS;
+  ensureCalculationHistory();
+  const historyMode = calculationHistoryMode();
   const lookback = 30*DAY_MS;
   const scanStart = dayStart - lookback;
   const findings = [];
@@ -1772,26 +1872,42 @@ function nhvrBreachesForDate(key){
       }
 
       if(rule.restCheck){
-        const got = nhvrMaxContinuousBetween(s, winEnd, nhvrPredicateForKind(rule.restCheck.kind));
-        if(got < rule.restCheck.mins){
-          // Do not colour the whole 24h/7d/14d window red for a missing major-rest requirement.
-          // The audit item explains the missing rest; work-limit breaches still colour exact blocks separately.
-          addFinding(nhvrFinding(
-            "error",
-            key,
-            `${rule.label} rest requirement missing`,
-            `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`,
-            [],
-            `Select the correct Rest Type for qualifying rest blocks or add the required rest inside this ${rule.label} period. This check is shown in audit instead of colouring the whole work period red.`,
-            s
-          ));
+        if(!longPeriodRestCheckIsDue(winEnd, dayEnd)){
+          // The period is still open. Do not show a false breach before the driver has had the full period to take the required rest.
+        } else if(shouldSkipLongRestCheckForMissingHistory(s)){
+          // Before the app history start is explicitly treated as no work/full rest, so do not create a missing-history false warning.
+        } else if(s < calculationHistoryStartAbs() && historyMode === "unknown"){
+          addFinding(missingHistoryFinding(key, rule, profile, s));
+        } else {
+          const got = nhvrMaxContinuousBetween(s, winEnd, nhvrPredicateForKind(rule.restCheck.kind));
+          if(got < rule.restCheck.mins){
+            // Do not colour the whole 24h/7d/14d window red for a missing major-rest requirement.
+            // The audit item explains the missing rest; work-limit breaches still colour exact blocks separately.
+            addFinding(nhvrFinding(
+              "error",
+              key,
+              `${rule.label} rest requirement missing`,
+              `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`,
+              [],
+              `Select the correct Rest Type for qualifying rest blocks or add the required rest inside this ${rule.label} period. This check is shown in audit instead of colouring the whole work period red.`,
+              s
+            ));
+          }
         }
       }
 
       if(rule.nightRest){
-        const nights = nhvrNightRestDates(s, winEnd);
-        if(nights.length < rule.nightRest.count || (rule.nightRest.consecutive && !nhvrHasConsecutiveDates(nights))){
-          addFinding(nhvrFinding("warn", key, `${rule.label} night rest check`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`, [], `Check night rests using your base time zone. A 24h stationary rest can count as a night rest.`, s));
+        if(!longPeriodRestCheckIsDue(winEnd, dayEnd)){
+          // The 7/14 day period has not finished yet, so a missing night-rest finding would be premature.
+        } else if(shouldSkipLongRestCheckForMissingHistory(s)){
+          // Before app history start is explicitly treated as no work/full rest.
+        } else if(s < calculationHistoryStartAbs() && historyMode === "unknown"){
+          addFinding(missingHistoryFinding(key, rule, profile, s));
+        } else {
+          const nights = nhvrNightRestDates(s, winEnd);
+          if(nights.length < rule.nightRest.count || (rule.nightRest.consecutive && !nhvrHasConsecutiveDates(nights))){
+            addFinding(nhvrFinding("warn", key, `${rule.label} night rest check`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`, [], `Check night rests using your base time zone. A 24h stationary rest can count as a night rest.`, s));
+          }
         }
       }
 
@@ -2805,7 +2921,7 @@ function saveSelectedPageOnly(){
   detail.driverNameSnapshot = $("pageDriverName").value.trim();
   detail.licenceNumberSnapshot = $("pageLicenceNumber").value.replace(/\D+/g, "");
   detail.baseStateSnapshot = $("pageBaseState").value;
-  detail.workDiaryNo = cleanPageNumberInput($("pageWorkDiaryNo").value);
+  detail.workDiaryNo = cleanWorkDiaryNoInput($("pageWorkDiaryNo").value);
   detail.pageNo = cleanPageNumberInput($("pagePageNo").value);
   detail.numberPlate = $("pageNumberPlate").value.trim().toUpperCase();
 
@@ -2867,7 +2983,7 @@ function updateDayDetailFromGraphForm(){
   detail.numberPlate = (detail.numberPlate || "").toUpperCase();
   detail.twoUpLicenceNumber = (detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
   detail.pageNo = cleanPageNumberInput(detail.pageNo);
-  detail.workDiaryNo = cleanPageNumberInput(detail.workDiaryNo);
+  detail.workDiaryNo = cleanWorkDiaryNoInput(detail.workDiaryNo);
   if((detail.pageStatus || "active") !== oldPageStatus){
     addAuditLog("Page status changed", `${state.selectedDate}: ${oldPageStatus} -> ${detail.pageStatus || "active"}. ${detail.pageStatusReason || ""}`);
   }
@@ -2928,7 +3044,7 @@ function bookId(){
 function normalizeDiaryBook(b){
   return {
     id: b && b.id || bookId(),
-    diaryNo: cleanPageNumberInput(b && (b.diaryNo || b.defaultWorkDiaryNo) || ""),
+    diaryNo: cleanWorkDiaryNoInput(b && (b.diaryNo || b.defaultWorkDiaryNo) || ""),
     firstPageNumber: cleanPageNumberInput(b && (b.firstPageNumber || b.firstPageNo) || ""),
     startDate: b && (b.startDate || b.firstPageDate) || state.selectedDate || toKey(new Date()),
     endDate: b && b.endDate || "",
@@ -2974,7 +3090,7 @@ function syncBookSettingsFromBook(book){
   ensureBookSettings();
   state.bookSettings.firstPageDate = book.startDate || state.bookSettings.firstPageDate || state.selectedDate;
   state.bookSettings.firstPageNumber = cleanPageNumberInput(book.firstPageNumber || state.bookSettings.firstPageNumber || "");
-  state.bookSettings.defaultWorkDiaryNo = cleanPageNumberInput(book.diaryNo || state.bookSettings.defaultWorkDiaryNo || "");
+  state.bookSettings.defaultWorkDiaryNo = cleanWorkDiaryNoInput(book.diaryNo || state.bookSettings.defaultWorkDiaryNo || "");
 }
 function usedBookPageDatesUpToInBook(key, book){
   const firstDate = book && book.startDate || state.bookSettings.firstPageDate || key;
@@ -3041,7 +3157,7 @@ function closeCurrentDiaryBook(){
 function startNewDiaryBook(){
   ensureDiaryBooks();
   const startDate = $("newBookStartDate") ? $("newBookStartDate").value || state.selectedDate : state.selectedDate;
-  const diaryNo = cleanPageNumberInput($("newBookDiaryNo") ? $("newBookDiaryNo").value : "");
+  const diaryNo = cleanWorkDiaryNoInput($("newBookDiaryNo") ? $("newBookDiaryNo").value : "");
   const firstPage = cleanPageNumberInput($("newBookFirstPageNo") ? $("newBookFirstPageNo").value : "");
   const notes = $("newBookNotes") ? $("newBookNotes").value.trim() : "";
   if(!startDate || !firstPage){ alert("Please enter the new book start date and first page number."); return; }
@@ -3285,7 +3401,7 @@ function saveBookSettings(){
   state.bookSettings.carryForwardTwoUp = $("carryForwardTwoUp").checked;
   state.bookSettings.firstPageDate = $("firstPageDate").value || state.selectedDate;
   state.bookSettings.firstPageNumber = cleanPageNumberInput($("firstPageNumber").value);
-  state.bookSettings.defaultWorkDiaryNo = cleanPageNumberInput($("defaultWorkDiaryNo").value);
+  state.bookSettings.defaultWorkDiaryNo = cleanWorkDiaryNoInput($("defaultWorkDiaryNo").value);
   state.bookSettings.defaultNumberPlate = $("defaultNumberPlate").value.trim().toUpperCase();
   ensureDiaryBooks();
   const bookStart = state.bookSettings.firstPageDate || effectiveDate;
@@ -3294,7 +3410,7 @@ function saveBookSettings(){
     book = normalizeDiaryBook({diaryNo: state.bookSettings.defaultWorkDiaryNo, firstPageNumber: state.bookSettings.firstPageNumber, startDate: bookStart, status:"active", notes:"Created from book setup."});
     state.diaryBooks.push(book);
   }
-  book.diaryNo = cleanPageNumberInput(state.bookSettings.defaultWorkDiaryNo);
+  book.diaryNo = cleanWorkDiaryNoInput(state.bookSettings.defaultWorkDiaryNo);
   book.firstPageNumber = cleanPageNumberInput(state.bookSettings.firstPageNumber);
   book.startDate = bookStart;
   if(book.status !== "closed") book.status = "active";
@@ -3674,6 +3790,7 @@ function renderDriverSettings(){
   if($("schemeSelect")) $("schemeSelect").value = rule.scheme || state.scheme || "BFM";
   renderBookSettings();
   renderRuleHistorySettings();
+  renderCalculationHistorySettings();
 }
 function renderAll(){
   renderDate();
@@ -3742,6 +3859,7 @@ function clearAll(){
     state.settingsHistory=[];
     state.ruleHistory=[];
     state.diaryBooks=[];
+    state.calculationHistory={startDate:state.selectedDate || toKey(new Date()), mode:"noWorkBeforeStart"};
     save(); renderAll();
   }
 }
@@ -3885,6 +4003,7 @@ function buildJsonBackup(){
     registrySettings: state.registrySettings || {autoSaveFromDiary:true},
     uiSettings: state.uiSettings || {locationPickerEnabled:true},
     diaryBooks: state.diaryBooks || [],
+    calculationHistory: state.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"},
     backupReminder: state.backupReminder || {},
     note: "Personal backup file for restoring this app data. Keep this file private."
   };
@@ -3972,6 +4091,7 @@ function importJsonBackupFromFile(file){
       state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
       state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
       state.diaryBooks = migrated.diaryBooks || [];
+      state.calculationHistory = migrated.calculationHistory || {};
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
@@ -4207,9 +4327,50 @@ function jumpToPageNumberValue(){
 }
 
 
+
+function quickRefreshCurrentScreen(){
+  try{
+    if(typeof refreshCurrentPageData === "function") refreshCurrentPageData({forceDefaults:false});
+    const active = document.querySelector(".screen.active");
+    const activeId = active ? active.id : "diaryScreen";
+    renderDate();
+    if(activeId === "diaryScreen"){
+      renderDiaryFast();
+    } else if(activeId === "drivingScreen"){
+      renderRuleCards();
+      renderNextBreak();
+      renderTodayAdvice();
+      renderAuditList();
+      renderComplianceConfidence();
+      renderAuditFixPanel();
+    } else if(activeId === "statsScreen"){
+      renderRuleCards();
+      renderNextBreak();
+      renderTodayAdvice();
+      renderStatistics();
+      renderComplianceConfidence();
+    } else if(activeId === "graphScreen"){
+      renderGraphPage();
+    } else if(activeId === "vehiclesScreen"){
+      renderVehicleDriverRegistry();
+    } else if(activeId === "settingsScreen"){
+      renderDriverSettings();
+      renderBackupReminderSettings();
+      renderAuditLog();
+    } else {
+      renderAll();
+    }
+    if(typeof showToast === "function") showToast("Refreshed");
+  }catch(err){
+    console.error("Refresh failed", err);
+    try{ renderAll(); }catch(e){}
+  }
+}
+
 function setup(){
   bindFindModalControls();
   if($("openFindModalBtn")) $("openFindModalBtn").onclick = openFindModal;
+  if($("quickRefreshBtn")) $("quickRefreshBtn").onclick = quickRefreshCurrentScreen;
   if($("closeFindModalBtn")) $("closeFindModalBtn").onclick = closeFindModal;
   if($("findModal")) $("findModal").onclick = (e)=>{ if(e.target === $("findModal")) closeFindModal(); };
   if($("jumpDateBtn")) $("jumpDateBtn").onclick = jumpToDateValue;
@@ -4224,6 +4385,7 @@ function setup(){
   document.addEventListener("input", enforceNumericOnly);
   document.addEventListener("input", enforcePageNumberOnly);
   document.addEventListener("input", enforceUppercaseOnly);
+  document.addEventListener("input", enforceWorkDiaryNoOnly);
   load();
   $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);saveSoon();renderDiaryFast();}
   $("nextDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,1);saveSoon();renderDiaryFast();}
@@ -4241,6 +4403,7 @@ function setup(){
   }
   $("restAsStationary").onchange=e=>{state.restAsStationary=e.target.checked;saveSoon();renderDiaryFast();}
   if($("saveRuleHistory")) $("saveRuleHistory").onclick=saveRuleHistorySetting;
+  if($("saveCalculationHistory")) $("saveCalculationHistory").onclick = saveCalculationHistorySettings;
   $("exportCsv").onclick=exportCsv;
   $("exportPdf").onclick=exportPdf;
   if($("graphExportPdf")) $("graphExportPdf").onclick=exportPdf;

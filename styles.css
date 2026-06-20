@@ -1092,3 +1092,46 @@ body.location-picker-off .locPickerWrap input{
 .bookHistoryItem strong{
   margin-bottom:5px;
 }
+
+/* Calculation history + refresh button update */
+.calculationHistoryBox{
+  margin:14px 0;
+  padding:12px;
+  border:1px solid #d7e8df;
+  border-radius:16px;
+  background:#f7fcf9;
+}
+.refreshBtn{
+  grid-column:1!important;
+  justify-self:start!important;
+  margin-left:70px!important;
+  height:34px!important;
+  width:38px!important;
+  min-width:38px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.14)!important;
+  color:#fff!important;
+  font-size:17px!important;
+  font-weight:500!important;
+  line-height:1!important;
+  touch-action:manipulation!important;
+}
+.findBtn + .refreshBtn{
+  margin-left:72px!important;
+}
+@media (max-width:420px){
+  .refreshBtn{
+    margin-left:62px!important;
+    width:34px!important;
+    min-width:34px!important;
+    font-size:16px!important;
+  }
+}
+@media (prefers-color-scheme:dark){
+  .calculationHistoryBox{
+    background:#0e1b12;
+    border-color:#244c31;
+  }
+}

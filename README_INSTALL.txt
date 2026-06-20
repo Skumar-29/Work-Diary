@@ -442,3 +442,16 @@ Diary Book History display format update:
   Last page: 3333 99
 - Active book displays as Book 2 - Active.
 - No page-numbering, backup/import, Find, or NHVR calculation logic changed.
+
+
+History-start / refresh / diary-number update:
+- Added Calculation History settings:
+  - History starts from date
+  - Before this date assume: No work/full rest, Unknown previous history, or Previous history imported.
+- Long-period rest/night-rest checks are no longer shown as breaches before the full 7d/14d period has ended.
+- If previous history is unknown, long-period checks can show a previous-history-needed warning instead of a false confirmed breach.
+- Default work diary number and other work diary number fields now accept letters, numbers and spaces, and auto-uppercase input.
+- Page number fields remain digits/spaces only; licence and odometer remain numbers-only.
+- Added a small 🔄 refresh button near Find for all screens.
+- Changed Settings tab icon to ⚙️.
+- NHVR limits and work/rest counting formulas were not changed; this update only improves missing-history handling and UI refresh.
