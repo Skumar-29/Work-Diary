@@ -2242,7 +2242,7 @@ function renderChangeDetailsEditor(){
       </td>
       <td>
         ${r.activity === "rest" ? `
-          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
+          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType" class="restTypeSelect">
             <option value="" ${!r.restType ? "selected" : ""}>Select rest type</option>
             <option value="rest" ${r.restType==="rest" ? "selected" : ""}>Rest</option>
             <option value="stationary" ${r.restType==="stationary" ? "selected" : ""}>Stationary rest</option>
@@ -3240,6 +3240,7 @@ function renderAlertsFast(){
   }
 }
 function renderDiaryFast(){
+  renderUiSettings();
   renderDate();
   renderGrid();
   renderTotals();

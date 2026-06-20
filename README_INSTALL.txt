@@ -335,3 +335,11 @@ Fast mode v2 fix:
 - Saved base state now applies forward to non-manually-edited pages.
 - Made the top header fixed to viewport so date and previous/next buttons stay visible while scrolling.
 - No NHVR fatigue calculation engine changes.
+
+
+Work/Rest change details table scroll update:
+- Made Work/Rest change details an intentionally wide horizontal-scrolling table, similar to graph preview.
+- Added swipe left/right hint.
+- Gave proper space to Location, Rest type, Notes and current-location picker button.
+- Kept manual typing, location picker ON/OFF, and fast mode.
+- No NHVR calculation engine changes.

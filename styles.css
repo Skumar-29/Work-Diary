@@ -633,3 +633,100 @@ body.location-picker-off .locPickerWrap input{
   #changeDetailsEditor table,
   .changeTable{min-width:850px!important}
 }
+
+/* Work/Rest change details horizontal scroll fix */
+#changeScrollHint{
+  margin:8px 0 6px;
+  font-size:13px;
+  font-weight:700;
+  color:#496157;
+  background:#eef8f2;
+  border:1px solid #cbe8d5;
+  border-radius:10px;
+  padding:8px 10px;
+}
+#changeDetailsEditor{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
+  border:1px solid #e1e7e3;
+  border-radius:14px;
+  padding:6px;
+  background:rgba(255,255,255,.55);
+}
+#changeDetailsEditor::after{
+  content:"";
+  display:block;
+  height:1px;
+  width:980px;
+}
+#changeDetailsEditor table,
+#changeDetailsEditor .changeTable,
+.changeTable{
+  min-width:980px!important;
+  width:980px!important;
+  max-width:none!important;
+  table-layout:fixed!important;
+  border-collapse:separate;
+  border-spacing:0 6px;
+}
+.changeTable th,
+.changeTable td{
+  padding:5px!important;
+  box-sizing:border-box!important;
+  vertical-align:middle!important;
+}
+.changeTable th:nth-child(1), .changeTable td:nth-child(1){width:78px!important}
+.changeTable th:nth-child(2), .changeTable td:nth-child(2){width:88px!important}
+.changeTable th:nth-child(3), .changeTable td:nth-child(3){width:112px!important}
+.changeTable th:nth-child(4), .changeTable td:nth-child(4){width:285px!important;min-width:285px!important}
+.changeTable th:nth-child(5), .changeTable td:nth-child(5){width:155px!important;min-width:155px!important}
+.changeTable th:nth-child(6), .changeTable td:nth-child(6){width:210px!important;min-width:210px!important}
+.changeTable th:nth-child(7), .changeTable td:nth-child(7){width:52px!important}
+.locPickerWrap{
+  display:flex!important;
+  gap:8px!important;
+  align-items:center!important;
+  min-width:270px!important;
+  width:270px!important;
+}
+.locPickerWrap input{
+  min-width:210px!important;
+  width:210px!important;
+  height:44px!important;
+  font-size:16px!important;
+}
+.locBtn{
+  width:44px!important;
+  min-width:44px!important;
+  height:44px!important;
+  flex:0 0 44px!important;
+}
+body.location-picker-off .locPickerWrap{width:270px!important}
+body.location-picker-off .locPickerWrap input{
+  width:260px!important;
+  min-width:260px!important;
+}
+.restTypeSelect,
+.changeTable select{
+  min-width:140px!important;
+  width:140px!important;
+}
+.changeTable input,
+.changeTable select{
+  height:44px!important;
+  font-size:15px!important;
+}
+.changeTable textarea{
+  min-height:44px!important;
+  font-size:15px!important;
+}
+@media (prefers-color-scheme:dark){
+  #changeScrollHint{background:#102419;border-color:#284d35;color:#bde8ca}
+  #changeDetailsEditor{background:rgba(0,0,0,.2);border-color:#333}
+}
