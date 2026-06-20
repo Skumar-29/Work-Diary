@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 7;
-const APP_BUILD_NAME = "auto-save-registry";
+const APP_SCHEMA_VERSION = 8;
+const APP_BUILD_NAME = "usability-performance-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1111,6 +1111,8 @@ function setupSwipePainting(){
   let startSlot = null;
   let lastSlot = null;
   let startAction = "rest";
+  let originalSlots = new Map();
+  let paintedSlots = new Set();
   const THRESHOLD = 10;
 
   function beginCandidate(target, point){
@@ -1124,6 +1126,8 @@ function setupSwipePainting(){
     painting = false;
     scrollMode = false;
     changed = false;
+    originalSlots = new Map();
+    paintedSlots = new Set();
     startX = point.clientX;
     startY = point.clientY;
     startSlot = Number(cell.dataset.slot);
@@ -1135,6 +1139,46 @@ function setupSwipePainting(){
   function start(e){
     const point = e.touches ? e.touches[0] : e;
     beginCandidate(e.target, point);
+  }
+
+  function rememberOriginal(idx){
+    const arr = getDaySlots(state.selectedDate);
+    if(!originalSlots.has(idx)) originalSlots.set(idx, arr[idx]);
+  }
+
+  function updateSlotVisual(idx){
+    const val = getDaySlots(state.selectedDate)[idx];
+    document.querySelectorAll(`.slot[data-slot="${idx}"]`).forEach(cell=>{
+      const row = cell.dataset.row;
+      cell.classList.toggle("work", row === "work" && val === "work");
+      cell.classList.toggle("rest", row === "rest" && val === "rest");
+      cell.classList.toggle("empty", row !== val);
+      cell.classList.toggle("dragPreview", paintedSlots.has(idx));
+    });
+  }
+
+  function setSlotDuringPaint(idx, val){
+    const arr = getDaySlots(state.selectedDate);
+    rememberOriginal(idx);
+    if(arr[idx] !== val){
+      arr[idx] = val;
+      changed = true;
+      if(val === "work") ensureDayDetail(state.selectedDate).usePage = true;
+    }
+    paintedSlots.add(idx);
+    updateSlotVisual(idx);
+  }
+
+  function restoreSlotDuringPaint(idx){
+    if(!originalSlots.has(idx)) return;
+    const arr = getDaySlots(state.selectedDate);
+    const original = originalSlots.get(idx);
+    if(arr[idx] !== original){
+      arr[idx] = original;
+      changed = true;
+    }
+    paintedSlots.delete(idx);
+    updateSlotVisual(idx);
   }
 
   function paintSingle(slotIdx, noteText){
@@ -1151,12 +1195,15 @@ function setupSwipePainting(){
     renderAll();
   }
 
-  function paintRangeTo(slotIdx){
-    const from = Math.min(lastSlot, slotIdx);
-    const to = Math.max(lastSlot, slotIdx);
-    for(let i = from; i <= to; i++){
-      const slotEl = grid.querySelector(`.slot[data-slot="${i}"][data-row="${startAction}"]`);
-      paintSlotByElement(slotEl, startAction);
+  function paintRangeFromStartTo(slotIdx){
+    const a = Math.min(startSlot, slotIdx);
+    const b = Math.max(startSlot, slotIdx);
+    // Restore slots that were painted during this swipe but are no longer inside current range.
+    Array.from(paintedSlots).forEach(idx=>{
+      if(idx < a || idx > b) restoreSlotDuringPaint(idx);
+    });
+    for(let i = a; i <= b; i++){
+      setSlotDuringPaint(i, startAction);
     }
     lastSlot = slotIdx;
   }
@@ -1177,8 +1224,7 @@ function setupSwipePainting(){
         painting = true;
         touchCandidate = false;
         grid.classList.add("painting");
-        const startEl = grid.querySelector(`.slot[data-slot="${startSlot}"][data-row="${startAction}"]`);
-        paintSlotByElement(startEl, startAction);
+        paintRangeFromStartTo(startSlot);
         changed = true;
       } else if(absY > absX){
         scrollMode = true;
@@ -1196,8 +1242,7 @@ function setupSwipePainting(){
     const idx = Number(cell.dataset.slot);
     if(Number.isNaN(idx)) return;
     if(idx !== lastSlot){
-      paintRangeTo(idx);
-      changed = true;
+      paintRangeFromStartTo(idx);
     }
     e.preventDefault();
   }
@@ -1217,6 +1262,7 @@ function setupSwipePainting(){
       if(changed && startSlot !== null && lastSlot !== null){
         const a = Math.min(startSlot, lastSlot);
         const b = Math.max(startSlot, lastSlot);
+        if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
         addEntryRecord(state.selectedDate, a*SLOT, state.selectedDate, (b+1)*SLOT, startAction, "Horizontal swipe fill");
         save();
         renderAll();
@@ -1228,6 +1274,8 @@ function setupSwipePainting(){
     changed = false;
     startSlot = null;
     lastSlot = null;
+    originalSlots = new Map();
+    paintedSlots = new Set();
   }
 
   grid.addEventListener("touchstart", start, {passive:true});
@@ -2073,16 +2121,34 @@ function compactNHVRPlaceFromAddress(data){
   return "";
 }
 
+function compactNHVRPlaceFromBigDataCloud(data){
+  if(!data) return "";
+  const locality = data.locality || data.city || data.principalSubdivision || "";
+  const localityInfo = data.localityInfo || {};
+  const localities = Array.isArray(localityInfo.informative) ? localityInfo.informative : [];
+  const useful = localities.find(x => x && x.name && /suburb|locality|town|village|city/i.test(String(x.description || x.order || "")));
+  if(useful && useful.name) return useful.name;
+  return locality;
+}
 function reverseGeocodeNHVR(lat, lon){
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&extratags=1&namedetails=1`;
-  return fetch(url, {
-    headers: {
-      "Accept": "application/json"
-    }
-  }).then(r => {
-    if(!r.ok) throw new Error("Location lookup failed");
-    return r.json();
-  }).then(data => compactNHVRPlaceFromAddress(data));
+  const nominatim = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&extratags=1&namedetails=1`;
+  const bigData = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=en`;
+  return fetch(nominatim, {headers: {"Accept": "application/json"}})
+    .then(r => {
+      if(!r.ok) throw new Error("Primary lookup failed");
+      return r.json();
+    })
+    .then(data => compactNHVRPlaceFromAddress(data))
+    .then(place => {
+      if(place) return place;
+      throw new Error("No primary place name");
+    })
+    .catch(() => fetch(bigData, {headers: {"Accept": "application/json"}})
+      .then(r => {
+        if(!r.ok) throw new Error("Backup lookup failed");
+        return r.json();
+      })
+      .then(data => compactNHVRPlaceFromBigDataCloud(data)));
 }
 
 function getCurrentNHVRLocation(){
@@ -2102,7 +2168,7 @@ function getCurrentNHVRLocation(){
           .catch(err => reject(err));
       },
       err => {
-        let msg = "Location permission was not allowed.";
+        let msg = "Location permission was not allowed. On iPhone: Settings > Privacy & Security > Location Services > Safari Websites > While Using. Also check Safari website settings for this app.";
         if(err && err.code === 2) msg = "Current location is unavailable. Please check GPS/data and try again.";
         if(err && err.code === 3) msg = "Location request timed out. Please try again or type manually.";
         reject(new Error(msg));
@@ -2195,7 +2261,7 @@ function svgBoxedLetters(x, y, letters, active, boxW=25, boxH=24, fontSize=12){
   return letters.map((l,i)=>{
     const bx = x + i*boxW;
     const on = Array.isArray(active) ? active.includes(l) : active === l || active === i;
-    return `${svgRect(bx,y,boxW,boxH,"#fff","#111",1)}${on ? svgText(bx+boxW/2,y+17,l,fontSize,"#1439d6","700",'text-anchor="middle"') : svgText(bx+boxW/2,y+17,l,fontSize,"#111","400",'text-anchor="middle"')}`;
+    return `${svgRect(bx,y,boxW,boxH,"#fff","#111",1)}${svgText(bx+boxW/2,y+17,l,fontSize,"#111","400",'text-anchor="middle"')}${on ? svgText(bx+boxW/2-4,y+boxH-3,"X",fontSize+4,"#1439d6","700") : ""}`;
   }).join("");
 }
 
@@ -2385,7 +2451,7 @@ function buildPaperSheetHtml(){
 
     ${svgText(560,28,"NATIONAL WORK DIARY DAILY SHEET",17,"#111","700",'text-anchor="middle"')}
     ${svgText(790,39,"WORK DIARY NO.",10,"#111","700")}
-    ${svgText(925,39,workDiaryNo,18,red,"700")}
+    ${svgText(925,39,workDiaryNo,18,"#111","700")}
     ${svgText(990,39,pageNo,18,red,"700")}
 
     <rect x="28" y="50" width="1064" height="24" fill="${dark}"/>
@@ -2609,14 +2675,20 @@ function updateDayDetailFromGraphForm(){
   const calcPage = calculatedPageNumberForDate(state.selectedDate);
   detail.pageNoManual = !!(detail.pageNo && detail.pageNo !== calcPage);
   recomputeAutoPageNumbers();
-  autoSaveRegistryFromDiaryPage(state.selectedDate);
   save();
   renderAlerts();
   renderRuleCards();
   renderNextBreak();
-  renderStatistics();
-  renderGraphPreviewOnly();
 }
+
+function saveDailySheetDetails(){
+  updateDayDetailFromGraphForm();
+  autoSaveRegistryFromDiaryPage(state.selectedDate);
+  save();
+  renderAll();
+  if(typeof showToast === "function") showToast("Saved");
+}
+
 function handleChangeDetailsInput(e){
   const target = e.target;
   if(!target || !target.dataset) return;
@@ -2627,9 +2699,7 @@ function handleChangeDetailsInput(e){
   syncChangeRowsForDay(state.selectedDate);
   if(!detail.changeRows[idx]) return;
   detail.changeRows[idx][field] = target.value;
-  autoSaveRegistryFromDiaryPage(state.selectedDate);
   save();
-  renderGraphPreviewOnly();
 }
 function renderGraphSummaryOnly(){
   const segs = segmentsForDay(state.selectedDate);
@@ -3160,14 +3230,19 @@ function renderAll(){
   renderNextBreak();
   renderTodayAdvice();
   renderTimer();
-  renderGraphPage();
-  renderStatistics();
-  renderAuditList();
   renderComplianceConfidence();
   renderAuditFixPanel();
-  renderDriverSettings();
-  renderBackupReminderSettings();
-  renderAuditLog();
+  const active = document.querySelector(".screen.active");
+  const activeId = active ? active.id : "diaryScreen";
+  if(activeId === "graphScreen") renderGraphPage();
+  if(activeId === "statsScreen") renderStatistics();
+  if(activeId === "drivingScreen") renderAuditList();
+  if(activeId === "vehiclesScreen") renderVehicleDriverRegistry();
+  if(activeId === "settingsScreen"){
+    renderDriverSettings();
+    renderBackupReminderSettings();
+    renderAuditLog();
+  }
 }
 
 function loadBFMSample(){
@@ -3533,11 +3608,22 @@ function setup(){
   if($("saveSelectedPageOnly")) $("saveSelectedPageOnly").onclick=saveSelectedPageOnly;
   if($("restoreSelectedPageDefaults")) $("restoreSelectedPageDefaults").onclick=restoreSelectedPageDefaults;
   $("saveBookSettings").onclick=saveBookSettings;
+  if($("saveDailySheetDetails")) $("saveDailySheetDetails").onclick = saveDailySheetDetails;
   if($("graphDetailsForm")){
     $("graphDetailsForm").addEventListener("input", updateDayDetailFromGraphForm);
     $("graphDetailsForm").addEventListener("change", updateDayDetailFromGraphForm);
   }
-  if($("changeDetailsEditor")) $("changeDetailsEditor").addEventListener("input", handleChangeDetailsInput);
+  if($("changeDetailsEditor")){
+    $("changeDetailsEditor").addEventListener("input", handleChangeDetailsInput);
+    $("changeDetailsEditor").addEventListener("change", handleChangeDetailsInput);
+    $("changeDetailsEditor").addEventListener("click", (ev)=>{
+      const btn = ev.target && ev.target.closest ? ev.target.closest("[data-location-index]") : null;
+      if(btn){
+        ev.preventDefault();
+        setChangeRowLocationFromCurrent(Number(btn.dataset.locationIndex), btn);
+      }
+    });
+  }
   $("clearDay").onclick=clearSelectedDay;
   $("clearAll").onclick=clearAll;
   if($("clearAuditLog")) $("clearAuditLog").onclick=clearAuditLogOnly;

@@ -489,3 +489,70 @@ main{
 }
 
 .autoSavedMeta{font-size:11px;color:#777;margin-top:4px}
+
+/* Usability/performance correction update */
+.topbar{
+  position:sticky!important;
+  top:0!important;
+  z-index:1000!important;
+  -webkit-transform:translateZ(0);
+  transform:translateZ(0);
+}
+.dateNav{
+  min-width:88px!important;
+  width:88px!important;
+  justify-content:space-between!important;
+}
+#todayBtn{
+  display:none!important;
+}
+.dateNav button{
+  flex:1 1 50%!important;
+  min-width:44px!important;
+}
+.changeTable{
+  table-layout:auto;
+}
+.changeTable th:nth-child(4),
+.changeTable td:nth-child(4){
+  min-width:260px!important;
+  width:260px!important;
+}
+.locPickerWrap{
+  display:flex!important;
+  gap:8px!important;
+  align-items:center!important;
+  min-width:250px!important;
+}
+.locPickerWrap input{
+  min-width:200px!important;
+  height:44px!important;
+  font-size:16px!important;
+  padding:10px!important;
+}
+.locBtn{
+  width:44px!important;
+  min-width:44px!important;
+  height:44px!important;
+  flex:0 0 44px!important;
+}
+#graphScreen .graphWrap{
+  max-height:64vh!important;
+  overflow:auto!important;
+}
+#graphScreen #paperSheetPreview{
+  min-width:820px!important;
+  max-width:900px!important;
+}
+#graphScreen .realDiarySvg{
+  max-width:900px!important;
+}
+@media (max-width:420px){
+  #graphScreen #paperSheetPreview{
+    min-width:820px!important;
+  }
+}
+@media print{
+  #graphScreen #paperSheetPreview{min-width:0!important;max-width:none!important}
+  #graphScreen .realDiarySvg{max-width:none!important}
+}

@@ -302,3 +302,18 @@ Auto-save registry update:
 - Existing manually saved records are protected; auto-save only fills missing details and updates first/last seen dates.
 - Registry auto-save setting is included in JSON backup/import.
 - No NHVR calculation/rule logic changed.
+
+
+Usability/performance fix update:
+- Work diary number in Graph/PDF header is now black; page number remains red.
+- Day-of-week and driver-base state/territory boxes now show an X mark instead of changing selected text colour.
+- Manual location input box is wider/taller and easier to type into.
+- Current-location picker button is now wired correctly and has a backup reverse-geocode service.
+- Auto-save vehicle/driver registry no longer saves partial regos while typing. It runs after Save daily sheet details.
+- Added Save daily sheet details button.
+- Header stays fixed/sticky while scrolling.
+- Removed the calendar icon between previous and next day buttons.
+- Swipe selection now restores accidentally selected extra blocks if you reverse direction before lifting your finger.
+- Graph preview is reduced by about 20-25% in preview size on the Graph screen; export PDF remains full size.
+- Render/update work reduced to improve lag/hanging.
+- NHVR fatigue calculation engine unchanged.
