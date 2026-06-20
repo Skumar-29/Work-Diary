@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 20;
-const APP_BUILD_NAME = "diary-book-history";
+const APP_SCHEMA_VERSION = 21;
+const APP_BUILD_NAME = "book-history-display-format";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -2993,17 +2993,29 @@ function renderDiaryBookHistory(){
   ensureDiaryBooks();
   const list = $("bookHistoryList");
   if(!list) return;
-  const rows = [...state.diaryBooks].sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate))).map(b => {
-    const status = b.status === "closed" ? "Closed" : "Active";
-    const end = b.endDate ? ` to ${escapeHtml(b.endDate)}` : " onward";
-    const last = b.lastPageNumber ? ` • Last page ${escapeHtml(b.lastPageNumber)}` : "";
-    const notes = b.notes ? `<small>${escapeHtml(b.notes)}</small>` : "";
+
+  const formatDMY = (key) => {
+    if(!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return "";
+    const [y,m,d] = key.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  const books = [...state.diaryBooks].sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)));
+  const rows = books.map((b, i) => {
+    const bookTitle = b.status === "closed" ? `Book ${i+1}` : `Book ${i+1} - Active`;
+    const closedLine = b.endDate ? `<small><b>Closed:</b> ${escapeHtml(formatDMY(b.endDate))}</small>` : "";
+    const lastPageLine = b.lastPageNumber ? `<small><b>Last page:</b> ${escapeHtml(b.lastPageNumber)}</small>` : "";
+    const notes = b.notes ? `<small><b>Notes:</b> ${escapeHtml(b.notes)}</small>` : "";
     return `<div class="bookHistoryItem">
-      <strong>${escapeHtml(b.diaryNo || "No diary no")} <span class="bookStatus ${b.status === "closed" ? "closed" : ""}">${status}</span></strong>
-      <small>Starts ${escapeHtml(b.startDate)} at page ${escapeHtml(b.firstPageNumber || "not set")}${end}${last}</small>
+      <strong>${escapeHtml(bookTitle)}</strong>
+      <small><b>Starts:</b> ${escapeHtml(formatDMY(b.startDate))}</small>
+      <small><b>First page:</b> ${escapeHtml(b.firstPageNumber || "not set")}</small>
+      ${closedLine}
+      ${lastPageLine}
       ${notes}
     </div>`;
   }).join("");
+
   list.innerHTML = rows || `<p class="hint">No diary books recorded yet.</p>`;
   if($("closeBookDate")) $("closeBookDate").value = $("closeBookDate").value || state.selectedDate;
   if($("newBookStartDate")) $("newBookStartDate").value = $("newBookStartDate").value || state.selectedDate;

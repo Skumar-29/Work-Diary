@@ -431,3 +431,14 @@ Diary Book History update:
 - JSON backup/import includes diary book history.
 - Find page/date works across old and new diary books because calculated page numbers use the correct book period.
 - No NHVR fatigue calculation engine changes.
+
+
+Diary Book History display format update:
+- Changed diary book history display to the simpler format:
+  Book 1
+  Starts: DD/MM/YYYY
+  First page: 3333 54
+  Closed: DD/MM/YYYY
+  Last page: 3333 99
+- Active book displays as Book 2 - Active.
+- No page-numbering, backup/import, Find, or NHVR calculation logic changed.

@@ -1085,3 +1085,10 @@ body.location-picker-off .locPickerWrap input{
   .bookHistoryItem,.bookActionBox{background:#151515;border-color:#333}
   .bookHistoryItem small{color:#aaa}
 }
+
+.bookHistoryItem b{
+  font-weight:900;
+}
+.bookHistoryItem strong{
+  margin-bottom:5px;
+}
