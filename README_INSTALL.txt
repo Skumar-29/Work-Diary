@@ -394,3 +394,12 @@ Find modal update:
 - Page number spaces like 9912 30 remain supported.
 - This saves screen space on the Work Diary page.
 - No NHVR calculation engine changes.
+
+
+Find modal v2 fix:
+- Fixed Find popup buttons so Go to Date and Find Page jump correctly.
+- Fixed X close button and outside-tap close.
+- Moved Find button to the left side of the header.
+- Centered Work Diary title in the header.
+- Reduced Find button font weight/size so it matches the header style better.
+- No NHVR calculation engine changes.

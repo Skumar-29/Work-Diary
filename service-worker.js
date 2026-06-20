@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v52-find-modal-jump";
+const CACHE = "truck-work-diary-v53-find-modal-fix-v2";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

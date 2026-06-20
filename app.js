@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 16;
-const APP_BUILD_NAME = "find-modal-jump";
+const APP_SCHEMA_VERSION = 17;
+const APP_BUILD_NAME = "find-modal-fix-v2";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -3936,15 +3936,20 @@ function goToDiaryDate(key, message="Opened"){
   }
   state.selectedDate = key;
   applyAutoDefaultsToDay(key);
-  saveSoon();
-  renderDiaryFast();
+  if(typeof refreshCurrentPageData === "function"){
+    refreshCurrentPageData({forceDefaults:false});
+  }else{
+    saveSoon();
+    renderDiaryFast();
+  }
   const active = document.querySelector(".screen.active");
-  if(active && active.id === "graphScreen") renderGraphPage();
+  if(active && active.id === "graphScreen" && typeof renderGraphPage === "function") renderGraphPage();
   if($("jumpDateInput")) $("jumpDateInput").value = key;
   if($("jumpStatus")) $("jumpStatus").textContent = `${message}: ${fmtDateLong(key)} • Page ${pageNoForDate(key)}`;
   closeFindModal();
   if(typeof showToast === "function") showToast(message);
 }
+
 
 function openFindModal(){
   const modal = $("findModal");
@@ -3952,12 +3957,34 @@ function openFindModal(){
   if($("jumpDateInput")) $("jumpDateInput").value = state.selectedDate || toKey(new Date());
   if($("jumpStatus")) $("jumpStatus").textContent = "";
   modal.hidden = false;
+  modal.classList.add("show");
   setTimeout(()=>{ if($("jumpPageInput")) $("jumpPageInput").focus(); }, 80);
 }
 function closeFindModal(){
   const modal = $("findModal");
-  if(modal) modal.hidden = true;
+  if(!modal) return;
+  modal.classList.remove("show");
+  modal.hidden = true;
 }
+function bindFindModalControls(){
+  const openBtn = $("openFindModalBtn");
+  const closeBtn = $("closeFindModalBtn");
+  const modal = $("findModal");
+  const dateBtn = $("jumpDateBtn");
+  const pageBtn = $("jumpPageBtn");
+  const pageInput = $("jumpPageInput");
+
+  if(openBtn) openBtn.onclick = (e)=>{ e.preventDefault(); openFindModal(); };
+  if(closeBtn) closeBtn.onclick = (e)=>{ e.preventDefault(); closeFindModal(); };
+  if(modal) modal.onclick = (e)=>{ if(e.target === modal) closeFindModal(); };
+  if(dateBtn) dateBtn.onclick = (e)=>{ e.preventDefault(); jumpToDateValue(); };
+  if(pageBtn) pageBtn.onclick = (e)=>{ e.preventDefault(); jumpToPageNumberValue(); };
+  if(pageInput && !pageInput.dataset.enterBound){
+    pageInput.dataset.enterBound = "true";
+    pageInput.addEventListener("keydown", (e)=>{ if(e.key === "Enter"){ e.preventDefault(); jumpToPageNumberValue(); } });
+  }
+}
+
 
 function jumpToDateValue(){
   const key = $("jumpDateInput") ? $("jumpDateInput").value : "";
@@ -3998,6 +4025,7 @@ function jumpToPageNumberValue(){
 
 
 function setup(){
+  bindFindModalControls();
   if($("openFindModalBtn")) $("openFindModalBtn").onclick = openFindModal;
   if($("closeFindModalBtn")) $("closeFindModalBtn").onclick = closeFindModal;
   if($("findModal")) $("findModal").onclick = (e)=>{ if(e.target === $("findModal")) closeFindModal(); };

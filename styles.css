@@ -984,3 +984,63 @@ body.location-picker-off .locPickerWrap input{
     -webkit-text-fill-color:#111!important;
   }
 }
+
+/* Find modal v2 header/layout fix */
+.titleRow{
+  display:grid!important;
+  grid-template-columns:auto 1fr auto!important;
+  align-items:center!important;
+  gap:8px!important;
+  position:relative!important;
+}
+.titleRow h1,
+#screenTitle{
+  grid-column:2!important;
+  text-align:center!important;
+  justify-self:center!important;
+  margin:0!important;
+}
+.dateNav{
+  grid-column:3!important;
+  justify-self:end!important;
+  min-width:96px!important;
+  width:auto!important;
+}
+.findBtn{
+  grid-column:1!important;
+  justify-self:start!important;
+  height:34px!important;
+  min-width:auto!important;
+  padding:0 8px!important;
+  border:0!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.14)!important;
+  color:#fff!important;
+  font-size:15px!important;
+  font-weight:500!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+}
+.dateNav .findBtn{
+  display:none!important;
+}
+.modalOverlay.show{
+  display:flex!important;
+}
+.modalClose{
+  cursor:pointer;
+}
+@media (max-width:420px){
+  .titleRow{
+    grid-template-columns:auto 1fr auto!important;
+    gap:6px!important;
+  }
+  .findBtn{
+    font-size:14px!important;
+    padding:0 7px!important;
+  }
+  .titleRow h1,
+  #screenTitle{
+    font-size:19px!important;
+  }
+}
