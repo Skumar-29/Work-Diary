@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 13;
-const APP_BUILD_NAME = "graph-refresh-fix";
+const APP_SCHEMA_VERSION = 14;
+const APP_BUILD_NAME = "precise-breach-highlighting";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1613,6 +1613,51 @@ function nhvrSlotsInDateWindow(key, startAbs, endAbs){
 function nhvrFinding(severity, key, title, message, slots, suggestion, anchorAbs){
   return {severity, title, message, focus:{type:"slot", slots:slots || []}, suggestion, anchorAbs};
 }
+
+function nhvrOverLimitSlotsForDate(key, startAbs, endAbs, maxWork, counterFn){
+  const slots = [];
+  let work = 0;
+  let firstAbs = null;
+  const counter = counterFn || ((abs) => activityAtAbs(abs) === "work" ? SLOT : 0);
+  for(let t=startAbs; t<endAbs; t+=SLOT*60000){
+    const add = counter(t);
+    if(add > 0){
+      work += add;
+      if(work > maxWork){
+        const ks = absToKeySlot(t);
+        if(ks.key === key){
+          slots.push(ks.slot);
+          if(firstAbs === null) firstAbs = t;
+        }
+      }
+    }
+  }
+  return {slots, firstAbs, work};
+}
+function nhvrFirstRedTimeText(key, slots){
+  if(!slots || !slots.length) return "";
+  const s = Math.min(...slots);
+  return fmtHM(s*SLOT);
+}
+function nhvrPreciseFixSuggestion(rule, profile, key, slots, startAbs, winEnd, work){
+  const first = nhvrFirstRedTimeText(key, slots);
+  const restText = rule.rest || (rule.restCheck ? rule.restCheck.label : "a qualifying rest break");
+  if(first){
+    return `First red block starts at ${first}. That is where this helper calculation first exceeds the ${rule.label} limit. Before continuing from that block, change incorrect Work to Rest or insert/move ${restText}. Count starts from ${formatDateTimeForStats(startAbs)} and this window ends ${formatDateTimeForStats(winEnd)}.`;
+  }
+  return `This ${rule.label} window is over the helper limit, but the first over-limit block is on another page. Check the period from ${formatDateTimeForStats(startAbs)} to ${formatDateTimeForStats(winEnd)} and add/move the required rest.`;
+}
+function nhvrLongNightSlotCounter(abs){
+  if(activityAtAbs(abs) !== "work") return 0;
+  const d = new Date(abs);
+  const h = d.getHours();
+  if(h < 6) return SLOT;
+  // Extra long work above 12h in a single day is handled in detailed audit text,
+  // but red grid highlighting stays conservative and only marks midnight-6am night work.
+  return 0;
+}
+
+
 function nhvrBreachesForDate(key){
   const profile = nhvrProfileForDate(key);
   if(profile.afm) return [nhvrFinding("error", key, "AFM conditions required", "AFM is selected. Enter your operator's AFM certificate limits before using fatigue calculations.", [], "Use AFM as record-only until the exact AFM certificate conditions are entered.")];
@@ -1623,54 +1668,87 @@ function nhvrBreachesForDate(key){
   const findings = [];
   const seen = new Set();
   const addFinding = (f) => {
-    const k = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${f.message}`;
+    const k = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${f.message}|${(f.focus && f.focus.slots || []).join(",")}`;
     if(seen.has(k)) return;
     seen.add(k); findings.push(f);
   };
   const restEnds = nhvrRestBreakEnds(scanStart, dayEnd + 15*DAY_MS);
 
   // Short-rest rules: count forward from the end of every rest break for periods under 24h.
+  // Red highlights now mark only the over-limit work blocks, not the full counted period.
   profile.short.forEach(rule => {
     restEnds.forEach(e => {
       const s = e.abs, winEnd = s + rule.minutes*60000;
       if(winEnd <= dayStart || s >= dayEnd) return;
       const work = nhvrWorkBetween(s, winEnd);
       if(work > rule.maxWork){
-        const slots = nhvrSlotsInDateWindow(key, s, winEnd);
-        addFinding(nhvrFinding("error", key, `${rule.label} short-rest breach`, `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`, slots, `Count from the end of the rest break at ${formatDateTimeForStats(s)}. Add/move rest or correct Work blocks so this ${rule.label} period has ${rule.rest}.`, s));
+        const precise = nhvrOverLimitSlotsForDate(key, s, winEnd, rule.maxWork);
+        addFinding(nhvrFinding(
+          "error",
+          key,
+          `${rule.label} short-rest breach`,
+          `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
+          precise.slots,
+          nhvrPreciseFixSuggestion(rule, profile, key, precise.slots, s, winEnd, work),
+          s
+        ));
       }
     });
   });
 
-  // 24h and longer rules: count from the end of relevant major rest breaks. Do not reset earlier 24h windows when another major rest occurs inside them.
+  // 24h and longer rules: count from the end of relevant major rest breaks.
+  // For work-limit breaches, red highlights start where the limit is first exceeded.
   profile.periods.forEach(rule => {
     const anchors = nhvrAnchorEndsForPeriod(profile, scanStart, dayEnd, rule);
     anchors.forEach(e => {
       const s = e.abs, winEnd = s + rule.minutes*60000;
       if(winEnd <= dayStart || s >= dayEnd) return;
-      const slots = nhvrSlotsInDateWindow(key, s, winEnd);
+
       if(rule.maxWork !== null && rule.maxWork !== undefined){
         const work = nhvrWorkBetween(s, winEnd);
         if(work > rule.maxWork){
-          addFinding(nhvrFinding("error", key, `${rule.label} work limit breach`, `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`, slots, `This period remains active until ${formatDateTimeForStats(winEnd)}. A later major rest inside this period does not reset this ${rule.label} count. Review all Work blocks inside the highlighted period.`, s));
+          const precise = nhvrOverLimitSlotsForDate(key, s, winEnd, rule.maxWork);
+          addFinding(nhvrFinding(
+            "error",
+            key,
+            `${rule.label} work limit breach`,
+            `${profile.name}: ${formatMinsShort(work)} work in the ${rule.label} period starting ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
+            precise.slots,
+            nhvrPreciseFixSuggestion(rule, profile, key, precise.slots, s, winEnd, work) + ` A later major rest inside this already-started period does not reset this ${rule.label} count.`,
+            s
+          ));
         }
       }
+
       if(rule.restCheck){
         const got = nhvrMaxContinuousBetween(s, winEnd, nhvrPredicateForKind(rule.restCheck.kind));
         if(got < rule.restCheck.mins){
-          addFinding(nhvrFinding("error", key, `${rule.label} rest requirement missing`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`, slots, `Select correct Rest Type for qualifying rest blocks or add the required rest inside this ${rule.label} period.`, s));
+          // Do not colour the whole 24h/7d/14d window red for a missing major-rest requirement.
+          // The audit item explains the missing rest; work-limit breaches still colour exact blocks separately.
+          addFinding(nhvrFinding(
+            "error",
+            key,
+            `${rule.label} rest requirement missing`,
+            `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`,
+            [],
+            `Select the correct Rest Type for qualifying rest blocks or add the required rest inside this ${rule.label} period. This check is shown in audit instead of colouring the whole work period red.`,
+            s
+          ));
         }
       }
+
       if(rule.nightRest){
         const nights = nhvrNightRestDates(s, winEnd);
         if(nights.length < rule.nightRest.count || (rule.nightRest.consecutive && !nhvrHasConsecutiveDates(nights))){
-          addFinding(nhvrFinding("warn", key, `${rule.label} night rest check`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`, slots, `Check night rests using your base time zone. A 24h stationary rest can count as a night rest.`, s));
+          addFinding(nhvrFinding("warn", key, `${rule.label} night rest check`, `${profile.name}: ${rule.label} period from ${formatDateTimeForStats(s)} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`, [], `Check night rests using your base time zone. A 24h stationary rest can count as a night rest.`, s));
         }
       }
+
       if(rule.longNight){
         const ln = nhvrLongNightWorkBetween(s, winEnd);
         if(ln > rule.maxLongNight){
-          addFinding(nhvrFinding("warn", key, `${rule.label} long/night work limit`, `${profile.name}: ${formatMinsShort(ln)} long/night work in the ${rule.label} period from ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxLongNight)}.`, slots, `Review night work between midnight and 6am and work above 12h in a 24h period.`, s));
+          const precise = nhvrOverLimitSlotsForDate(key, s, winEnd, rule.maxLongNight, nhvrLongNightSlotCounter);
+          addFinding(nhvrFinding("warn", key, `${rule.label} long/night work limit`, `${profile.name}: ${formatMinsShort(ln)} long/night work in the ${rule.label} period from ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxLongNight)}.`, precise.slots, `Red blocks show the midnight-6am work blocks that push the helper over the long/night limit. Also review work above 12h in any 24h period.`, s));
         }
       }
     });

@@ -366,3 +366,12 @@ Graph refresh/update fix:
 - Added Re-apply current defaults button on Graph screen for when you want the selected page to use current driver/base/truck/work-option defaults.
 - Saving driver/base details, book setup, or work option now refreshes the current page immediately so base state and graph details do not stay stale until Safari refresh.
 - No NHVR calculation engine changes.
+
+
+Precise breach highlighting update:
+- Red grid highlights now mark only the work blocks where the limit is exceeded, not the whole counted work/rest window.
+- Earlier legal work blocks stay green.
+- Short-rest and 24h/longer work-limit checks still use the NHVR counting engine, but the display now identifies the first/minimum illegal blocks.
+- Missing major-rest requirements are shown in the audit/suggestion text instead of colouring the whole work period red.
+- Suggestions now identify the first red block and recommend adding/moving the required rest before continuing from that block.
+- NHVR calculation engine structure and limits were preserved; only focus/highlight selection was refined.

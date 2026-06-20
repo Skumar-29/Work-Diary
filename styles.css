@@ -881,3 +881,9 @@ body.location-picker-off .locPickerWrap input{
   flex:1;
   min-width:140px;
 }
+
+/* Precise breach highlight */
+.slot.bad{
+  background:var(--red)!important;
+  color:#fff!important;
+}
