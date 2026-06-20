@@ -351,3 +351,10 @@ Breach highlight, sticky columns and comment layout update:
 - Comments / number plate change notes now print inside the correct comments writing area on the Graph/PDF, not over the left label box.
 - Long comments are wrapped and safely shortened on the sheet preview/PDF to avoid overlap.
 - NHVR fatigue calculation engine unchanged.
+
+
+Change details table visibility fix:
+- Fixed sticky Time and Activity columns showing too dark/black and unreadable.
+- Sticky columns now stay light with readable black text in both light and dark iPhone modes.
+- Added table visibility/stability safeguards so the Work/Rest change details table does not collapse or disappear leaving only the scrollbar.
+- No NHVR calculation engine changes.

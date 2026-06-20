@@ -770,3 +770,102 @@ body.location-picker-off .locPickerWrap input{
     background:#151515!important;
   }
 }
+
+/* Change details table visibility/sticky-column fix */
+#changeDetailsEditor{
+  min-height:190px!important;
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+  background:#fff!important;
+  color:#111!important;
+  contain:layout paint;
+}
+#changeDetailsEditor table,
+#changeDetailsEditor .changeTable,
+.changeTable{
+  display:table!important;
+  visibility:visible!important;
+  opacity:1!important;
+  border-collapse:separate!important;
+  border-spacing:0 6px!important;
+  background:#fff!important;
+  color:#111!important;
+}
+.changeTable thead,
+.changeTable tbody,
+.changeTable tr{
+  visibility:visible!important;
+  opacity:1!important;
+}
+.changeTable th,
+.changeTable td{
+  background:#fff!important;
+  color:#111!important;
+  border-color:#d7d7d7!important;
+}
+.changeTable th:nth-child(1),
+.changeTable td:nth-child(1),
+.changeTable th:nth-child(2),
+.changeTable td:nth-child(2){
+  position:sticky!important;
+  background:#f7f7f7!important;
+  color:#111!important;
+  z-index:20!important;
+  opacity:1!important;
+  visibility:visible!important;
+  box-shadow:2px 0 4px rgba(0,0,0,.12)!important;
+}
+.changeTable th:nth-child(1),
+.changeTable td:nth-child(1){
+  left:0!important;
+}
+.changeTable th:nth-child(2),
+.changeTable td:nth-child(2){
+  left:78px!important;
+}
+.changeTable thead th:nth-child(1),
+.changeTable thead th:nth-child(2){
+  background:#ececec!important;
+  color:#111!important;
+  z-index:30!important;
+}
+.changeTable td:nth-child(1),
+.changeTable td:nth-child(2){
+  font-weight:800!important;
+}
+.changeTable input,
+.changeTable select,
+.changeTable textarea{
+  background:#fff!important;
+  color:#111!important;
+  -webkit-text-fill-color:#111!important;
+}
+@media (prefers-color-scheme:dark){
+  #changeDetailsEditor{
+    background:#fff!important;
+    color:#111!important;
+  }
+  .changeTable,
+  .changeTable th,
+  .changeTable td,
+  .changeTable th:nth-child(1),
+  .changeTable td:nth-child(1),
+  .changeTable th:nth-child(2),
+  .changeTable td:nth-child(2){
+    background:#fff!important;
+    color:#111!important;
+  }
+  .changeTable thead th:nth-child(1),
+  .changeTable thead th:nth-child(2){
+    background:#ececec!important;
+    color:#111!important;
+  }
+  .changeTable input,
+  .changeTable select,
+  .changeTable textarea{
+    background:#fff!important;
+    color:#111!important;
+    -webkit-text-fill-color:#111!important;
+  }
+}

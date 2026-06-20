@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 11;
-const APP_BUILD_NAME = "breach-sticky-comments-fix";
+const APP_SCHEMA_VERSION = 12;
+const APP_BUILD_NAME = "change-table-visibility-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -2240,7 +2240,19 @@ function setChangeRowLocationFromCurrent(index, btn){
 }
 
 
+
+function ensureChangeDetailsVisible(){
+  const editor = $("changeDetailsEditor");
+  if(editor){
+    editor.hidden = false;
+    editor.style.display = "block";
+    editor.style.visibility = "visible";
+    editor.style.opacity = "1";
+  }
+}
+
 function renderChangeDetailsEditor(){
+  ensureChangeDetailsVisible();
   const holder = $("changeDetailsEditor");
   if(!holder) return;
   const rows = syncChangeRowsForDay(state.selectedDate);
@@ -2755,6 +2767,7 @@ function handleChangeDetailsInput(e){
   if(!detail.changeRows[idx]) return;
   detail.changeRows[idx][field] = target.value;
   saveSoon();
+  ensureChangeDetailsVisible();
 }
 function renderGraphSummaryOnly(){
   const segs = segmentsForDay(state.selectedDate);
