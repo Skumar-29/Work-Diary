@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 24;
-const APP_BUILD_NAME = "header-tight-alignment-fix";
+const APP_SCHEMA_VERSION = 25;
+const APP_BUILD_NAME = "no-details-refresh-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -423,6 +423,7 @@ function defaultDayDetail(){
     pageStatus: "active",
     pageStatusReason: "",
     usePage: false,
+    usePageManual: false,
     numberPlate: "",
     dailyCheckTime: "",
     comments: "",
@@ -553,6 +554,8 @@ function normalizeDayDetailForMigration(d){
   out.changeRows = out.changeRows.map(r => ({
     time: r.time || "",
     activity: r.activity || "rest",
+    noDetails: !!r.noDetails,
+    autoNoDetails: !!r.autoNoDetails,
     odometer: String(r.odometer || "").replace(/\D+/g, ""),
     location: r.location || "",
     note: r.note || "",
@@ -1223,7 +1226,7 @@ function paintSlotByElement(el, forcedAction=null){
   const arr = getDaySlots(state.selectedDate);
   if(arr[idx] !== val){
     arr[idx] = val;
-    if(val === "work") ensureDayDetail(state.selectedDate).usePage = true;
+    if(val === "work"){ const d = ensureDayDetail(state.selectedDate); d.usePage = true; if(d.usePageManual === undefined) d.usePageManual = false; }
     cell.classList.add("dragPreview");
     return true;
   }
@@ -1293,7 +1296,7 @@ function setupSwipePainting(){
     if(arr[idx] !== val){
       arr[idx] = val;
       changed = true;
-      if(val === "work") ensureDayDetail(state.selectedDate).usePage = true;
+      if(val === "work"){ const d = ensureDayDetail(state.selectedDate); d.usePage = true; if(d.usePageManual === undefined) d.usePageManual = false; }
     }
     paintedSlots.add(idx);
     updateSlotVisual(idx);
@@ -2081,22 +2084,23 @@ function auditDate(key){
 
   // Work/rest change rows: locations are important for matching paper diary.
   const changes = syncChangeRowsForDay(key);
-  const missingLocation = changes.filter(r => !r.location && !r.note);
+  const detailRowsRequired = changes.filter(r => !rowDetailsNotRequired(r));
+  const missingLocation = detailRowsRequired.filter(r => !r.location && !r.note);
   if(changes.length > 1 && missingLocation.length){
     const locKey = missingLocation.map(r => r.time).join(",");
     if(!isAuditDismissed("missing_location", key, locKey)){
       const beforeLen = errors.length;
-      add("warn","Missing work/rest change locations",`${missingLocation.length} change row(s) have no location/note.`,{type:"section", section:"changeDetailsEditor"},"Add the town/suburb/rest area or a note for each work/rest change so the PDF matches your paper diary.");
+      add("warn","Missing work/rest change locations",`${missingLocation.length} required-detail row(s) have no location/note.`,{type:"section", section:"changeDetailsEditor"},"Add the town/suburb/rest area or a note, or tick N/D only if odometer/location are genuinely not required for that row.");
       errors[beforeLen].optionalDismiss = {kind:"missing_location", date:key, extra:locKey, label:"Missing work/rest change locations"};
     }
   }
 
-  const missingOdometer = changes.filter(r => !r.odometer);
+  const missingOdometer = detailRowsRequired.filter(r => !r.odometer);
   if(changes.length > 1 && missingOdometer.length){
     const odoKey = missingOdometer.map(r => r.time).join(",");
     if(!isAuditDismissed("missing_odometer", key, odoKey)){
       const beforeLen = errors.length;
-      add("warn","Missing odometer readings",`${missingOdometer.length} change row(s) have no odometer reading.`,{type:"section", section:"changeDetailsEditor"},"Enter odometer readings if you want the app/PDF to match your paper diary exactly. If your paper page does not require it for this situation, mark this optional item Not required.");
+      add("warn","Missing odometer readings",`${missingOdometer.length} required-detail row(s) have no odometer reading.`,{type:"section", section:"changeDetailsEditor"},"Enter odometer readings, or tick N/D only if odometer/location are genuinely not required for that row.");
       errors[beforeLen].optionalDismiss = {kind:"missing_odometer", date:key, extra:odoKey, label:"Missing odometer readings"};
     }
   }
@@ -2348,6 +2352,28 @@ function formatDisplayDateShort(key){
   const d = fromKey(key);
   return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
 }
+
+function compactChangeActivityLabel(a){
+  return a === "work" ? "Work" : "Rest";
+}
+function previousDateKey(key){
+  return addDays(key, -1);
+}
+function isMidnightContinuationSegment(key, seg){
+  if(!seg || seg.startMins !== 0) return false;
+  const prevKey = previousDateKey(key);
+  const prevLast = getSlot(prevKey, SLOTS_PER_DAY - 1);
+  const curFirst = getSlot(key, 0);
+  return prevLast === curFirst && curFirst === seg.activity;
+}
+function rowDetailsNotRequired(row){
+  return !!(row && (row.noDetails || row.autoNoDetails));
+}
+function rowDetailsLockLabel(row){
+  if(row && row.autoNoDetails) return "Auto continuation";
+  return "N/D";
+}
+
 function syncChangeRowsForDay(key){
   const detail = ensureDayDetail(key);
   const existing = Array.isArray(detail.changeRows) ? detail.changeRows : [];
@@ -2357,11 +2383,15 @@ function syncChangeRowsForDay(key){
   detail.changeRows = segs.map(seg => {
     const time = fmtHM(seg.startMins);
     const prev = keep[`${time}|${seg.activity}`] || {};
+    const autoNoDetails = isMidnightContinuationSegment(key, seg);
+    const noDetails = autoNoDetails || !!prev.noDetails;
     return {
       time,
       activity: seg.activity,
-      odometer: prev.odometer || "",
-      location: prev.location || "",
+      noDetails,
+      autoNoDetails,
+      odometer: noDetails ? "" : (prev.odometer || ""),
+      location: noDetails ? "" : (prev.location || ""),
       note: prev.note || "",
       restType: prev.restType || (seg.activity === "rest" ? "" : "work")
     };
@@ -2460,6 +2490,10 @@ function getCurrentNHVRLocation(){
 function setChangeRowLocationFromCurrent(index, btn){
   const detail = ensureDayDetail(state.selectedDate);
   if(!detail.changeRows || !detail.changeRows[index]) return;
+  if(rowDetailsNotRequired(detail.changeRows[index])){
+    if(typeof showToast === "function") showToast("Details not required");
+    return;
+  }
   const oldText = btn ? btn.textContent : "";
   if(btn){
     btn.disabled = true;
@@ -2505,20 +2539,27 @@ function renderChangeDetailsEditor(){
     holder.innerHTML = "<p class=\"hint\">No work/rest changes yet.</p>";
     return;
   }
-  const htmlRows = rows.map((r, i) => `
-    <tr>
-      <td class="readonlyCell">${escapeHtml(r.time)}</td>
-      <td class="readonlyCell">${escapeHtml(activityLabel(r.activity))}</td>
-      <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${escapeHtml(r.odometer)}" placeholder="Odometer"></td>
+  const htmlRows = rows.map((r, i) => {
+    const locked = rowDetailsNotRequired(r);
+    const disabled = locked ? "disabled" : "";
+    const lockTitle = r.autoNoDetails ? "Continuous activity from previous day — odometer/location not required for this split row" : "Tick if odometer/location are not required for this row";
+    return `
+    <tr class="${locked ? "detailsLockedRow" : ""}">
+      <td class="ndCell" title="${escapeHtml(lockTitle)}">
+        <input type="checkbox" class="ndCheck" data-change-index="${i}" data-change-field="noDetails" ${r.noDetails ? "checked" : ""} ${r.autoNoDetails ? "disabled" : ""}>
+      </td>
+      <td class="readonlyCell timeCell">${escapeHtml(r.time)}</td>
+      <td class="readonlyCell activityCell">${escapeHtml(compactChangeActivityLabel(r.activity))}</td>
+      <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${locked ? "" : escapeHtml(r.odometer)}" placeholder="${locked ? "N/D" : "Odometer"}" ${disabled}></td>
       <td>
         <div class="locPickerWrap">
-          <input data-change-index="${i}" data-change-field="location" value="${escapeHtml(r.location)}" placeholder="Suburb/town/rest area">
-          <button type="button" class="locBtn" data-location-index="${i}" title="Use current location">📍</button>
+          <input data-change-index="${i}" data-change-field="location" value="${locked ? "" : escapeHtml(r.location)}" placeholder="${locked ? "N/D" : "Suburb/town/rest area"}" ${disabled}>
+          <button type="button" class="locBtn" data-location-index="${i}" title="Use current location" ${disabled}>📍</button>
         </div>
       </td>
       <td>
         ${r.activity === "rest" ? `
-          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType" class="restTypeSelect">
+          <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
             <option value="" ${!r.restType ? "selected" : ""}>Select rest type</option>
             <option value="rest" ${r.restType==="rest" ? "selected" : ""}>Rest</option>
             <option value="stationary" ${r.restType==="stationary" ? "selected" : ""}>Stationary rest</option>
@@ -2527,13 +2568,15 @@ function renderChangeDetailsEditor(){
             <option value="24h" ${r.restType==="24h" ? "selected" : ""}>24h rest</option>
           </select>` : `<span class="readonlyCell">Work</span>`}
       </td>
-      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note)}" placeholder="Optional"></td>
-    </tr>`).join("");
+      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note)}" placeholder="${locked ? "Reason optional" : "Optional"}"></td>
+    </tr>`;
+  }).join("");
   holder.innerHTML = `
     <table class="changeTable">
-      <thead><tr><th>Time</th><th>Activity</th><th>Odometer</th><th>Location</th><th>Rest type</th><th>Note</th></tr></thead>
+      <thead><tr><th>N/D</th><th>Time</th><th>Activity</th><th>Odometer</th><th>Location</th><th>Rest type</th><th>Note</th></tr></thead>
       <tbody>${htmlRows}</tbody>
     </table>`;
+  ensureChangeDetailsVisible();
 }
 
 function svgText(x, y, text, size=12, fill="#111", weight="400", extra=""){
@@ -2727,6 +2770,7 @@ function buildPaperSheetHtml(){
 
   const changeText = [];
   changeRows.slice(0,22).forEach(r => {
+    if(rowDetailsNotRequired(r)) return;
     const mins = timeToMins(r.time);
     const x = gridX + (mins/15)*slotW + 9;
     if(r.odometer){
@@ -2973,13 +3017,19 @@ function renderGraphForm(){
   setVal("sheetTwoUpScheme", detail.twoUpScheme || "BFM");
   setVal("sheetTwoUpBaseState", detail.twoUpBaseState);
 }
-function updateDayDetailFromGraphForm(){
+function updateDayDetailFromGraphForm(e){
   const detail = ensureDayDetail(state.selectedDate);
   const oldPageStatus = detail.pageStatus || "active";
+  const oldUsePage = !!detail.usePage;
   document.querySelectorAll("[data-day-detail]").forEach(el => {
     const key = el.dataset.dayDetail;
     detail[key] = el.type === "checkbox" ? !!el.checked : el.value;
   });
+  if(e && e.target && e.target.id === "sheetUsePage"){
+    detail.usePageManual = true;
+  }else if(detail.usePage !== oldUsePage && $("sheetUsePage") && document.activeElement === $("sheetUsePage")){
+    detail.usePageManual = true;
+  }
   detail.numberPlate = (detail.numberPlate || "").toUpperCase();
   detail.twoUpLicenceNumber = (detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
   detail.pageNo = cleanPageNumberInput(detail.pageNo);
@@ -2992,14 +3042,19 @@ function updateDayDetailFromGraphForm(){
   recomputeAutoPageNumbers();
   saveSoon();
   renderDiaryFast();
+  const active = document.querySelector(".screen.active");
+  if(active && active.id === "drivingScreen") renderAuditList();
 }
 
 function saveDailySheetDetails(){
   updateDayDetailFromGraphForm();
   autoSaveRegistryFromDiaryPage(state.selectedDate);
+  rebuildDerivedDiaryData();
   flushSaveSoon();
   save();
   renderDiaryFast();
+  const active = document.querySelector(".screen.active");
+  if(active && active.id === "drivingScreen") renderAuditList();
   if(typeof showToast === "function") showToast("Saved");
 }
 
@@ -3012,7 +3067,24 @@ function handleChangeDetailsInput(e){
   const detail = ensureDayDetail(state.selectedDate);
   if(!Array.isArray(detail.changeRows)) detail.changeRows = [];
   if(!detail.changeRows[idx]) return;
-  detail.changeRows[idx][field] = target.value;
+
+  if(field === "noDetails"){
+    detail.changeRows[idx].noDetails = !!target.checked;
+    if(detail.changeRows[idx].noDetails){
+      detail.changeRows[idx].odometer = "";
+      detail.changeRows[idx].location = "";
+    }
+    saveSoon();
+    renderChangeDetailsEditor();
+    return;
+  }
+
+  if(rowDetailsNotRequired(detail.changeRows[idx]) && (field === "odometer" || field === "location")){
+    target.value = "";
+    return;
+  }
+
+  detail.changeRows[idx][field] = target.type === "checkbox" ? !!target.checked : target.value;
   saveSoon();
   ensureChangeDetailsVisible();
 }
@@ -3225,9 +3297,34 @@ function calculatedPageNumberForDate(key){
   return formatPageNumberLikeTemplate(String(first + index), book.firstPageNumber || state.bookSettings.firstPageNumber);
 }
 
+
+function repairStaleAutoPageState(){
+  const dates = allKnownDiaryDates();
+  dates.forEach(k => {
+    const d = ensureDayDetail(k);
+    const status = d.pageStatus || "active";
+    const hasWork = dayHasAnyWork(k);
+    if(status === "active" && !hasWork && !d.usePageManual && !d.pageNoManual){
+      d.usePage = false;
+      d.pageNo = "";
+    }
+  });
+}
+function rebuildDerivedDiaryData(){
+  if(typeof flushSaveSoon === "function") flushSaveSoon();
+  allKnownDiaryDates().forEach(k => {
+    applyAutoDefaultsToDay(k);
+    syncChangeRowsForDay(k);
+  });
+  repairStaleAutoPageState();
+  recomputeAutoPageNumbers();
+  allKnownDiaryDates().forEach(k => syncChangeRowsForDay(k));
+}
+
 function recomputeAutoPageNumbers(){
   ensureBookSettings();
   if(!state.bookSettings.autoPageNumber) return;
+  if(typeof repairStaleAutoPageState === "function") repairStaleAutoPageState();
   const dates = new Set();
   Object.keys(state.dayDetails || {}).forEach(d => dates.add(d));
   Object.keys(state.slots || {}).forEach(d => dates.add(d));
@@ -3448,7 +3545,8 @@ function refreshCurrentPageData(opts={}){
 
   applyAutoDefaultsToDay(key);
   if(typeof syncChangeRowsForDay === "function") syncChangeRowsForDay(key);
-  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
+  if(typeof rebuildDerivedDiaryData === "function") rebuildDerivedDiaryData();
+  else if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
   applyAutoDefaultsToDay(key);
   save();
 
@@ -3845,6 +3943,10 @@ function clearSelectedDay(){
     state.slots[state.selectedDate]=Array(SLOTS_PER_DAY).fill("rest");
     const detail = ensureDayDetail(state.selectedDate);
     detail.changeRows = [];
+    detail.usePage = false;
+    detail.usePageManual = false;
+    if(!detail.pageNoManual) detail.pageNo = "";
+    rebuildDerivedDiaryData();
     save(); renderAll();
   }
 }
@@ -4330,7 +4432,8 @@ function jumpToPageNumberValue(){
 
 function quickRefreshCurrentScreen(){
   try{
-    if(typeof refreshCurrentPageData === "function") refreshCurrentPageData({forceDefaults:false});
+    rebuildDerivedDiaryData();
+    save();
     const active = document.querySelector(".screen.active");
     const activeId = active ? active.id : "diaryScreen";
     renderDate();

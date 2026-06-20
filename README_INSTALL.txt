@@ -468,3 +468,15 @@ Header tight alignment fix:
 - Moved the 🔄 refresh button directly beside Find with almost no gap.
 - Removed the extra title shift so the screen title is closer to center.
 - UI-only change; no data, page numbering, or NHVR calculation logic changed.
+
+
+No details + refresh/recalculation fix:
+- Added compact N/D column before Time in Work/Rest change details.
+- N/D, Time and Activity columns are frozen while scrolling left/right.
+- N/D is automatically ticked for midnight continuation rows where the activity continues from the previous day.
+- Manual N/D can be ticked for rows where odometer/location are not required.
+- When N/D is ticked, odometer/location fields and the location picker are disabled for that row.
+- Missing odometer/location audit warnings ignore N/D rows only; fatigue checks and rest-type calculations are unchanged.
+- Activity wording in the change table now uses Work instead of Work / Driving to save space.
+- Added derived-data rebuild/repair to clear stale auto page numbers after blocks are removed and refresh audit/table/page data more reliably.
+- NHVR fatigue calculation limits/formulas were not changed.

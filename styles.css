@@ -1288,3 +1288,96 @@ body.location-picker-off .locPickerWrap input{
     min-width:41px!important;
   }
 }
+
+/* N/D details-not-required column + stable refresh table layout */
+#changeDetailsEditor table,
+#changeDetailsEditor .changeTable,
+.changeTable{
+  min-width:980px!important;
+  width:980px!important;
+  table-layout:fixed!important;
+}
+.changeTable th:nth-child(1), .changeTable td:nth-child(1){width:44px!important;min-width:44px!important}
+.changeTable th:nth-child(2), .changeTable td:nth-child(2){width:64px!important;min-width:64px!important}
+.changeTable th:nth-child(3), .changeTable td:nth-child(3){width:70px!important;min-width:70px!important}
+.changeTable th:nth-child(4), .changeTable td:nth-child(4){width:112px!important;min-width:112px!important}
+.changeTable th:nth-child(5), .changeTable td:nth-child(5){width:285px!important;min-width:285px!important}
+.changeTable th:nth-child(6), .changeTable td:nth-child(6){width:155px!important;min-width:155px!important}
+.changeTable th:nth-child(7), .changeTable td:nth-child(7){width:210px!important;min-width:210px!important}
+.changeTable th:nth-child(1),
+.changeTable td:nth-child(1){
+  position:sticky!important;
+  left:0!important;
+  z-index:28!important;
+  background:#f7f7f7!important;
+  color:#111!important;
+  box-shadow:2px 0 3px rgba(0,0,0,.08)!important;
+}
+.changeTable th:nth-child(2),
+.changeTable td:nth-child(2){
+  position:sticky!important;
+  left:44px!important;
+  z-index:27!important;
+  background:#f7f7f7!important;
+  color:#111!important;
+  box-shadow:2px 0 3px rgba(0,0,0,.08)!important;
+}
+.changeTable th:nth-child(3),
+.changeTable td:nth-child(3){
+  position:sticky!important;
+  left:108px!important;
+  z-index:26!important;
+  background:#f7f7f7!important;
+  color:#111!important;
+  box-shadow:2px 0 3px rgba(0,0,0,.08)!important;
+}
+.changeTable thead th:nth-child(1),
+.changeTable thead th:nth-child(2),
+.changeTable thead th:nth-child(3){
+  z-index:35!important;
+  background:#ececec!important;
+}
+.ndCell{
+  text-align:center!important;
+  padding:4px!important;
+}
+.ndCheck{
+  width:19px!important;
+  height:19px!important;
+  accent-color:#1f6f43;
+}
+.activityCell,.timeCell{
+  font-weight:900!important;
+  font-size:13px!important;
+}
+.detailsLockedRow input[disabled],
+.detailsLockedRow button[disabled]{
+  opacity:.55!important;
+  background:#f0f0f0!important;
+  color:#777!important;
+  -webkit-text-fill-color:#777!important;
+}
+.detailsLockedRow .locBtn{
+  display:none!important;
+}
+.detailsLockedRow .locPickerWrap input{
+  width:260px!important;
+  min-width:260px!important;
+}
+@media (prefers-color-scheme:dark){
+  .changeTable th:nth-child(1),
+  .changeTable td:nth-child(1),
+  .changeTable th:nth-child(2),
+  .changeTable td:nth-child(2),
+  .changeTable th:nth-child(3),
+  .changeTable td:nth-child(3){
+    background:#fff!important;
+    color:#111!important;
+  }
+  .changeTable thead th:nth-child(1),
+  .changeTable thead th:nth-child(2),
+  .changeTable thead th:nth-child(3){
+    background:#ececec!important;
+    color:#111!important;
+  }
+}
