@@ -1487,3 +1487,18 @@ body.location-picker-off .locPickerWrap input{
 .changeTable th{
   display:table-cell!important;
 }
+
+/* Smart major rest settings */
+.smartMajorRestBox{
+  margin:14px 0;
+  padding:12px;
+  border:1px solid #d7e8df;
+  border-radius:16px;
+  background:#f7fcf9;
+}
+@media (prefers-color-scheme:dark){
+  .smartMajorRestBox{
+    background:#0e1b12;
+    border-color:#244c31;
+  }
+}

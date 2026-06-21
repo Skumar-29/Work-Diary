@@ -487,6 +487,24 @@
           <button id="saveShortBreakSettings" class="secondary full" type="button">Save short break settings</button>
         </div>
 
+
+        <div class="smartMajorRestBox">
+          <h3>Smart major rest classification</h3>
+          <p class="smartTip">Automatically classifies long rest breaks so major-rest, night-rest, 84h checkpoint, and 24h reset calculations are less likely to be wrong if you forget to select rest type manually.</p>
+          <label class="checkLabel">
+            <input id="smartMajorRestEnabled" type="checkbox" checked>
+            Auto-classify long continuous rest breaks
+          </label>
+          <label class="checkLabel">
+            <input id="smartMajorRestTwoUpNotice" type="checkbox" checked>
+            Show skippable reminder when two-up 7h+ rest is counted as Sleeper berth
+          </label>
+          <p class="hint">
+            Less than 7h = Rest. Solo 7h+ = Stationary/Night if it qualifies. Two-up 7h+ = Sleeper berth reminder. 24h+ = 24h rest unless you manually choose another rest type.
+          </p>
+          <button id="saveSmartMajorRestSettings" class="secondary full" type="button">Save smart major rest settings</button>
+        </div>
+
 <div class="calculationHistoryBox">
           <h3>Calculation history</h3>
           <p class="smartTip">Use this to avoid false long-period warnings when the app does not contain older work diary history.</p>

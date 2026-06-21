@@ -601,3 +601,15 @@ BFM solo 84h checkpoint fix:
 - It also allows restart after a full 24h continuous no-work/stationary rest, e.g. Sunday evening after stopping Saturday evening.
 - The check is BFM solo only and does not change Standard, BFM two-up, graph layout, N/D logic, table logic, page numbering, vehicle records, diary history, settings, or other fatigue rules.
 - Added self-test helper: nhvrBfm84CheckpointSelfTest()
+
+
+Smart major rest classification:
+- Added Settings > Smart major rest classification.
+- Less than 7h continuous rest stays normal Rest.
+- Solo 7h+ continuous rest auto-counts as Stationary rest, or Night rest if it qualifies in the 10pm-8am window.
+- Two-up 7h+ continuous rest auto-counts as Sleeper berth rest and shows a skippable Driving screen reminder.
+- 24h+ continuous rest auto-counts as 24h rest unless manually overridden.
+- Manual rest type choices still override auto choices.
+- Sleeper berth rest no longer counts as stationary rest; Stationary/Night/24h are stationary.
+- This focused update keeps the BFM long/night and 84h checkpoint fixes unchanged.
+- Added self-test helper: smartMajorRestSelfTest()

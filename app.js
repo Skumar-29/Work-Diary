@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 37;
-const APP_BUILD_NAME = "bfm-84h-checkpoint-fix";
+const APP_SCHEMA_VERSION = 38;
+const APP_BUILD_NAME = "smart-major-rest-classification";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -3413,6 +3413,10 @@ function handleChangeDetailsInput(e){
   }
 
   detail.changeRows[idx][field] = target.type === "checkbox" ? !!target.checked : target.value;
+  if(field === "restType"){
+    detail.changeRows[idx].autoRestType = false;
+    detail.changeRows[idx].autoRestReason = "";
+  }
   saveSoon();
   ensureChangeDetailsVisible();
 }
@@ -6637,6 +6641,277 @@ function nhvrBfm84CheckpointSelfTest(){
     setRanges(start, [[0,40]]);
     findings = nhvrBreachesForDate(start);
     add("Standard solo is not touched by BFM 84h checkpoint helper", !findings.some(f => f.title === "BFM 84h checkpoint reached"), findings.map(f=>f.title));
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   SMART MAJOR REST CLASSIFICATION
+   Scope: rest type classification only.
+   ========================================================= */
+
+function ensureSmartMajorRestSettings(){
+  if(!state.smartMajorRestSettings || typeof state.smartMajorRestSettings !== "object"){
+    state.smartMajorRestSettings = {enabled:true, twoUpNotice:true};
+  }
+  if(state.smartMajorRestSettings.enabled === undefined) state.smartMajorRestSettings.enabled = true;
+  if(state.smartMajorRestSettings.twoUpNotice === undefined) state.smartMajorRestSettings.twoUpNotice = true;
+}
+function renderSmartMajorRestSettings(){
+  ensureSmartMajorRestSettings();
+  if($("smartMajorRestEnabled")) $("smartMajorRestEnabled").checked = !!state.smartMajorRestSettings.enabled;
+  if($("smartMajorRestTwoUpNotice")) $("smartMajorRestTwoUpNotice").checked = !!state.smartMajorRestSettings.twoUpNotice;
+}
+function saveSmartMajorRestSettings(){
+  ensureSmartMajorRestSettings();
+  if($("smartMajorRestEnabled")) state.smartMajorRestSettings.enabled = !!$("smartMajorRestEnabled").checked;
+  if($("smartMajorRestTwoUpNotice")) state.smartMajorRestSettings.twoUpNotice = !!$("smartMajorRestTwoUpNotice").checked;
+  addAuditLog("Smart major rest settings changed", state.smartMajorRestSettings.enabled ? "Enabled" : "Disabled");
+  rebuildDerivedDiaryData();
+  save();
+  renderAll();
+  if(typeof showToast === "function") showToast("Saved");
+}
+function smartMajorRestSlotStartAbs(key, slot){
+  return fromKey(key).getTime() + Number(slot || 0) * SLOT * 60000;
+}
+function smartMajorRestHasData(key, currentKey){
+  return key === currentKey || hasExplicitDiaryDataForDate(key);
+}
+function smartMajorRestScanStart(abs, currentKey){
+  let t = abs;
+  while(true){
+    const prev = t - SLOT*60000;
+    const ks = absToKeySlot(prev);
+    if(!smartMajorRestHasData(ks.key, currentKey)) break;
+    if(getSlot(ks.key, ks.slot) !== "rest") break;
+    t = prev;
+  }
+  return t;
+}
+function smartMajorRestScanEnd(abs, currentKey){
+  let t = abs;
+  while(true){
+    const ks = absToKeySlot(t);
+    if(!smartMajorRestHasData(ks.key, currentKey)) break;
+    if(getSlot(ks.key, ks.slot) !== "rest") break;
+    t += SLOT*60000;
+  }
+  return t;
+}
+function smartMajorRestPeriodForSlot(key, idx){
+  if(getSlot(key, idx) !== "rest") return null;
+  const abs = smartMajorRestSlotStartAbs(key, idx);
+  const startAbs = smartMajorRestScanStart(abs, key);
+  const endAbs = smartMajorRestScanEnd(abs, key);
+  return {startAbs, endAbs, minutes:Math.max(0, Math.round((endAbs-startAbs)/60000))};
+}
+function smartMajorRestNightMinutes(startAbs, endAbs){
+  let best = 0;
+  const firstDay = toKey(new Date(startAbs - DAY_MS));
+  for(let d = firstDay, guard=0; guard<40; d=addDays(d,1), guard++){
+    const dayStart = fromKey(d).getTime();
+    if(dayStart > endAbs + DAY_MS) break;
+    const ns = dayStart + 22*60*60000;
+    const ne = fromKey(addDays(d,1)).getTime() + 8*60*60000;
+    const s = Math.max(startAbs, ns);
+    const e = Math.min(endAbs, ne);
+    if(e > s) best = Math.max(best, Math.round((e-s)/60000));
+  }
+  return best;
+}
+function smartMajorRestQualifiesNight(period){
+  if(!period || period.minutes < 420) return false;
+  if(period.minutes >= 1440) return true;
+  return smartMajorRestNightMinutes(period.startAbs, period.endAbs) >= 420;
+}
+function smartMajorRestIsManualMajorType(t){
+  return ["stationary","sleeper","night","24h"].includes(String(t || ""));
+}
+function smartMajorRestTypeForSlot(key, idx){
+  ensureSmartMajorRestSettings();
+  if(!state.smartMajorRestSettings.enabled) return "";
+  if(getSlot(key, idx) !== "rest") return "";
+  const period = smartMajorRestPeriodForSlot(key, idx);
+  if(!period || period.minutes < 420) return "rest";
+  if(period.minutes >= 1440) return "24h";
+  if(modeForDate(key) === "twoUp") return "sleeper";
+  if(smartMajorRestQualifiesNight(period)) return "night";
+  return "stationary";
+}
+function smartMajorRestApplyToRows(key, rows){
+  ensureSmartMajorRestSettings();
+  if(!state.smartMajorRestSettings.enabled || !Array.isArray(rows)) return rows;
+  rows.forEach(r => {
+    if(!r || r.activity !== "rest") return;
+    const slot = Math.max(0, Math.min(SLOTS_PER_DAY-1, Math.floor(timeToMins(r.time || "00:00") / SLOT)));
+    const current = String(r.restType || "");
+    if(smartMajorRestIsManualMajorType(current) && !r.autoRestType) return;
+    const autoType = smartMajorRestTypeForSlot(key, slot);
+    if(autoType && autoType !== "rest"){
+      r.restType = autoType;
+      r.autoRestType = true;
+      r.autoRestReason = autoType === "24h" ? "24h+ continuous rest" :
+        autoType === "night" ? "7h+ stationary rest in night period" :
+        autoType === "sleeper" ? "Two-up 7h+ continuous rest" :
+        "7h+ continuous rest";
+    }else if(r.autoRestType){
+      r.restType = "rest";
+      r.autoRestType = true;
+      r.autoRestReason = "Less than 7h continuous rest";
+    }
+  });
+  return rows;
+}
+
+(function(){
+  const coreSyncChangeRowsForDayForSmartMajorRest = syncChangeRowsForDay;
+  syncChangeRowsForDay = function(key){
+    const rows = coreSyncChangeRowsForDayForSmartMajorRest(key) || [];
+    return smartMajorRestApplyToRows(key, rows);
+  };
+
+  const coreRestTypeForSlotForSmartMajorRest = restTypeForSlot;
+  restTypeForSlot = function(key, idx, seen=new Set()){
+    if(getSlot(key, idx) !== "rest") return "";
+    const manual = coreRestTypeForSlotForSmartMajorRest(key, idx, seen);
+    if(smartMajorRestIsManualMajorType(manual)) return manual;
+    const autoType = smartMajorRestTypeForSlot(key, idx);
+    return autoType || manual || "";
+  };
+
+  isStationary = function(key, idx){
+    const t = getSlot(key, idx);
+    if(t !== "rest") return false;
+    const rt = restTypeForSlot(key, idx);
+    if(rt) return ["stationary","night","24h"].includes(rt);
+    return !!state.restAsStationary;
+  };
+
+  const coreAuditDateForSmartMajorRest = auditDate;
+  auditDate = function(key){
+    const errors = coreAuditDateForSmartMajorRest(key) || [];
+    smartMajorRestAuditForDate(key).forEach(e => errors.push(e));
+    return errors;
+  };
+
+  const coreRenderDriverSettingsForSmartMajorRest = renderDriverSettings;
+  renderDriverSettings = function(){
+    coreRenderDriverSettingsForSmartMajorRest();
+    renderSmartMajorRestSettings();
+  };
+
+  const coreSetupForSmartMajorRest = setup;
+  setup = function(){
+    coreSetupForSmartMajorRest();
+    if($("saveSmartMajorRestSettings")) $("saveSmartMajorRestSettings").onclick = saveSmartMajorRestSettings;
+    ensureSmartMajorRestSettings();
+  };
+})();
+
+function smartMajorRestAuditForDate(key){
+  ensureSmartMajorRestSettings();
+  if(!state.smartMajorRestSettings.enabled || !state.smartMajorRestSettings.twoUpNotice) return [];
+  if(modeForDate(key) !== "twoUp") return [];
+  const rows = syncChangeRowsForDay(key) || [];
+  const out = [];
+  const seen = new Set();
+  rows.forEach(r => {
+    if(!r || r.activity !== "rest" || r.restType !== "sleeper") return;
+    const slot = Math.max(0, Math.min(SLOTS_PER_DAY-1, Math.floor(timeToMins(r.time || "00:00") / SLOT)));
+    const period = smartMajorRestPeriodForSlot(key, slot);
+    if(!period || period.minutes < 420 || period.minutes >= 1440) return;
+    if(smartMajorRestTypeForSlot(key, slot) !== "sleeper") return;
+    const extra = `${Math.round(period.startAbs/60000)}-${Math.round(period.endAbs/60000)}`;
+    if(seen.has(extra) || isAuditDismissed("smart_major_rest_sleeper", key, extra)) return;
+    seen.add(extra);
+    out.push({
+      id:`${key}-smart-major-rest-${extra}`,
+      date:key,
+      pageNo:pageNoForDate(key),
+      severity:"info",
+      title:"Two-up long rest counted as Sleeper berth",
+      message:`A ${formatMinsShort(period.minutes)} continuous two-up rest was automatically counted as Sleeper berth rest.`,
+      focus:{type:"section", section:"changeDetailsEditor"},
+      suggestion:"If the truck was stationary, change this rest type to Stationary/Night/24h as appropriate. If Sleeper berth is correct, tap Skip.",
+      optionalDismiss:{kind:"smart_major_rest_sleeper", date:key, extra, label:"Two-up long rest counted as Sleeper berth"}
+    });
+  });
+  return out;
+}
+
+function smartMajorRestSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+  try{
+    const start = "2026-07-01";
+    state.selectedDate = start;
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {};
+    state.dayDetails = {};
+    state.entries = [];
+    state.smartMajorRestSettings = {enabled:true, twoUpNotice:true};
+
+    const setAllRest = (key) => {
+      state.selectedDate = key;
+      ensureDayDetail(key).ruleScheme = "BFM";
+      state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+      ensureDayDetail(key).changeRows = [];
+    };
+    const setWorkRange = (key,a,b) => {
+      if(!state.slots[key]) state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+      for(let i=a;i<b;i++) setSlot(key,i,"work");
+    };
+
+    setAllRest(start);
+    setWorkRange(start, 32, 88);
+    const next = addDays(start,1);
+    setAllRest(next);
+    setWorkRange(next, 32, 60);
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    syncChangeRowsForDay(start);
+    syncChangeRowsForDay(next);
+    add("Solo 7h+ rest in 10pm-8am auto-counts as Night rest", restTypeForSlot(next,0) === "night", {type:restTypeForSlot(next,0), rows:ensureDayDetail(next).changeRows});
+
+    state.slots = {}; state.dayDetails = {};
+    setAllRest(start);
+    setWorkRange(start, 0, 24);
+    setWorkRange(start, 56, 80);
+    syncChangeRowsForDay(start);
+    add("Solo 7h+ daytime rest auto-counts as Stationary", restTypeForSlot(start,24) === "stationary", {type:restTypeForSlot(start,24), rows:ensureDayDetail(start).changeRows});
+
+    state.slots = {}; state.dayDetails = {};
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"twoUp", coDriverScheme:"BFM"}];
+    setAllRest(start);
+    ensureDayDetail(start).driverMode = "twoUp";
+    ensureDayDetail(start).twoUpEnabled = true;
+    setWorkRange(start, 0, 24);
+    setWorkRange(start, 56, 80);
+    syncChangeRowsForDay(start);
+    const audit = smartMajorRestAuditForDate(start);
+    add("Two-up 7h+ rest auto-counts as Sleeper && shows skippable reminder", restTypeForSlot(start,24) === "sleeper" && audit.length > 0, {type:restTypeForSlot(start,24), audit:audit.map(a=>a.title), rows:ensureDayDetail(start).changeRows});
+
+    state.slots = {}; state.dayDetails = {};
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    setAllRest(start);
+    setWorkRange(start, 0, 20);
+    const d2 = addDays(start,1);
+    setAllRest(d2);
+    const d3 = addDays(start,2);
+    setAllRest(d3);
+    setWorkRange(d3, 20, 40);
+    syncChangeRowsForDay(d2);
+    add("24h+ continuous rest auto-counts as 24h rest", restTypeForSlot(d2,0) === "24h", {type:restTypeForSlot(d2,0), rows:ensureDayDetail(d2).changeRows});
+
   }catch(err){
     add("Self-test crashed", false, String(err && err.stack || err));
   }finally{

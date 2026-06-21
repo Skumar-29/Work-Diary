@@ -1,0 +1,179 @@
+SMART MAJOR REST TEST REPORT
+
+[
+  {
+    "name": "Solo 7h+ rest in 10pm-8am auto-counts as Night rest",
+    "pass": true,
+    "actual": {
+      "type": "night",
+      "rows": [
+        {
+          "time": "00:00",
+          "activity": "rest",
+          "noDetails": true,
+          "autoNoDetails": true,
+          "autoReason": "continuation",
+          "odometer": "",
+          "location": "",
+          "note": "Continuation from previous day",
+          "restType": "night",
+          "autoRestType": true,
+          "autoRestReason": "7h+ stationary rest in night period"
+        },
+        {
+          "time": "08:00",
+          "activity": "work",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "work"
+        },
+        {
+          "time": "15:00",
+          "activity": "rest",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "stationary"
+        }
+      ]
+    }
+  },
+  {
+    "name": "Solo 7h+ daytime rest auto-counts as Stationary",
+    "pass": true,
+    "actual": {
+      "type": "stationary",
+      "rows": [
+        {
+          "time": "00:00",
+          "activity": "work",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "work"
+        },
+        {
+          "time": "06:00",
+          "activity": "rest",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "stationary"
+        },
+        {
+          "time": "14:00",
+          "activity": "work",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "work"
+        },
+        {
+          "time": "20:00",
+          "activity": "rest",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": ""
+        }
+      ]
+    }
+  },
+  {
+    "name": "Two-up 7h+ rest auto-counts as Sleeper && shows skippable reminder",
+    "pass": true,
+    "actual": {
+      "type": "sleeper",
+      "audit": [
+        "Two-up long rest counted as Sleeper berth"
+      ],
+      "rows": [
+        {
+          "time": "00:00",
+          "activity": "work",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "work"
+        },
+        {
+          "time": "06:00",
+          "activity": "rest",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "sleeper"
+        },
+        {
+          "time": "14:00",
+          "activity": "work",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": "work"
+        },
+        {
+          "time": "20:00",
+          "activity": "rest",
+          "noDetails": false,
+          "autoNoDetails": false,
+          "autoReason": "",
+          "odometer": "",
+          "location": "",
+          "note": "",
+          "restType": ""
+        }
+      ]
+    }
+  },
+  {
+    "name": "24h+ continuous rest auto-counts as 24h rest",
+    "pass": true,
+    "actual": {
+      "type": "24h",
+      "rows": [
+        {
+          "time": "00:00",
+          "activity": "rest",
+          "noDetails": true,
+          "autoNoDetails": true,
+          "autoReason": "continuation",
+          "odometer": "",
+          "location": "",
+          "note": "Continuation from previous day",
+          "restType": "24h",
+          "autoRestType": true,
+          "autoRestReason": "24h+ continuous rest"
+        }
+      ]
+    }
+  }
+]
