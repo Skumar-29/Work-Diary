@@ -581,3 +581,14 @@ Change table render-call fix:
 - Added safe render wrapper and table self-test helper: changeDetailsTableSelfTest().
 - If change rows are unexpectedly empty, the table now creates at least the current 00:00 row instead of leaving the box blank.
 - This only changes Work/rest change table rendering. Fatigue rules, graph layout, page numbering, N/D logic, vehicle records and diary history are unchanged.
+
+
+BFM solo 7-day long/night fix:
+- Added a focused BFM solo long/night detector.
+- It counts rolling 7-day long/night work:
+  - all work between 00:00 and 06:00
+  - non-night work after 12h work has been reached on that daily sheet/24h page
+- If the total exceeds 36h in the rolling 7-day period, the first over-limit block is marked red as an error.
+- This specifically fixes the case where previous days have used almost all night hours and the driver starts too early on the next day.
+- Added self-test helper: nhvrBfmLongNightSelfTest()
+- No graph layout, N/D logic, table logic, page numbering, vehicle records, diary history, settings, or other fatigue rules were changed.

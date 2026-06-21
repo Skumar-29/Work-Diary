@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 35;
-const APP_BUILD_NAME = "change-table-render-call-fix";
+const APP_SCHEMA_VERSION = 36;
+const APP_BUILD_NAME = "bfm-long-night-7d-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -6282,6 +6282,165 @@ function nhvrEngineSelfTest(){
 
   }catch(err){
     nhvrDAddResult(results, "QA-CRASH", "Self-test crashed", false, "No crash", String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   BFM SOLO 7-DAY LONG/NIGHT WORK FIX
+   Scope: BFM solo long/night detector only.
+   It adds an independent safety check so early starts are caught when the
+   rolling 7-day long/night total is already near 36h.
+   ========================================================= */
+
+function nhvrBfmSoloIsNightSlot(abs){
+  const d = new Date(abs);
+  return d.getHours() >= 0 && d.getHours() < 6;
+}
+function nhvrBfmSoloDailyWorkBeforeSlot(abs){
+  const key = toKey(new Date(abs));
+  const dayStart = fromKey(key).getTime();
+  let total = 0;
+  for(let t=dayStart; t<=abs; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work") total += SLOT;
+  }
+  return total;
+}
+function nhvrBfmSoloIsLongNightSlot(abs){
+  if(activityAtAbs(abs) !== "work") return false;
+  if(nhvrBfmSoloIsNightSlot(abs)) return true;
+
+  // For this diary-page helper, non-night work counts as long/night after
+  // the driver has already reached 12h work on that daily sheet/24h page.
+  // This prevents 14h BFM days from being treated as zero long work.
+  return nhvrBfmSoloDailyWorkBeforeSlot(abs) > 720;
+}
+function nhvrBfmSoloLongNightMinsBetween(startAbs, endAbs){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    if(nhvrBfmSoloIsLongNightSlot(t)) total += SLOT;
+  }
+  return total;
+}
+function nhvrBfmSoloLongNightFindingForDate(key, profile, existingFindings){
+  if(!profile || profile.key !== "BFM") return null;
+  if((existingFindings || []).some(f => String(f.title || "").includes("7d long/night"))) return null;
+
+  const dayStart = nhvrV2DayStart(key);
+  const dayEnd = nhvrV2DayEnd(key);
+  const limit = 2160; // 36 hours
+  let dueAbs = null;
+  let totalAtDue = 0;
+
+  for(let t=dayStart; t<dayEnd; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) !== "work") continue;
+    const endAbs = t + nhvrV2StepMs();
+    const total = nhvrBfmSoloLongNightMinsBetween(endAbs - 7*DAY_MS, endAbs);
+    if(total > limit){
+      dueAbs = t;
+      totalAtDue = total;
+      break;
+    }
+  }
+  if(dueAbs === null) return null;
+
+  const ks = absToKeySlot(dueAbs);
+  const slots = ks.key === key ? [ks.slot] : [];
+  const before = nhvrBfmSoloLongNightMinsBetween(dueAbs - 7*DAY_MS, dueAbs);
+
+  return nhvrV2Finding(
+    "error",
+    key,
+    "7d long/night work limit reached",
+    `${profile.name}: ${formatMinsShort(totalAtDue)} long/night work counted in the rolling 7-day period. Limit is 36h. Before this block: ${formatMinsShort(before)}.`,
+    slots,
+    `Long/night work is not available from ${formatDateTimeForStats(dueAbs)}. Do not work between midnight and 6am, and do not work beyond 12h in a 24h/day period, until the rolling 7-day long/night total drops below 36h.`,
+    dueAbs - 7*DAY_MS,
+    {ruleType:"bfmSoloLongNight7d", totalAtDue, before, limit}
+  );
+}
+
+(function(){
+  const coreNhvrBreachesForDate = nhvrBreachesForDate;
+  nhvrBreachesForDate = function(key){
+    const profile = nhvrProfileForDate(key);
+    const findings = coreNhvrBreachesForDate(key) || [];
+    const ln = nhvrBfmSoloLongNightFindingForDate(key, profile, findings);
+    if(ln) findings.push(ln);
+
+    const seen = new Set();
+    return findings.filter(f => {
+      const slots = f && f.focus && Array.isArray(f.focus.slots) ? f.focus.slots.join(",") : "";
+      const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${slots}|${f.message}`;
+      if(seen.has(sig)) return false;
+      seen.add(sig);
+      return true;
+    }).sort((a,b)=>{
+      const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+      const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+      return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+    }).slice(0, 24);
+  };
+})();
+
+function nhvrBfmLongNightSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+
+  try{
+    const start = "2026-06-22";
+    state.selectedDate = start;
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {};
+    state.dayDetails = {};
+    state.entries = [];
+    state.calculationHistory = {startDate:start, mode:"noWorkBeforeStart"};
+    state.restAsStationary = false;
+
+    const setRanges = (key, ranges) => {
+      state.selectedDate = key;
+      ensureDayDetail(key).ruleScheme = "BFM";
+      ensureDayDetail(key).driverMode = "solo";
+      for(let i=0;i<SLOTS_PER_DAY;i++) setSlot(key, i, "rest");
+      ranges.forEach(([a,b]) => {
+        for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "work");
+      });
+      syncChangeRowsForDay(key);
+    };
+
+    // Four days: 13h work each with 7h long/night each.
+    // Fifth day: 13.5h work with 7.5h long/night.
+    // Total before Saturday = 35.5h.
+    for(let d=0; d<4; d++){
+      const k = addDays(start, d);
+      setRanges(k, [[0,24],[28,56]]); // 00-06 + 07-14 = 13h total, 7h long/night
+    }
+    setRanges(addDays(start,4), [[0,24],[28,58]]); // 13.5h total, 7.5h long/night
+
+    // Saturday starts at 01:30. First over-limit block is 02:00-02:15.
+    const sat = addDays(start,5);
+    setRanges(sat, [[6,24]]); // 01:30-06:00
+    const findings = nhvrBreachesForDate(sat);
+    const hit = findings.find(f => f.title === "7d long/night work limit reached");
+    const slots = hit && hit.focus ? hit.focus.slots : [];
+    add("BFM solo 35.5h previous long/night + early Sat start breaches at 02:00", !!hit && slots.includes(8), {title:hit && hit.title, slots, message:hit && hit.message});
+
+    // A normal daytime-only day should not trigger this rule.
+    state.slots = {};
+    state.dayDetails = {};
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    setRanges(start, [[32,56]]); // 08:00-14:00 only
+    const cleanFindings = nhvrBreachesForDate(start);
+    add("BFM solo normal daytime work does not trigger long/night 7d", !cleanFindings.some(f => f.title === "7d long/night work limit reached"), cleanFindings.map(f=>f.title));
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
   }finally{
     state = {...state, ...backup};
   }

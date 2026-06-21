@@ -1,0 +1,20 @@
+BFM SOLO LONG/NIGHT 7D TEST REPORT
+
+[
+  {
+    "name": "BFM solo 35.5h previous long/night + early Sat start breaches at 02:00",
+    "pass": true,
+    "actual": {
+      "title": "7d long/night work limit reached",
+      "slots": [
+        8
+      ],
+      "message": "BFM solo: 36h 15m long/night work counted in the rolling 7-day period. Limit is 36h. Before this block: 36h."
+    }
+  },
+  {
+    "name": "BFM solo normal daytime work does not trigger long/night 7d",
+    "pass": true,
+    "actual": []
+  }
+]
