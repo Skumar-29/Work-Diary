@@ -537,3 +537,12 @@ NHVR engine rebuild + Stats rebuild:
   - last 7 daily summaries
 - Kept N/D, short-break settings, page numbering, diary book history, Find/Refresh, backup/import and smart options unchanged.
 - Added console self-test: nhvrEngineSelfTest()
+
+
+BFM 24h anchor repair:
+- Fixed a bug where a major rest ending after the work day could incorrectly become the only 24h anchor.
+- This caused the user's BFM 15h45m day to show green even though BFM solo should breach the 14h/24h work limit.
+- The engine now keeps a clean-start/previous-major-rest anchor for the current 24h period and uses later major rests for the next period.
+- Added a Work Diary alert for the first NHVR helper breach on the selected page.
+- Added/updated console self-test: nhvrEngineSelfTest()
+- No N/D, diary book, page numbering, vehicle records, Find/Refresh or layout settings were changed.

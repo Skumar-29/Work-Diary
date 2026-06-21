@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 29;
-const APP_BUILD_NAME = "nhvr-engine-rebuild-stats";
+const APP_SCHEMA_VERSION = 30;
+const APP_BUILD_NAME = "bfm-24h-anchor-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -5675,6 +5675,148 @@ function nhvrEngineSelfTest(){
     run("Standard 4h continuous: no breach", "Standard", 16, false, []);
     run("Standard 10h continuous: first required rests at 5:15 and 7:30", "Standard", 40, true, [21,30,31]);
     run("BFM 10h continuous: first required rests at 6:00 and 8:30", "BFM", 40, true, [24,34,35]);
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   NHVR ENGINE REBUILD v2.1 - BFM/24h anchor repair
+   Issue fixed:
+   A relevant major rest that ends after the work day must not replace
+   the clean-start/previous-major-rest anchor for that same day.
+   Example: BFM 00:00-16:45 work with two 30m rests must breach at 15:00.
+   ========================================================= */
+
+function nhvrV2RealAnchorsForPeriod(profile, scanStart, dayEnd, rule){
+  const restEnds = nhvrV2RestEndAnchors(scanStart, dayEnd);
+  if(rule.label === "24h" && profile.anchor24){
+    return restEnds.filter(a => nhvrV2Qualifies(a.period, profile.anchor24));
+  }
+  if(rule.label === "52h"){
+    return restEnds.filter(a => nhvrV2Qualifies(a.period, {mins:300, kind:"stationaryOrSleeper"}));
+  }
+  if(rule.label === "82h"){
+    return restEnds;
+  }
+  if(rule.label === "7d" || rule.label === "7d long/night"){
+    return restEnds.filter(a => nhvrV2Qualifies(a.period, {mins:1440, kind:"stationary"}) || (profile.anchor24 && nhvrV2Qualifies(a.period, profile.anchor24)));
+  }
+  if(rule.label === "14d"){
+    return restEnds.filter(a => nhvrV2IsNightRestPeriod(a.period) || nhvrV2Qualifies(a.period, {mins:1440, kind:"stationary"}) || (profile.anchor24 && nhvrV2Qualifies(a.period, profile.anchor24)));
+  }
+  return restEnds;
+}
+function nhvrV2AnchorsForPeriod(profile, scanStart, dayEnd, rule){
+  const anchors = nhvrV2RealAnchorsForPeriod(profile, scanStart, dayEnd, rule);
+  const key = absToKeySlot(dayEnd-1).key;
+  const firstWork = nhvrV2FirstWorkAbs(scanStart, dayEnd);
+  const virt = nhvrV2VirtualStartAnchor(key, scanStart, dayEnd);
+
+  // Important: if app history starts with this work period, we need a clean-start
+  // anchor at the first work block. A qualifying rest ending later that night begins
+  // the NEXT counting period; it must not erase the current 24h count.
+  if(virt && firstWork !== null){
+    const hasRealAnchorAtOrBeforeFirstWork = anchors.some(a => a.abs <= firstWork);
+    if(!hasRealAnchorAtOrBeforeFirstWork){
+      anchors.unshift(virt);
+    }
+  }
+
+  return anchors
+    .filter(Boolean)
+    .sort((a,b)=>a.abs-b.abs);
+}
+function renderAlertsFast(){
+  const a = $("alerts");
+  if(!a) return;
+  a.innerHTML = "";
+  if(isPageCancelledOrSkipped(state.selectedDate)){
+    const el=document.createElement("div");
+    el.className="alert warn";
+    el.textContent=`This page is marked ${pageStatusLabel(state.selectedDate)}. Do not use this page for break/fatigue advice.`;
+    a.appendChild(el);
+    return;
+  }
+  if(selectedDayIsTwoUp()){
+    const missing = twoUpMissingDetails();
+    if(missing.length){
+      const el=document.createElement("div");
+      el.className="alert warn";
+      el.textContent=`Two-up is selected but missing: ${missing.join(", ")}.`;
+      a.appendChild(el);
+    }
+  }
+  try{
+    const findings = nhvrBreachesForDate(state.selectedDate);
+    const firstError = findings.find(f => (f.severity || "error") === "error");
+    if(firstError){
+      const el=document.createElement("div");
+      el.className="alert bad";
+      el.textContent=`${firstError.title}: ${firstError.fix || firstError.suggestion || firstError.message}`;
+      a.appendChild(el);
+    }else if(dayHasAnyWork(state.selectedDate)){
+      const el=document.createElement("div");
+      el.className="alert ok";
+      el.textContent=`No NHVR helper breach found for ${schemeForDate(state.selectedDate)} on this page.`;
+      a.appendChild(el);
+    }
+  }catch(err){
+    console.warn("NHVR alert render skipped", err);
+  }
+}
+function nhvrEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  try{
+    const reset = (key, scheme) => {
+      state.selectedDate = key;
+      state.scheme = scheme;
+      state.ruleHistory = [{effectiveDate:key, scheme, mode:"solo", coDriverScheme:""}];
+      state.slots = {}; state.dayDetails = {}; state.entries = [];
+      state.calculationHistory = {startDate:key, mode:"noWorkBeforeStart"};
+      for(let i=0;i<96;i++) setSlot(key, i, "rest");
+    };
+    const runContinuous = (name, scheme, slots, expectErrors, expectedFirstSlots) => {
+      const key = "2026-06-18";
+      reset(key, scheme);
+      for(let i=0;i<slots;i++) setSlot(key, i, "work");
+      const findings = nhvrBreachesForDate(key).filter(f => (f.severity||"error")==="error");
+      const allSlots = findings.flatMap(f => f.focus && f.focus.slots ? f.focus.slots : []);
+      const firstSlots = [...new Set(allSlots)].sort((a,b)=>a-b).slice(0, expectedFirstSlots.length);
+      const okErrors = expectErrors ? findings.length > 0 : findings.length === 0;
+      const okSlots = expectedFirstSlots.length ? JSON.stringify(firstSlots) === JSON.stringify(expectedFirstSlots) : true;
+      results.push({name, ok:okErrors && okSlots, errors:findings.length, firstSlots, titles:findings.map(f=>f.title)});
+    };
+    const runBFMPlan = () => {
+      const key = "2026-06-22";
+      reset(key, "BFM");
+      // User screenshot/example:
+      // 00:00-06:00 work, 06:00-06:30 rest,
+      // 06:30-11:30 work, 11:30-12:00 rest,
+      // 12:00-16:45 work = 15h45m work.
+      for(let i=0;i<24;i++) setSlot(key,i,"work");
+      for(let i=26;i<46;i++) setSlot(key,i,"work");
+      for(let i=48;i<67;i++) setSlot(key,i,"work");
+      const findings = nhvrBreachesForDate(key).filter(f => (f.severity||"error")==="error");
+      const titles = findings.map(f=>f.title);
+      const slots = [...new Set(findings.flatMap(f => f.focus && f.focus.slots ? f.focus.slots : []))].sort((a,b)=>a-b);
+      results.push({
+        name:"BFM 15h45m day with two 30m breaks: 24h limit must breach at 3:00pm",
+        ok: findings.some(f => String(f.title).includes("24h")) && slots.includes(60),
+        errors:findings.length,
+        firstSlots:slots.slice(0,6),
+        titles
+      });
+    };
+    runContinuous("Standard 4h continuous: no breach", "Standard", 16, false, []);
+    runContinuous("Standard 10h continuous: short windows due", "Standard", 40, true, [21,30,31]);
+    runContinuous("BFM 10h continuous: short windows due", "BFM", 40, true, [24,34,35]);
+    runBFMPlan();
   }finally{
     state = {...state, ...backup};
   }
