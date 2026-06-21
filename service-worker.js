@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v72-bfm-long-night-7d-fix";
+const CACHE = "truck-work-diary-v73-bfm-84h-checkpoint-fix";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 36;
-const APP_BUILD_NAME = "bfm-long-night-7d-fix";
+const APP_SCHEMA_VERSION = 37;
+const APP_BUILD_NAME = "bfm-84h-checkpoint-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -6439,6 +6439,204 @@ function nhvrBfmLongNightSelfTest(){
     setRanges(start, [[32,56]]); // 08:00-14:00 only
     const cleanFindings = nhvrBreachesForDate(start);
     add("BFM solo normal daytime work does not trigger long/night 7d", !cleanFindings.some(f => f.title === "7d long/night work limit reached"), cleanFindings.map(f=>f.title));
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   BFM SOLO 84H CHECKPOINT / 24H STATIONARY REST FIX
+   Scope: BFM solo only.
+   Situation fixed:
+   If the driver has about 82h work before Sunday, then starts work at
+   06:00 Sunday, the 84h checkpoint is reached at 08:00 and the first
+   over-limit block is 08:00-08:15 unless a 24h continuous stationary
+   rest has been completed.
+   ========================================================= */
+
+function nhvrBfm84SlotRestType(abs){
+  const ks = absToKeySlot(abs);
+  try{
+    return restTypeForSlot(ks.key, ks.slot) || "";
+  }catch(e){
+    return "";
+  }
+}
+function nhvrBfm84IsCheckpointRest(abs){
+  if(activityAtAbs(abs) === "work") return false;
+  const rt = nhvrBfm84SlotRestType(abs);
+
+  // Explicit stationary-style rest qualifies.
+  if(rt === "stationary" || rt === "night" || rt === "24h") return true;
+
+  // Explicit moving sleeper rest does not satisfy this stationary checkpoint.
+  if(rt === "sleeper") return false;
+
+  // For this checkpoint helper only, untyped continuous no-work rest is treated
+  // as stationary rest unless the user explicitly marks it as sleeper.
+  return true;
+}
+function nhvrBfm84CheckpointFindingForDate(key, profile, existingFindings){
+  if(!profile || profile.key !== "BFM") return null;
+  if((existingFindings || []).some(f => String(f.title || "").includes("84h checkpoint"))) return null;
+
+  const dayStart = nhvrV2DayStart(key);
+  const dayEnd = nhvrV2DayEnd(key);
+  const step = nhvrV2StepMs();
+  const limit = 84 * 60; // 84h = 5040 minutes
+  const scanStart = Math.max(
+    dayEnd - 14 * DAY_MS,
+    (typeof nhvrV2ScanStartFor === "function" ? nhvrV2ScanStartFor(key) : dayEnd - 14 * DAY_MS)
+  );
+
+  let workSinceReset = 0;
+  let restRun = 0;
+  let lastResetAbs = scanStart;
+  let dueAbs = null;
+  let before = 0;
+  let atDue = 0;
+
+  for(let t = scanStart; t < dayEnd; t += step){
+    if(activityAtAbs(t) === "work"){
+      restRun = 0;
+      workSinceReset += SLOT;
+      if(t >= dayStart && workSinceReset > limit && dueAbs === null){
+        dueAbs = t;
+        before = workSinceReset - SLOT;
+        atDue = workSinceReset;
+        break;
+      }
+    }else{
+      if(nhvrBfm84IsCheckpointRest(t)){
+        restRun += SLOT;
+        if(restRun >= 1440){
+          workSinceReset = 0;
+          lastResetAbs = t + step;
+        }
+      }else{
+        restRun = 0;
+      }
+    }
+  }
+
+  if(dueAbs === null) return null;
+
+  const ks = absToKeySlot(dueAbs);
+  const slots = ks.key === key ? [ks.slot] : [];
+  return nhvrV2Finding(
+    "error",
+    key,
+    "BFM 84h checkpoint reached",
+    `BFM solo: ${formatMinsShort(atDue)} work counted since the last 24h continuous stationary rest. The 84h checkpoint was reached before this block; more work needs a 24h continuous stationary rest first.`,
+    slots,
+    `Take/record 24h continuous stationary rest before working from ${formatDateTimeForStats(dueAbs)}. If you already took the 24h stationary rest, mark that long break as Stationary/24h rest, or keep it as continuous no-work rest.`,
+    lastResetAbs,
+    {ruleType:"bfmSolo84hCheckpoint", before, atDue, limit, lastResetAbs}
+  );
+}
+
+(function(){
+  const coreNhvrBreachesForDateFor84h = nhvrBreachesForDate;
+  nhvrBreachesForDate = function(key){
+    const profile = nhvrProfileForDate(key);
+    const findings = coreNhvrBreachesForDateFor84h(key) || [];
+    const f84 = nhvrBfm84CheckpointFindingForDate(key, profile, findings);
+    if(f84) findings.push(f84);
+
+    const seen = new Set();
+    return findings.filter(f => {
+      const slots = f && f.focus && Array.isArray(f.focus.slots) ? f.focus.slots.join(",") : "";
+      const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${slots}|${f.message}`;
+      if(seen.has(sig)) return false;
+      seen.add(sig);
+      return true;
+    }).sort((a,b)=>{
+      const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+      const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+      return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+    }).slice(0, 24);
+  };
+})();
+
+function nhvrBfm84CheckpointSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+
+  try{
+    const start = "2026-06-22";
+    state.selectedDate = start;
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {};
+    state.dayDetails = {};
+    state.entries = [];
+    state.calculationHistory = {startDate:start, mode:"noWorkBeforeStart"};
+    state.restAsStationary = false;
+
+    const setAllRest = (key, restType="rest") => {
+      state.selectedDate = key;
+      ensureDayDetail(key).ruleScheme = "BFM";
+      ensureDayDetail(key).driverMode = "solo";
+      for(let i=0;i<SLOTS_PER_DAY;i++) {
+        setSlot(key, i, "rest");
+      }
+      ensureDayDetail(key).changeRows = [{time:"00:00", activity:"rest", restType, odometer:"", location:"", note:"QA"}];
+      syncChangeRowsForDay(key);
+    };
+    const setRanges = (key, ranges, restType="rest") => {
+      setAllRest(key, restType);
+      ranges.forEach(([a,b]) => {
+        for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "work");
+      });
+      syncChangeRowsForDay(key);
+    };
+
+    // Mon-Fri = 5 x 14h = 70h.
+    for(let d=0; d<5; d++){
+      setRanges(addDays(start,d), [[6,30],[32,54],[56,66]]); // 14h
+    }
+    // Sat = 12h. Total before Sun = 82h.
+    setRanges(addDays(start,5), [[22,46],[48,72]]); // 12h
+    const sun = addDays(start,6);
+
+    // Sun starts 06:00. 84h reached at 08:00; first over-limit block is 08:00.
+    setRanges(sun, [[24,72]]); // 06:00-18:00
+    let findings = nhvrBreachesForDate(sun);
+    let hit = findings.find(f => f.title === "BFM 84h checkpoint reached");
+    let slots = hit && hit.focus ? hit.focus.slots : [];
+    add("82h before Sun + work from 06:00 breaches first at 08:00", !!hit && slots.includes(32), {title:hit && hit.title, slots, message:hit && hit.message});
+
+    // If no Sunday morning work and the driver waits a full 24h after Sat evening,
+    // the 84h checkpoint helper should not flag the Sunday evening restart.
+    state.slots = {};
+    state.dayDetails = {};
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    for(let d=0; d<5; d++){
+      setRanges(addDays(start,d), [[6,30],[32,54],[56,66]]); // 14h
+    }
+    // Sat work ends at 18:30; before Sun = 82.5h.
+    setRanges(addDays(start,5), [[22,46],[48,74]]); // 12.5h ending 18:30
+    setAllRest(sun, "rest");
+    for(let i=74;i<82;i++) setSlot(sun, i, "work"); // Sun 18:30 start
+    syncChangeRowsForDay(sun);
+    findings = nhvrBreachesForDate(sun);
+    add("After 24h continuous rest from Sat evening, Sunday 18:30 start has no 84h checkpoint breach", !findings.some(f => f.title === "BFM 84h checkpoint reached"), findings.map(f=>({title:f.title, slots:f.focus && f.focus.slots})));
+
+    // Standard solo should be unaffected.
+    state.slots = {};
+    state.dayDetails = {};
+    state.scheme = "Standard";
+    state.ruleHistory = [{effectiveDate:start, scheme:"Standard", mode:"solo", coDriverScheme:""}];
+    setRanges(start, [[0,40]]);
+    findings = nhvrBreachesForDate(start);
+    add("Standard solo is not touched by BFM 84h checkpoint helper", !findings.some(f => f.title === "BFM 84h checkpoint reached"), findings.map(f=>f.title));
   }catch(err){
     add("Self-test crashed", false, String(err && err.stack || err));
   }finally{

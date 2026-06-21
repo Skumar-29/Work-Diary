@@ -592,3 +592,12 @@ BFM solo 7-day long/night fix:
 - This specifically fixes the case where previous days have used almost all night hours and the driver starts too early on the next day.
 - Added self-test helper: nhvrBfmLongNightSelfTest()
 - No graph layout, N/D logic, table logic, page numbering, vehicle records, diary history, settings, or other fatigue rules were changed.
+
+
+BFM solo 84h checkpoint fix:
+- Added a focused BFM solo 84h checkpoint detector.
+- It catches the situation where the driver has about 82h work before Sunday, works from 06:00, reaches 84h at 08:00, and must not continue without 24h continuous stationary rest.
+- It marks the first over-limit block red.
+- It also allows restart after a full 24h continuous no-work/stationary rest, e.g. Sunday evening after stopping Saturday evening.
+- The check is BFM solo only and does not change Standard, BFM two-up, graph layout, N/D logic, table logic, page numbering, vehicle records, diary history, settings, or other fatigue rules.
+- Added self-test helper: nhvrBfm84CheckpointSelfTest()

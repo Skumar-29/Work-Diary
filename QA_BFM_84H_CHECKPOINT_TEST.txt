@@ -1,0 +1,84 @@
+BFM SOLO 84H CHECKPOINT TEST REPORT
+
+[
+  {
+    "name": "82h before Sun + work from 06:00 breaches first at 08:00",
+    "pass": true,
+    "actual": {
+      "title": "BFM 84h checkpoint reached",
+      "slots": [
+        32
+      ],
+      "message": "BFM solo: 84h 15m work counted since the last 24h continuous stationary rest. The 84h checkpoint was reached before this block; more work needs a 24h continuous stationary rest first."
+    }
+  },
+  {
+    "name": "After 24h continuous rest from Sat evening, Sunday 18:30 start has no 84h checkpoint breach",
+    "pass": true,
+    "actual": [
+      {
+        "title": "24h rest requirement missing",
+        "slots": [
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95
+        ]
+      },
+      {
+        "title": "24h rest requirement missing",
+        "slots": [
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Standard solo is not touched by BFM 84h checkpoint helper",
+    "pass": true,
+    "actual": [
+      "6¼h break due",
+      "9h break due",
+      "24h rest requirement missing"
+    ]
+  }
+]
