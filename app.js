@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 34;
-const APP_BUILD_NAME = "change-table-blank-fix";
+const APP_SCHEMA_VERSION = 35;
+const APP_BUILD_NAME = "change-table-render-call-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -2837,8 +2837,13 @@ function renderChangeDetailsEditor(){
   }
 
   if(!Array.isArray(rows) || !rows.length){
-    holder.innerHTML = changeDetailsMessage("No work/rest change rows on this page yet. Select Work or Rest blocks above and tap refresh if needed.");
-    return;
+    try{
+      rows = [{time:"00:00", activity:getSlot(state.selectedDate,0) || "rest", noDetails:false, autoNoDetails:false, autoReason:"", odometer:"", location:"", note:"", restType:(getSlot(state.selectedDate,0)==="work" ? "work" : "rest")}];
+      ensureDayDetail(state.selectedDate).changeRows = rows;
+    }catch(e){
+      holder.innerHTML = changeDetailsMessage("No work/rest change rows on this page yet. Select Work or Rest blocks above and tap refresh if needed.");
+      return;
+    }
   }
 
   const safeRows = rows.map((r, i) => {
@@ -4188,6 +4193,30 @@ function renderAlertsFast(){
     }
   }
 }
+
+
+function changeDetailsTableSelfTest(){
+  const oldDate = state.selectedDate;
+  const k = state.selectedDate || toKey(new Date());
+  state.selectedDate = k;
+  state.slots[k] = Array(SLOTS_PER_DAY).fill("rest");
+  for(let i=0;i<8;i++) setSlot(k,i,"work");
+  const rows = syncChangeRowsForDay(k);
+  state.selectedDate = oldDate;
+  return {ok:Array.isArray(rows) && rows.length >= 1, rows};
+}
+
+function renderChangeDetailsIfPresent(){
+  const holder = $("changeDetailsEditor");
+  if(!holder || typeof renderChangeDetailsEditor !== "function") return;
+  try{
+    renderChangeDetailsEditor();
+  }catch(err){
+    console.error("Work/rest change table render failed", err);
+    holder.innerHTML = `<div class="changeEmptyMessage">Could not refresh the work/rest change table. Tap 🔄 Refresh or change one block and try again.</div>`;
+  }
+}
+
 function renderDiaryFast(){
   renderUiSettings();
   renderDate();
@@ -4195,6 +4224,7 @@ function renderDiaryFast(){
   renderTotals();
   renderTimer();
   renderAlertsFast();
+  renderChangeDetailsIfPresent();
 }
 
 function renderDriverSettings(){
@@ -4224,6 +4254,8 @@ function renderAll(){
   const active = document.querySelector(".screen.active");
   const activeId = active ? active.id : "diaryScreen";
 
+  if(activeId === "diaryScreen") renderChangeDetailsIfPresent();
+  if(activeId === "workDiaryScreen") renderChangeDetailsIfPresent();
   if(activeId === "graphScreen") renderGraphPage();
   if(activeId === "statsScreen"){
     renderRuleCards();

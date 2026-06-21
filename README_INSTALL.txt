@@ -573,3 +573,11 @@ Change table blank-box fix:
 - If there are no rows, the app now shows a clear message instead of a blank white box.
 - Removed forced blank table height/min-height behaviour.
 - This update only touches the change-details table display/refresh. It does not change fatigue rules, page numbering, graph layout, N/D logic, vehicle records, or diary history.
+
+
+Change table render-call fix:
+- Fixed the exact issue where the Work Diary screen showed the blank/fallback message because renderDiaryFast did not call renderChangeDetailsEditor.
+- Work/rest change details now rebuild whenever the Work Diary screen refreshes.
+- Added safe render wrapper and table self-test helper: changeDetailsTableSelfTest().
+- If change rows are unexpectedly empty, the table now creates at least the current 00:00 row instead of leaving the box blank.
+- This only changes Work/rest change table rendering. Fatigue rules, graph layout, page numbering, N/D logic, vehicle records and diary history are unchanged.
