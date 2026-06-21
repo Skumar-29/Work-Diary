@@ -1409,3 +1409,41 @@ body.location-picker-off .locPickerWrap input{
   color:#fff!important;
   border-color:#8b0000!important;
 }
+
+/* NHVR engine rebuild stats screen */
+.statsMiniTableWrap{
+  overflow-x:auto;
+  margin-top:10px;
+  border:1px solid #e0e0e0;
+  border-radius:12px;
+}
+.statsMiniTable{
+  width:100%;
+  min-width:620px;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.statsMiniTable th,
+.statsMiniTable td{
+  border-bottom:1px solid #eee;
+  padding:7px 8px;
+  text-align:left;
+}
+.statsMiniTable th{
+  background:#f3f7f4;
+  font-weight:900;
+}
+.canDriveCard.bad{
+  border-color:#d22!important;
+}
+.canDriveCard.warn{
+  border-color:#f0a000!important;
+}
+.statLimit.bad .fill{
+  width:100%!important;
+}
+@media (prefers-color-scheme:dark){
+  .statsMiniTableWrap{border-color:#333}
+  .statsMiniTable th{background:#1d2b22}
+  .statsMiniTable th,.statsMiniTable td{border-color:#333}
+}

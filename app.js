@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 28;
-const APP_BUILD_NAME = "required-rest-highlight-fix";
+const APP_SCHEMA_VERSION = 29;
+const APP_BUILD_NAME = "nhvr-engine-rebuild-stats";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -1622,7 +1622,7 @@ function saveCalculationHistorySettings(){
   showToast("Saved");
 }
 
-const NHVR_ENGINE_VERSION = "NHVR Work Diary Guide v1.3 counting engine";
+const NHVR_ENGINE_VERSION = "NHVR Guide v1.3 rebuilt counting engine";
 
 function nhvrProfileForDate(key){
   const rk = activeRuleKeyForDate(key);
@@ -5065,4 +5065,619 @@ setup();
     bindFindModalControls();
   }
 })();
+
+
+
+
+/* =========================================================
+   NHVR ENGINE REBUILD v2
+   Focus: counting logic + stats screen only.
+   Keeps UI, N/D, page numbering, diary book history, and smart options.
+   Source logic follows National Driver Work Diary v1.3:
+   - 15-minute blocks
+   - <24h periods count from end of any rest break
+   - 24h+ periods count from end of relevant major rest
+   ========================================================= */
+
+function nhvrProfileForDate(key){
+  const rk = activeRuleKeyForDate(key);
+  const shortStd = [
+    {label:"5½h", minutes:330, maxWork:315, minRest:15, rest:"15 continuous minutes rest"},
+    {label:"8h", minutes:480, maxWork:450, minRest:30, rest:"30 minutes rest in 15-minute blocks"},
+    {label:"11h", minutes:660, maxWork:600, minRest:60, rest:"60 minutes rest in 15-minute blocks"}
+  ];
+  if(rk === "AFM") return {key:"AFM", name:"AFM record-only", afm:true, short:[], periods:[]};
+  if(rk === "StandardTwoUp") return {
+    key:rk, name:"Standard two-up",
+    short:shortStd,
+    anchor24:{label:"5h stationary/sleeper rest", mins:300, kind:"stationaryOrSleeper"},
+    periods:[
+      {label:"24h", minutes:1440, maxWork:720, restCheck:{mins:300, kind:"stationaryOrSleeper", label:"5h stationary or approved sleeper-berth rest"}},
+      {label:"52h", minutes:3120, maxWork:null, restCheck:{mins:600, kind:"stationary", label:"10h continuous stationary rest"}},
+      {label:"7d", minutes:10080, maxWork:3600, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest plus extra 24h in blocks of at least 7h"}},
+      {label:"14d", minutes:20160, maxWork:7200, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}
+    ]
+  };
+  if(rk === "BFMTwoUp") return {
+    key:rk, name:"BFM two-up",
+    short:[],
+    anchor24:{label:"any rest break", mins:15, kind:"anyRest"},
+    periods:[
+      {label:"24h", minutes:1440, maxWork:840, restCheck:null},
+      {label:"82h", minutes:4920, maxWork:null, restCheck:{mins:600, kind:"stationary", label:"10h continuous stationary rest"}},
+      {label:"7d", minutes:10080, maxWork:4200, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest plus extra 24h in blocks of at least 7h"}},
+      {label:"14d", minutes:20160, maxWork:8400, nightRest:{count:4, consecutive:false, label:"4 night rests"}}
+    ]
+  };
+  if(rk === "BFM") return {
+    key:rk, name:"BFM solo",
+    short:[
+      {label:"6¼h", minutes:375, maxWork:360, minRest:15, rest:"15 continuous minutes rest"},
+      {label:"9h", minutes:540, maxWork:510, minRest:30, rest:"30 minutes rest in 15-minute blocks"},
+      {label:"12h", minutes:720, maxWork:660, minRest:60, rest:"60 minutes rest in 15-minute blocks"}
+    ],
+    anchor24:{label:"7h stationary rest", mins:420, kind:"stationary", note:"BFM split rest defence is not auto-applied."},
+    periods:[
+      {label:"24h", minutes:1440, maxWork:840, restCheck:{mins:420, kind:"stationary", label:"7h continuous stationary rest"}},
+      {label:"7d long/night", minutes:10080, maxWork:null, maxLongNight:2160, longNight:true},
+      {label:"14d", minutes:20160, maxWork:8640, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest after no more than 84h work plus 24h stationary rest"}, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}
+    ]
+  };
+  return {
+    key:"Standard", name:"Standard solo",
+    short:shortStd,
+    anchor24:{label:"7h stationary rest", mins:420, kind:"stationary"},
+    periods:[
+      {label:"24h", minutes:1440, maxWork:720, restCheck:{mins:420, kind:"stationary", label:"7h continuous stationary rest"}},
+      {label:"7d", minutes:10080, maxWork:4320, restCheck:{mins:1440, kind:"stationary", label:"24h continuous stationary rest"}},
+      {label:"14d", minutes:20160, maxWork:8640, nightRest:{count:2, consecutive:true, label:"2 night rests and 2 consecutive night rests"}}
+    ]
+  };
+}
+
+function nhvrV2StepMs(){ return SLOT * 60000; }
+function nhvrV2DayStart(key){ return fromKey(key).getTime(); }
+function nhvrV2DayEnd(key){ return nhvrV2DayStart(key) + DAY_MS; }
+function nhvrV2RoundSlots(mins){ return Math.max(1, Math.ceil(mins / SLOT)); }
+function nhvrV2RestLabel(mins){
+  if(mins % 60 === 0) return `${mins/60} hour${mins===60 ? "" : "s"}`;
+  return `${mins} minutes`;
+}
+function nhvrV2CountWork(startAbs, endAbs){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work") total += SLOT;
+  }
+  return total;
+}
+function nhvrV2SlotFlags(abs){
+  const {key, slot} = absToKeySlot(abs);
+  const rest = activityAtAbs(abs) !== "work";
+  const rt = rest ? restTypeForSlot(key, slot) : "work";
+  const stationary = rest && (isStationary(key, slot) || rt === "stationary" || rt === "night" || rt === "24h");
+  const sleeper = rest && rt === "sleeper";
+  return {key, slot, rest, rt, stationary, sleeper, stationaryOrSleeper:stationary || sleeper};
+}
+function nhvrV2Predicate(kind){
+  if(kind === "anyRest") return abs => nhvrV2SlotFlags(abs).rest;
+  if(kind === "stationaryOrSleeper") return abs => nhvrV2SlotFlags(abs).stationaryOrSleeper;
+  return abs => nhvrV2SlotFlags(abs).stationary;
+}
+function nhvrV2MaxContinuous(startAbs, endAbs, predicate){
+  let best = 0, cur = 0;
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    if(predicate(t)){ cur += SLOT; best = Math.max(best, cur); }
+    else cur = 0;
+  }
+  return best;
+}
+function nhvrV2RestPeriods(startAbs, endAbs){
+  const periods = [];
+  let active = null;
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    const f = nhvrV2SlotFlags(t);
+    if(f.rest){
+      if(!active) active = {startAbs:t, endAbs:t, minutes:0, bestStationary:0, bestStationaryOrSleeper:0, curStationary:0, curStationaryOrSleeper:0};
+      active.minutes += SLOT;
+      active.endAbs = t + nhvrV2StepMs();
+      if(f.stationary){ active.curStationary += SLOT; active.bestStationary = Math.max(active.bestStationary, active.curStationary); }
+      else active.curStationary = 0;
+      if(f.stationaryOrSleeper){ active.curStationaryOrSleeper += SLOT; active.bestStationaryOrSleeper = Math.max(active.bestStationaryOrSleeper, active.curStationaryOrSleeper); }
+      else active.curStationaryOrSleeper = 0;
+    }else if(active){
+      periods.push(active); active = null;
+    }
+  }
+  if(active) periods.push(active);
+  return periods;
+}
+function nhvrV2Qualifies(period, req){
+  if(!period || !req) return false;
+  if(req.kind === "anyRest") return period.minutes >= (req.mins || 15);
+  if(req.kind === "stationaryOrSleeper") return period.bestStationaryOrSleeper >= req.mins;
+  return period.bestStationary >= req.mins;
+}
+function nhvrV2RestEndAnchors(startAbs, endAbs){
+  return nhvrV2RestPeriods(startAbs, endAbs)
+    .filter(p => p.minutes >= 15)
+    .map(p => ({abs:p.endAbs, period:p}));
+}
+function nhvrV2QualifyingRestIn(startAbs, endAbs, kind="anyRest"){
+  // For short-rest rules: add rest blocks of at least 15 continuous minutes.
+  return nhvrV2RestPeriods(startAbs, endAbs)
+    .filter(p => p.minutes >= 15)
+    .reduce((sum,p) => sum + p.minutes, 0);
+}
+function nhvrV2FirstWorkAbs(startAbs, endAbs){
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work") return t;
+  }
+  return null;
+}
+function nhvrV2HistoryStartAbs(){
+  if(typeof ensureCalculationHistory === "function") ensureCalculationHistory();
+  if(state.calculationHistory && state.calculationHistory.startDate) return fromKey(state.calculationHistory.startDate).getTime();
+  return fromKey(earliestRecordedDiaryDate()).getTime();
+}
+function nhvrV2NoPreviousHistoryMode(){
+  return !state.calculationHistory || state.calculationHistory.mode === "noWorkBeforeStart";
+}
+function nhvrV2ScanStartFor(key){
+  const hist = nhvrV2HistoryStartAbs();
+  return Math.max(nhvrV2DayStart(key) - 30*DAY_MS, hist);
+}
+function nhvrV2VirtualStartAnchor(key, scanStart, dayEnd){
+  const firstWork = nhvrV2FirstWorkAbs(scanStart, dayEnd);
+  if(firstWork === null) return null;
+  // If no earlier diary history is available/required, treat this as coming after full rest.
+  if(nhvrV2NoPreviousHistoryMode()) return {abs:firstWork, period:{minutes:1440, bestStationary:1440, bestStationaryOrSleeper:1440}, virtual:true};
+  return null;
+}
+function nhvrV2AnchorsForShort(key, profile, scanStart, dayEnd){
+  const anchors = nhvrV2RestEndAnchors(scanStart, dayEnd);
+  const virt = nhvrV2VirtualStartAnchor(key, scanStart, dayEnd);
+  if(virt && !anchors.some(a => Math.abs(a.abs - virt.abs) < 60000)) anchors.unshift(virt);
+  return anchors.sort((a,b)=>a.abs-b.abs);
+}
+function nhvrV2DueSlots(key, startAbs, requiredRestMins){
+  const slots = [];
+  const first = nhvrV2FirstWorkAbs(Math.max(startAbs, nhvrV2DayStart(key)), nhvrV2DayEnd(key));
+  if(first === null) return slots;
+  for(let i=0; i<nhvrV2RoundSlots(requiredRestMins); i++){
+    const ks = absToKeySlot(first + i*nhvrV2StepMs());
+    if(ks.key === key && ks.slot >= 0 && ks.slot < SLOTS_PER_DAY) slots.push(ks.slot);
+  }
+  return [...new Set(slots)];
+}
+function nhvrV2Finding(severity, key, title, message, slots, suggestion, anchorAbs, meta={}){
+  return {severity, title, message, focus:{type:"slot", slots:slots || []}, suggestion, fix:suggestion, anchorAbs, meta};
+}
+function nhvrV2FindShortBreach(key, profile, rule, anchorAbs, dayStart, dayEnd){
+  const windowEnd = anchorAbs + rule.minutes*60000;
+  if(windowEnd <= dayStart || anchorAbs >= dayEnd) return null;
+  let work = 0;
+  let dueAbs = null;
+  for(let t=anchorAbs; t<windowEnd; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work"){
+      work += SLOT;
+      if(work > rule.maxWork){ dueAbs = t; break; }
+    }
+  }
+  if(dueAbs === null) return null;
+  if(dueAbs < dayStart || dueAbs >= dayEnd) return null;
+  const restTaken = nhvrV2QualifyingRestIn(anchorAbs, dueAbs);
+  const missingRest = Math.max(SLOT, rule.minRest - restTaken);
+  const slots = nhvrV2DueSlots(key, dueAbs, missingRest);
+  if(!slots.length) return null;
+  const dueText = fmtHM(Math.min(...slots)*SLOT);
+  return nhvrV2Finding(
+    "error",
+    key,
+    `${rule.label} break due`,
+    `${profile.name}: ${formatMinsShort(work)} work counted from ${formatDateTimeForStats(anchorAbs)}. Limit is ${formatMinsShort(rule.maxWork)} work in ${rule.label}.`,
+    slots,
+    `Rest is due at ${dueText}. Change ${nhvrV2RoundSlots(missingRest)} block(s) to Rest here (${nhvrV2RestLabel(missingRest)}). Already counted qualifying rest in this window: ${formatMinsShort(restTaken)}.`,
+    anchorAbs,
+    {ruleType:"short", requiredRestMins:missingRest, windowStart:anchorAbs, windowEnd}
+  );
+}
+function nhvrV2AnchorsForPeriod(profile, scanStart, dayEnd, rule){
+  const restEnds = nhvrV2RestEndAnchors(scanStart, dayEnd);
+  if(rule.label === "24h" && profile.anchor24){
+    const filtered = restEnds.filter(a => nhvrV2Qualifies(a.period, profile.anchor24));
+    if(filtered.length) return filtered;
+    // If there is no relevant major rest and no prior history is available, use first work as a clean start.
+    return nhvrV2NoPreviousHistoryMode() ? [nhvrV2VirtualStartAnchor(absToKeySlot(dayEnd-1).key, scanStart, dayEnd)].filter(Boolean) : [];
+  }
+  if(rule.label === "52h"){
+    return restEnds.filter(a => nhvrV2Qualifies(a.period, {mins:300, kind:"stationaryOrSleeper"}));
+  }
+  if(rule.label === "82h"){
+    return restEnds;
+  }
+  if(rule.label === "7d" || rule.label === "7d long/night"){
+    return restEnds.filter(a => nhvrV2Qualifies(a.period, {mins:1440, kind:"stationary"}) || (profile.anchor24 && nhvrV2Qualifies(a.period, profile.anchor24)));
+  }
+  if(rule.label === "14d"){
+    return restEnds.filter(a => nhvrV2IsNightRestPeriod(a.period) || nhvrV2Qualifies(a.period, {mins:1440, kind:"stationary"}) || (profile.anchor24 && nhvrV2Qualifies(a.period, profile.anchor24)));
+  }
+  return restEnds;
+}
+function nhvrV2IsNightRestPeriod(period){
+  if(!period) return false;
+  if(period.bestStationary >= 1440) return true;
+  const startKey = toKey(new Date(period.startAbs - DAY_MS));
+  const endKey = toKey(new Date(period.endAbs));
+  for(let key=startKey; key<=endKey; key=addDays(key,1)){
+    const ns = fromKey(key).getTime() + 22*60*60000;
+    const ne = fromKey(addDays(key,1)).getTime() + 8*60*60000;
+    const s = Math.max(ns, period.startAbs);
+    const e = Math.min(ne, period.endAbs);
+    if(e > s && nhvrV2MaxContinuous(s, e, nhvrV2Predicate("stationary")) >= 420) return true;
+  }
+  return false;
+}
+function nhvrNightRestDates(startAbs, endAbs){
+  const dates = new Set();
+  nhvrV2RestPeriods(startAbs, endAbs).forEach(p => {
+    if(nhvrV2IsNightRestPeriod(p)) dates.add(toKey(new Date(p.endAbs - 60000)));
+  });
+  return [...dates].sort();
+}
+function nhvrV2HasConsecutiveDates(dates){
+  const set = new Set(dates);
+  return dates.some(d => set.has(addDays(d, 1)));
+}
+function nhvrV2LongNightWorkBetween(startAbs, endAbs){
+  let night = 0;
+  const byDay = {};
+  for(let t=startAbs; t<endAbs; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work"){
+      const d = new Date(t);
+      const h = d.getHours();
+      const k = toKey(d);
+      byDay[k] = (byDay[k] || 0) + SLOT;
+      if(h < 6) night += SLOT;
+    }
+  }
+  let longExtra = 0;
+  Object.values(byDay).forEach(m => { if(m > 720) longExtra += (m - 720); });
+  return night + longExtra;
+}
+function nhvrV2PeriodWorkFinding(key, profile, rule, anchorAbs, dayStart, dayEnd){
+  const winEnd = anchorAbs + rule.minutes*60000;
+  if(winEnd <= dayStart || anchorAbs >= dayEnd) return null;
+  const work = rule.longNight ? nhvrV2LongNightWorkBetween(anchorAbs, winEnd) : nhvrV2CountWork(anchorAbs, winEnd);
+  const maxWork = rule.longNight ? rule.maxLongNight : rule.maxWork;
+  if(maxWork === null || maxWork === undefined || work <= maxWork) return null;
+  let cum = 0, dueAbs = null;
+  for(let t=anchorAbs; t<winEnd; t+=nhvrV2StepMs()){
+    let add = 0;
+    if(rule.longNight){
+      const d = new Date(t);
+      add = (activityAtAbs(t)==="work" && d.getHours()<6) ? SLOT : 0;
+    }else{
+      add = activityAtAbs(t)==="work" ? SLOT : 0;
+    }
+    cum += add;
+    if(cum > maxWork){ dueAbs = t; break; }
+  }
+  if(dueAbs === null || dueAbs < dayStart || dueAbs >= dayEnd) return null;
+  // Work-limit overrun focus: mark only first over-limit block, not whole day.
+  const ks = absToKeySlot(dueAbs);
+  const slots = ks.key === key ? [ks.slot] : [];
+  return nhvrV2Finding(
+    rule.longNight ? "warn" : "error",
+    key,
+    `${rule.label} work limit reached`,
+    `${profile.name}: ${formatMinsShort(work)} counted in ${rule.label} from ${formatDateTimeForStats(anchorAbs)}. Limit is ${formatMinsShort(maxWork)}.`,
+    slots,
+    `Stop work at ${formatDateTimeForStats(dueAbs)} and check the full ${rule.label} counted period. The first over-limit block is highlighted only; later work is not all painted red.`,
+    anchorAbs,
+    {ruleType:"periodWork", windowStart:anchorAbs, windowEnd:winEnd}
+  );
+}
+function nhvrV2RestRequirementFinding(key, profile, rule, anchorAbs, dayStart, dayEnd){
+  if(!rule.restCheck) return null;
+  const winEnd = anchorAbs + rule.minutes*60000;
+  if(winEnd <= dayStart || anchorAbs >= dayEnd) return null;
+  // Do not call it a breach until the period has finished. While active, Stats shows whether it is still possible.
+  if(winEnd > dayEnd) return null;
+  const got = nhvrV2MaxContinuous(anchorAbs, winEnd, nhvrV2Predicate(rule.restCheck.kind));
+  if(got >= rule.restCheck.mins) return null;
+  const missing = rule.restCheck.mins;
+  const dueAbs = Math.max(dayStart, winEnd - missing*60000);
+  const slots = nhvrV2DueSlots(key, dueAbs, missing);
+  return nhvrV2Finding(
+    "error",
+    key,
+    `${rule.label} rest requirement missing`,
+    `${profile.name}: ${rule.label} from ${formatDateTimeForStats(anchorAbs)} needs ${rule.restCheck.label}; found ${formatMinsShort(got)} continuous qualifying rest.`,
+    slots,
+    `Add or correct ${rule.restCheck.label}. If the required rest was taken, set the Rest type to Stationary/Sleeper as required so the app can count it.`,
+    anchorAbs,
+    {ruleType:"periodRest", requiredRestMins:missing, windowStart:anchorAbs, windowEnd:winEnd}
+  );
+}
+function nhvrV2NightRestFinding(key, profile, rule, anchorAbs, dayStart, dayEnd){
+  if(!rule.nightRest) return null;
+  const winEnd = anchorAbs + rule.minutes*60000;
+  if(winEnd <= dayStart || anchorAbs >= dayEnd) return null;
+  if(winEnd > dayEnd) return null;
+  const nights = nhvrNightRestDates(anchorAbs, winEnd);
+  const okCount = nights.length >= rule.nightRest.count;
+  const okConsec = !rule.nightRest.consecutive || nhvrV2HasConsecutiveDates(nights);
+  if(okCount && okConsec) return null;
+  return nhvrV2Finding(
+    "warn",
+    key,
+    `${rule.label} night rest check`,
+    `${profile.name}: ${rule.label} needs ${rule.nightRest.label}; found ${nights.length} night rest(s).`,
+    [],
+    `Review night rests using the base time zone. A 24h stationary rest can count as a night rest.`,
+    anchorAbs,
+    {ruleType:"nightRest", nights}
+  );
+}
+function nhvrBreachesForDate(key){
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm){
+    return [nhvrV2Finding("error", key, "AFM conditions required", "AFM is selected. Enter certificate conditions before using fatigue calculations.", [], "Use AFM as record-only until exact AFM limits are configured.", nhvrV2DayStart(key))];
+  }
+  const dayStart = nhvrV2DayStart(key);
+  const dayEnd = nhvrV2DayEnd(key);
+  const scanStart = nhvrV2ScanStartFor(key);
+  const findings = [];
+  const seen = new Set();
+  const add = f => {
+    if(!f) return;
+    const slots = f.focus && Array.isArray(f.focus.slots) ? f.focus.slots.join(",") : "";
+    const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${slots}|${f.message}`;
+    if(seen.has(sig)) return;
+    seen.add(sig);
+    findings.push(f);
+  };
+
+  // Short-rest rules: count forward from the end of every rest break.
+  const anchors = nhvrV2AnchorsForShort(key, profile, scanStart, dayEnd);
+  profile.short.forEach(rule => {
+    anchors.forEach(a => add(nhvrV2FindShortBreach(key, profile, rule, a.abs, dayStart, dayEnd)));
+  });
+
+  // 24h and longer rules: count forward from the relevant major rest break.
+  profile.periods.forEach(rule => {
+    const periodAnchors = nhvrV2AnchorsForPeriod(profile, scanStart, dayEnd, rule);
+    periodAnchors.forEach(a => {
+      add(nhvrV2PeriodWorkFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+      add(nhvrV2RestRequirementFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+      add(nhvrV2NightRestFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+    });
+  });
+
+  // Keep display useful: first/highest-impact findings first, no duplicate huge red runs.
+  return findings.sort((a,b)=>{
+    const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+    const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+    return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+  }).slice(0, 16);
+}
+function breachSlotSetForGrid(key){
+  const set = new Set();
+  try{
+    if(typeof dayHasAnyWork === "function" && !dayHasAnyWork(key)) return set;
+    nhvrBreachesForDate(key).forEach(f => {
+      if((f.severity || "error") !== "error") return;
+      if(f.focus && Array.isArray(f.focus.slots)){
+        f.focus.slots.forEach(s => {
+          const n = Number(s);
+          if(!Number.isNaN(n)) set.add(n);
+        });
+      }
+    });
+  }catch(err){ console.warn("Breach highlight skipped", err); }
+  return set;
+}
+function nhvrActiveWindows(asOfAbs){
+  const key = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return [];
+  const scanStart = Math.max(asOfAbs - 30*DAY_MS, nhvrV2HistoryStartAbs());
+  const windows = [];
+  const shortAnchors = nhvrV2AnchorsForShort(key, profile, scanStart, asOfAbs + 30*DAY_MS);
+  profile.short.forEach(rule => {
+    shortAnchors.forEach(a => {
+      const end = a.abs + rule.minutes*60000;
+      if(a.abs <= asOfAbs && asOfAbs < end){
+        const work = nhvrV2CountWork(a.abs, asOfAbs);
+        const rest = nhvrV2QualifyingRestIn(a.abs, asOfAbs);
+        windows.push({label:rule.label, startAbs:a.abs, endAbs:end, maxWork:rule.maxWork, work, restTaken:rest, rest:rule.rest, minRest:rule.minRest, type:"short"});
+      }
+    });
+  });
+  profile.periods.forEach(rule => {
+    const anchors = nhvrV2AnchorsForPeriod(profile, scanStart, asOfAbs + 30*DAY_MS, rule);
+    anchors.forEach(a => {
+      const end = a.abs + rule.minutes*60000;
+      if(a.abs <= asOfAbs && asOfAbs < end){
+        const work = rule.longNight ? nhvrV2LongNightWorkBetween(a.abs, asOfAbs) : nhvrV2CountWork(a.abs, asOfAbs);
+        const maxWork = rule.longNight ? rule.maxLongNight : rule.maxWork;
+        const restNeed = rule.restCheck ? rule.restCheck.label : (rule.nightRest ? rule.nightRest.label : (rule.longNight ? "Long/night work limit" : "Work limit"));
+        if(maxWork !== null && maxWork !== undefined){
+          windows.push({label:rule.label, startAbs:a.abs, endAbs:end, maxWork, work, rest:restNeed, type:rule.longNight ? "longNight" : "period"});
+        }
+      }
+    });
+  });
+  return windows.sort((a,b)=>a.endAbs-b.endAbs || a.label.localeCompare(b.label));
+}
+function nhvrCanWorkStatus(asOfAbs){
+  const key = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return {minutes:0, reason:"AFM record-only: enter certificate conditions", windows:[]};
+  const windows = nhvrActiveWindows(asOfAbs);
+  if(!windows.length) return {minutes:24*60, reason:"No active counted window found in saved history", windows:[]};
+  let can = 24*60, reason = "";
+  windows.forEach(w => {
+    const rem = Math.max(0, w.maxWork - w.work);
+    if(rem < can){
+      can = rem;
+      reason = `${w.label} window ending ${formatDateTimeForStats(w.endAbs)}`;
+    }
+  });
+  return {minutes:can, reason:reason || "No limiting window", windows};
+}
+function findNextRequiredRestDue(asOfAbs){
+  const status = nhvrCanWorkStatus(asOfAbs);
+  if(status.minutes <= 0) return {dueAbs:asOfAbs, reason:status.reason || "Rest required now"};
+  if(status.minutes >= 24*60) return {dueAbs:null, reason:"No active counted window found"};
+  return {dueAbs:asOfAbs + status.minutes*60000, reason:status.reason};
+}
+function nhvrRuleCardsForDate(key){
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm) return `<div class="alert warn">AFM is selected. Enter AFM certificate conditions before relying on fatigue calculations.</div>`;
+  const findings = nhvrBreachesForDate(key);
+  const active = nhvrActiveWindows(nhvrV2DayEnd(key)-nhvrV2StepMs()).slice(0,8);
+  let html = `<span class="engineBadge">${escapeHtml(NHVR_ENGINE_VERSION)}</span><span class="engineBadge">${escapeHtml(profile.name)}</span>`;
+  if(findings.length){
+    html += findings.slice(0,6).map(f => `<div class="rule ${f.severity === "warn" ? "warn" : "bad"}"><h3>${escapeHtml(f.title)}</h3><p>${escapeHtml(f.message)}</p><p>${escapeHtml(f.suggestion || f.fix || "")}</p></div>`).join("");
+  }else{
+    html += `<div class="rule"><h3>No NHVR helper breach found on this page</h3><p>Uses 15-minute blocks, short windows from rest-break ends, and 24h+ windows from relevant major rest breaks.</p></div>`;
+  }
+  if(active.length){
+    html += active.map(w => {
+      const pct = Math.min(100, w.maxWork ? (w.work/w.maxWork)*100 : 0);
+      const bad = w.maxWork !== undefined && w.work >= w.maxWork;
+      return `<div class="rule ${bad ? "bad" : ""}"><h3>${escapeHtml(w.label)} active window</h3><div class="bar"><div class="fill" style="width:${pct}%"></div></div><p>${formatMinsShort(w.work)} / max ${formatMinsShort(w.maxWork)}</p><p class="anchorNote">From ${escapeHtml(formatDateTimeForStats(w.startAbs))} to ${escapeHtml(formatDateTimeForStats(w.endAbs))}</p></div>`;
+    }).join("");
+  }
+  return html;
+}
+function nhvrV2StatsDailyRows(asOfAbs, days=14){
+  const rows = [];
+  const endKey = absToKeySlot(asOfAbs).key;
+  for(let i=days-1; i>=0; i--){
+    const key = addDays(endKey, -i);
+    const ds = nhvrV2DayStart(key), de = ds + DAY_MS;
+    const work = nhvrV2CountWork(ds, de);
+    const rest = 1440 - work;
+    const nightWork = nhvrV2LongNightWorkBetween(ds, de);
+    const stationary7 = nhvrV2MaxContinuous(ds, de, nhvrV2Predicate("stationary")) >= 420;
+    const findings = nhvrBreachesForDate(key);
+    rows.push({key, work, rest, nightWork, stationary7, findings});
+  }
+  return rows;
+}
+function renderStatistics(){
+  const asOf = parseStatsAsOf();
+  const asOfAbs = asOf.getTime();
+  const oldStatsDate = state.selectedDate;
+  state.selectedDate = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(state.selectedDate);
+  const input = $("statsAsOf");
+  if(input && !input.value) input.value = makeLocalDateTimeValue(asOf);
+
+  const status = nhvrCanWorkStatus(asOfAbs);
+  const findings = nhvrBreachesForDate(state.selectedDate);
+  const nextRestDue = findNextRequiredRestDue(asOfAbs);
+  const canCard = $("canDriveCard");
+  if(canCard){
+    const bad = status.minutes <= 0 || findings.some(f => f.severity === "error");
+    const warn = !bad && (status.minutes <= 30 || findings.length);
+    canCard.className = "canDriveCard " + (bad ? "bad" : warn ? "warn" : "ok");
+    canCard.innerHTML = `
+      <p class="big">${status.minutes > 0 ? `Work remaining about ${formatMinsShort(status.minutes)}` : "Rest required now"}</p>
+      <p class="sub">Limiting rule: ${escapeHtml(status.reason)}. Calculated as of ${escapeHtml(formatDateTimeForStats(asOfAbs))}.</p>
+      <span class="engineBadge">${escapeHtml(NHVR_ENGINE_VERSION)}</span><span class="engineBadge">${escapeHtml(profile.name)}</span>
+      ${findings.length ? `<p class="sub"><strong>${findings.length}</strong> current issue(s) found on selected day.</p>` : `<p class="sub">No breach found for the selected day.</p>`}`;
+  }
+  const note = $("nhvrEngineNote");
+  if(note) note.textContent = "Rebuilt engine: 15-minute blocks; short periods from rest-break ends; 24h+ periods from relevant major rest breaks.";
+
+  const limitCards = $("statsLimitCards");
+  if(limitCards){
+    const active = status.windows || [];
+    if(!active.length){
+      limitCards.innerHTML = `<div class="statLimit"><h3><span>No active counted windows</span></h3><p>Enter earlier work/rest blocks if this looks wrong. With no previous history, the app will not invent old 7/14-day breaches.</p></div>`;
+    }else{
+      limitCards.innerHTML = active.slice(0,12).map(w => {
+        const rem = Math.max(0, (w.maxWork || 0) - (w.work || 0));
+        const pct = w.maxWork ? Math.min(100, (w.work/w.maxWork)*100) : 0;
+        const bad = rem <= 0;
+        return `<div class="statLimit ${bad ? "bad" : ""}">
+          <h3><span>${escapeHtml(w.label)} ${escapeHtml(w.type || "")}</span><span>${formatMinsShort(w.work)} / ${formatMinsShort(w.maxWork)}</span></h3>
+          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+          <p>Remaining work: <strong>${formatMinsShort(rem)}</strong> • Rest rule: ${escapeHtml(w.rest || "Check work option table")}</p>
+          ${w.minRest !== undefined ? `<p>Qualifying rest already counted in this short window: <strong>${formatMinsShort(w.restTaken || 0)}</strong> / required ${formatMinsShort(w.minRest)}</p>` : ""}
+          <p class="anchorNote">Counted from ${escapeHtml(formatDateTimeForStats(w.startAbs))} to ${escapeHtml(formatDateTimeForStats(w.endAbs))}</p>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  const breaks = $("statsBreaksDue");
+  if(breaks){
+    const restSinceBreak = continuousRestBeforeAbs(asOfAbs);
+    const workSinceBreak = continuousWorkBeforeAbs(asOfAbs);
+    const active24 = (status.windows || []).filter(w => w.label === "24h").sort((a,b)=>a.endAbs-b.endAbs)[0];
+    const firstFinding = findings.find(f => f.focus && f.focus.slots && f.focus.slots.length);
+    const redText = firstFinding ? `${firstFinding.title}: ${firstFinding.suggestion || firstFinding.fix || ""}` : "No required-rest red blocks on selected day.";
+    breaks.innerHTML = `
+      <div class="statRow"><strong>Continuous work before as-of time</strong><span>${formatMinsShort(workSinceBreak)}</span></div>
+      <div class="statRow"><strong>Continuous rest before as-of time</strong><span>${formatMinsShort(restSinceBreak)}</span></div>
+      <div class="statRow"><strong>Next work-limit/rest due</strong><span>${nextRestDue.dueAbs ? escapeHtml(formatDateTimeForStats(nextRestDue.dueAbs)) : "Not found"}<small>${escapeHtml(nextRestDue.reason || "")}</small></span></div>
+      <div class="statRow"><strong>Current 24h period ends</strong><span>${active24 ? escapeHtml(formatDateTimeForStats(active24.endAbs)) : "Not found"}<small>${active24 ? "A later major rest inside this period does not reset this 24h count." : "Add previous relevant major rest if needed."}</small></span></div>
+      <div class="statRow"><strong>Red-block advice</strong><span>${escapeHtml(redText)}</span></div>`;
+  }
+
+  const longRange = $("statsLongRange");
+  if(longRange){
+    const work24 = nhvrV2CountWork(asOfAbs-DAY_MS, asOfAbs);
+    const work7 = nhvrV2CountWork(asOfAbs-7*DAY_MS, asOfAbs);
+    const work14 = nhvrV2CountWork(asOfAbs-14*DAY_MS, asOfAbs);
+    const longNight7 = nhvrV2LongNightWorkBetween(asOfAbs-7*DAY_MS, asOfAbs);
+    const nights14 = nhvrNightRestDates(asOfAbs-14*DAY_MS, asOfAbs);
+    const daily = nhvrV2StatsDailyRows(asOfAbs, 7).map(r => `<tr><td>${escapeHtml(r.key)}</td><td>${formatMinsShort(r.work)}</td><td>${formatMinsShort(r.rest)}</td><td>${formatMinsShort(r.nightWork)}</td><td>${r.stationary7 ? "Yes" : "No"}</td><td>${r.findings.length}</td></tr>`).join("");
+    longRange.innerHTML = `
+      <div class="statRow"><strong>Last 24h work</strong><span>${formatMinsShort(work24)}</span></div>
+      <div class="statRow"><strong>Last 7 days work</strong><span>${formatMinsShort(work7)}</span></div>
+      <div class="statRow"><strong>Last 14 days work</strong><span>${formatMinsShort(work14)}</span></div>
+      <div class="statRow"><strong>BFM long/night work helper, last 7 days</strong><span>${formatMinsShort(longNight7)}</span></div>
+      <div class="statRow"><strong>Night rests found, last 14 days</strong><span>${nights14.length}<small>${escapeHtml(nights14.join(", ") || "None found")}</small></span></div>
+      <div class="statsMiniTableWrap"><table class="statsMiniTable"><thead><tr><th>Date</th><th>Work</th><th>Rest</th><th>Night/long</th><th>7h stationary</th><th>Issues</th></tr></thead><tbody>${daily}</tbody></table></div>`;
+  }
+
+  const lastFinished = findLastFinishedDrivingAbs(asOfAbs);
+  const lastBox = $("statsLastDriving");
+  if(lastBox){
+    lastBox.innerHTML = lastFinished ? `Last finished driving<br>${escapeHtml(formatDateTimeForStats(lastFinished))}` : "No finished driving found in saved history.";
+  }
+  state.selectedDate = oldStatsDate;
+}
+function nhvrEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  try{
+    const run = (name, scheme, slots, expectErrors, expectedFirstSlots) => {
+      const key = "2026-06-18";
+      state.selectedDate = key;
+      state.scheme = scheme;
+      state.ruleHistory = [{effectiveDate:key, scheme, mode:"solo", coDriverScheme:""}];
+      state.slots = {}; state.dayDetails = {}; state.entries = [];
+      state.calculationHistory = {startDate:key, mode:"noWorkBeforeStart"};
+      for(let i=0;i<slots;i++) setSlot(key, i, "work");
+      const findings = nhvrBreachesForDate(key).filter(f => (f.severity||"error")==="error");
+      const allSlots = findings.flatMap(f => f.focus && f.focus.slots ? f.focus.slots : []);
+      const firstSlots = [...new Set(allSlots)].sort((a,b)=>a-b).slice(0, expectedFirstSlots.length);
+      const okErrors = expectErrors ? findings.length > 0 : findings.length === 0;
+      const okSlots = expectedFirstSlots.length ? JSON.stringify(firstSlots) === JSON.stringify(expectedFirstSlots) : true;
+      results.push({name, ok:okErrors && okSlots, errors:findings.length, firstSlots, titles:findings.map(f=>f.title)});
+    };
+    run("Standard 4h continuous: no breach", "Standard", 16, false, []);
+    run("Standard 10h continuous: first required rests at 5:15 and 7:30", "Standard", 40, true, [21,30,31]);
+    run("BFM 10h continuous: first required rests at 6:00 and 8:30", "BFM", 40, true, [24,34,35]);
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
 

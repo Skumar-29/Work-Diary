@@ -520,3 +520,20 @@ Required-rest highlight fix:
 - Previous-date records are still considered by the NHVR engine where available.
 - Missing previous history is not treated as old-work unless data exists/settings say it should be imported.
 - No N/D, smart short-break, diary-book, page-number, or UI settings were changed.
+
+
+NHVR engine rebuild + Stats rebuild:
+- Replaced the fatigue/break calculation engine with a cleaner 15-minute-block model.
+- Short-rest rules now count forward from the end of every rest break, with a virtual clean-start anchor only when Calculation History says there was no prior work.
+- 24h and longer periods count forward from the relevant major rest break, not from inside work/rest periods.
+- Red blocks now mark only required-rest blocks or the first over-limit block, not all following work.
+- Standard solo, Standard two-up, BFM solo and BFM two-up rule profiles are rebuilt from the NHVR work diary tables.
+- Rebuilt Stats screen:
+  - work remaining / rest required card
+  - active counted windows
+  - next rest due / 24h period end
+  - 24h / 7d / 14d summary
+  - BFM long/night work helper
+  - last 7 daily summaries
+- Kept N/D, short-break settings, page numbering, diary book history, Find/Refresh, backup/import and smart options unchanged.
+- Added console self-test: nhvrEngineSelfTest()
