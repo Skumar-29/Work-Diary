@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 31;
-const APP_BUILD_NAME = "nhvr-engine-qa-final";
+const APP_SCHEMA_VERSION = 33;
+const APP_BUILD_NAME = "d-scenario-qa";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -6015,6 +6015,214 @@ function nhvrEngineSelfTest(){
     addResult("30-day mixed scenario battery: every intended breach day produced errors", batteryPass, {days:batteryDetails});
   }catch(err){
     addResult("Self-test crashed", false, {error:String(err && err.stack || err)});
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   D-SCENARIO QA SUITE
+   User-supplied stress tests D-01 to D-05.
+   ========================================================= */
+
+function isStationary(key, idx){
+  const t = getSlot(key, idx);
+  if(t !== "rest") return false;
+  const rt = restTypeForSlot(key, idx);
+  if(rt) return ["stationary","night","24h"].includes(rt);
+  return !!state.restAsStationary;
+}
+function nhvrV2SlotFlags(abs){
+  const {key, slot} = absToKeySlot(abs);
+  const rest = activityAtAbs(abs) !== "work";
+  const rt = rest ? restTypeForSlot(key, slot) : "work";
+  const stationary = rest && (rt === "stationary" || rt === "night" || rt === "24h" || (!rt && !!state.restAsStationary));
+  const sleeper = rest && rt === "sleeper";
+  return {key, slot, rest, rt, stationary, sleeper, stationaryOrSleeper:stationary || sleeper};
+}
+function nhvrDApplyProfileToDay(key){
+  const d = ensureDayDetail(key);
+  d.ruleScheme = state.scheme || "BFM";
+  d.driverMode = state.__qaMode || (state.ruleHistory && state.ruleHistory[0] && state.ruleHistory[0].mode) || "solo";
+  d.twoUpEnabled = d.driverMode === "twoUp";
+  d.twoUpScheme = state.scheme || "BFM";
+}
+function nhvrDSetSlotsForRanges(key, ranges, restType="rest"){
+  nhvrDApplyProfileToDay(key);
+  for(let i=0;i<SLOTS_PER_DAY;i++) setSlot(key, i, "rest");
+  const d = ensureDayDetail(key);
+  d.changeRows = [{time:"00:00", activity:"rest", restType, odometer:"", location:"", note:""}];
+  (ranges || []).forEach(([a,b]) => {
+    for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "work");
+  });
+  syncChangeRowsForDay(key);
+  nhvrDApplyProfileToDay(key);
+}
+function nhvrDSetRestTypeRange(key, a, b, restType){
+  nhvrDApplyProfileToDay(key);
+  const detail = ensureDayDetail(key);
+  if(!Array.isArray(detail.changeRows)) detail.changeRows = [];
+  detail.changeRows.push({time:fmtHM(a*SLOT), activity:"rest", restType, odometer:"", location:"", note:"QA rest type"});
+  detail.changeRows.sort((x,y)=>timeToMins(x.time)-timeToMins(y.time));
+  for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "rest");
+}
+function nhvrDCountWorkRange(startKey, days){
+  let total = 0;
+  for(let i=0;i<days;i++){
+    const k = addDays(startKey, i);
+    for(let s=0;s<SLOTS_PER_DAY;s++) if(getSlot(k,s)==="work") total += SLOT;
+  }
+  return total;
+}
+function nhvrDReset(startKey, scheme="BFM", mode="twoUp"){
+  state.selectedDate = startKey;
+  state.scheme = scheme;
+  state.__qaMode = mode;
+  state.ruleHistory = [{effectiveDate:startKey, scheme, mode, coDriverScheme:"BFM"}];
+  state.slots = {};
+  state.dayDetails = {};
+  state.entries = [];
+  state.calculationHistory = {startDate:startKey, mode:"noWorkBeforeStart"};
+  state.restAsStationary = false;
+}
+function nhvrDAddResult(results, id, name, pass, expected, actual){
+  results.push({id, scenario:name, pass:!!pass, expected, actual});
+}
+function nhvrV2SleeperUnder5Findings(key, profile){
+  if(!profile || profile.key !== "StandardTwoUp") return [];
+  const dayStart = nhvrV2DayStart(key), dayEnd = nhvrV2DayEnd(key);
+  const out = [];
+  let start = null, mins = 0;
+  for(let t=dayStart; t<=dayEnd; t+=nhvrV2StepMs()){
+    const inRange = t < dayEnd;
+    const f = inRange ? nhvrV2SlotFlags(t) : {rest:false, rt:""};
+    if(inRange && f.rest && f.rt === "sleeper"){
+      if(start === null) start = t;
+      mins += SLOT;
+    }else if(start !== null){
+      const nextWork = inRange && activityAtAbs(t) === "work";
+      if(nextWork && mins >= 270 && mins < 300){
+        const ks = absToKeySlot(t);
+        out.push(nhvrV2Finding(
+          "error",
+          key,
+          "Two-up sleeper berth rest under 5h",
+          `Standard two-up: moving sleeper berth rest was ${formatMinsShort(mins)}, which is less than the 5 continuous hours required for that 24h rest option.`,
+          ks.key === key ? [ks.slot] : [],
+          `Extend the moving sleeper berth rest to at least 5 continuous hours, or record a qualifying stationary rest if that is what occurred.`,
+          start,
+          {ruleType:"twoUpSleeperUnder5", restMins:mins}
+        ));
+      }
+      start = null; mins = 0;
+    }
+  }
+  return out;
+}
+function nhvrV2RollingCalendarSafetyFindings(key, profile, existing){
+  const out = [];
+  const dayEnd = nhvrV2DayEnd(key);
+  const addIfNeeded = (label, days, maxWork) => {
+    if(!maxWork) return;
+    if((existing || []).some(f => String(f.title || "").includes(`${label} work`))) return;
+    const startAbs = dayEnd - days*DAY_MS;
+    const work = nhvrV2CountWork(startAbs, dayEnd);
+    if(work > maxWork){
+      const firstSlot = Math.max(0, SLOTS_PER_DAY-1);
+      out.push(nhvrV2Finding(
+        "error",
+        key,
+        `${label} work limit reached`,
+        `${profile.name}: ${formatMinsShort(work)} work found in the last ${label} ending this day. Limit is ${formatMinsShort(maxWork)}.`,
+        [firstSlot],
+        `Review the previous ${label}. This rolling safety check prevents ${label} over-limit work from staying green when the relevant major-rest anchor is unclear or missing.`,
+        startAbs,
+        {ruleType:"rollingCalendarSafety", label, work, maxWork}
+      ));
+    }
+  };
+  if(profile.key === "BFMTwoUp"){ addIfNeeded("7d", 7, 4200); addIfNeeded("14d", 14, 8400); }
+  if(profile.key === "StandardTwoUp"){ addIfNeeded("7d", 7, 3600); addIfNeeded("14d", 14, 7200); }
+  if(profile.key === "Standard"){ addIfNeeded("7d", 7, 4320); addIfNeeded("14d", 14, 8640); }
+  if(profile.key === "BFM"){ addIfNeeded("14d", 14, 8640); }
+  return out;
+}
+(function(){
+  const coreBreachesForDate = nhvrBreachesForDate;
+  nhvrBreachesForDate = function(key){
+    const profile = nhvrProfileForDate(key);
+    const findings = coreBreachesForDate(key) || [];
+    nhvrV2SleeperUnder5Findings(key, profile).forEach(f => findings.push(f));
+    nhvrV2RollingCalendarSafetyFindings(key, profile, findings).forEach(f => findings.push(f));
+    return findings.sort((a,b)=>{
+      const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+      const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+      return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+    }).slice(0, 24);
+  };
+})();
+function nhvrEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  try{
+    nhvrDReset("2026-06-01", "BFM", "twoUp");
+    nhvrDSetSlotsForRanges("2026-06-01", [[0,56]], "sleeper");
+    let f = nhvrBreachesForDate("2026-06-01");
+    nhvrDAddResult(results, "D-01", "BFM two-up max 14h work in 24h", !f.some(x=>String(x.title).includes("24h work limit")), "PASS: no 24h work-limit breach", f.map(x=>x.title));
+
+    nhvrDReset("2026-06-01", "BFM", "twoUp");
+    for(let d=0; d<4; d++){
+      const k = addDays("2026-06-01", d);
+      nhvrDSetSlotsForRanges(k, [[0,24],[48,72]], "sleeper");
+      nhvrDSetRestTypeRange(k, 24, 48, "sleeper");
+      nhvrDSetRestTypeRange(k, 72, 96, "sleeper");
+    }
+    f = nhvrBreachesForDate("2026-06-04");
+    nhvrDAddResult(results, "D-02", "BFM two-up 82h with zero stationary rest", f.some(x=>String(x.title).includes("82h") && String(x.title).includes("rest")), "FAIL: 82h stationary-rest breach", f.map(x=>x.title));
+
+    nhvrDReset("2026-06-01", "BFM", "twoUp");
+    for(let d=0; d<7; d++){
+      const k = addDays("2026-06-01", d);
+      nhvrDSetSlotsForRanges(k, d < 6 ? [[0,42]] : [[0,40]], "stationary");
+      nhvrDSetRestTypeRange(k, 42, 96, "stationary");
+    }
+    f = nhvrBreachesForDate("2026-06-07");
+    nhvrDAddResult(results, "D-03", "BFM two-up 73h work in rolling 7 days", f.some(x=>String(x.title).includes("7d work")), "FAIL: 7d work limit breach", {workMins:nhvrDCountWorkRange("2026-06-01",7), titles:f.map(x=>x.title)});
+
+    nhvrDReset("2026-06-01", "BFM", "twoUp");
+    let slotsNeeded = Math.ceil(143*60/SLOT);
+    for(let d=0; d<14; d++){
+      const k = addDays("2026-06-01", d);
+      const slotsToday = Math.min(44, slotsNeeded);
+      nhvrDSetSlotsForRanges(k, [[0,slotsToday]], "stationary");
+      nhvrDSetRestTypeRange(k, slotsToday, 96, "stationary");
+      slotsNeeded -= slotsToday;
+    }
+    f = nhvrBreachesForDate("2026-06-14");
+    nhvrDAddResult(results, "D-04", "BFM two-up 143h work in rolling 14 days", f.some(x=>String(x.title).includes("14d work")), "FAIL: 14d work limit breach", {workMins:nhvrDCountWorkRange("2026-06-01",14), titles:f.map(x=>x.title)});
+
+    nhvrDReset("2026-06-01", "Standard", "twoUp");
+    nhvrDSetSlotsForRanges("2026-06-01", [[19,56]], "sleeper");
+    nhvrDSetRestTypeRange("2026-06-01", 0, 19, "sleeper");
+    f = nhvrBreachesForDate("2026-06-01");
+    nhvrDAddResult(results, "D-05", "Standard two-up moving sleeper berth rest only 4h45", f.some(x=>String(x.title).includes("sleeper berth rest under 5h")), "FAIL: under-5h moving sleeper berth rest", f.map(x=>x.title));
+
+    nhvrDReset("2026-06-22", "BFM", "solo");
+    nhvrDSetSlotsForRanges("2026-06-22", [[0,24],[26,46],[48,67]], "rest");
+    f = nhvrBreachesForDate("2026-06-22");
+    nhvrDAddResult(results, "U-01", "User BFM 15h45m solo day must breach", f.some(x=>String(x.title).includes("24h work")), "FAIL: BFM solo >14h/24h", f.map(x=>({title:x.title, slots:x.focus&&x.focus.slots})));
+
+    nhvrDReset("2026-06-24", "BFM", "solo");
+    nhvrDSetSlotsForRanges("2026-06-24", [[8,24],[24,32],[34,54],[56,72],[78,96]], "rest");
+    f = nhvrBreachesForDate("2026-06-24");
+    nhvrDAddResult(results, "U-02", "User BFM 20h30m solo day must not stay green", f.some(x=>String(x.title).includes("24h work")), "FAIL: BFM solo >14h/24h", f.map(x=>({title:x.title, slots:x.focus&&x.focus.slots})));
+
+  }catch(err){
+    nhvrDAddResult(results, "QA-CRASH", "Self-test crashed", false, "No crash", String(err && err.stack || err));
   }finally{
     state = {...state, ...backup};
   }

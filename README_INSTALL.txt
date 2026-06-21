@@ -554,3 +554,15 @@ NHVR engine QA final:
 - Added console self-test: nhvrEngineSelfTest()
 - Ran automated scenario tests, including the user's BFM 15h45m and 20h+ screenshots plus a 30-day mixed scenario battery.
 - No N/D, smart short-break, diary book history, page numbering, vehicle records, Find/Refresh or graph layout settings were changed.
+
+
+D-scenario QA update:
+- Added the user's D-01 to D-05 test cases to nhvrEngineSelfTest().
+- Corrected moving sleeper rest handling:
+  - Sleeper berth rest counts for moving-sleeper rules where allowed.
+  - Sleeper berth rest no longer counts as stationary rest for rules that specifically require stationary rest.
+  - Use Stationary / Night / 24h rest type when the rest must count as stationary.
+- Added Standard two-up under-5h moving sleeper berth rest warning for D-05.
+- Added 7d/14d rolling safety checks for work-limit ceilings so over-limit long periods cannot stay green if anchor history is unclear.
+- Added user screenshot scenarios U-01 and U-02 to QA tests.
+- No page numbering, diary book history, N/D, Find/Refresh, graph layout or vehicle records changed.
