@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v69-d-scenario-qa";
+const CACHE = "truck-work-diary-v70-change-table-blank-fix";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

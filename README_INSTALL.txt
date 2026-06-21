@@ -566,3 +566,10 @@ D-scenario QA update:
 - Added 7d/14d rolling safety checks for work-limit ceilings so over-limit long periods cannot stay green if anchor history is unclear.
 - Added user screenshot scenarios U-01 and U-02 to QA tests.
 - No page numbering, diary book history, N/D, Find/Refresh, graph layout or vehicle records changed.
+
+
+Change table blank-box fix:
+- Fixed Work/rest change details table rendering when the holder was visible but rows were not being displayed.
+- If there are no rows, the app now shows a clear message instead of a blank white box.
+- Removed forced blank table height/min-height behaviour.
+- This update only touches the change-details table display/refresh. It does not change fatigue rules, page numbering, graph layout, N/D logic, vehicle records, or diary history.

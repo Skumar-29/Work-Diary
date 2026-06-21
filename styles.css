@@ -1447,3 +1447,43 @@ body.location-picker-off .locPickerWrap input{
   .statsMiniTable th{background:#1d2b22}
   .statsMiniTable th,.statsMiniTable td{border-color:#333}
 }
+
+/* Change details blank-table repair */
+#changeDetailsEditor{
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+  background:#fff!important;
+}
+#changeDetailsEditor:empty::before{
+  content:"No work/rest change rows to show yet.";
+  display:block;
+  padding:16px;
+  color:#555;
+  font-weight:800;
+}
+.changeEmptyMessage{
+  padding:16px;
+  color:#555;
+  font-weight:800;
+  background:#fff;
+  border-radius:14px;
+}
+.changeTable{
+  display:table!important;
+}
+.changeTable tbody{
+  display:table-row-group!important;
+}
+.changeTable tr{
+  display:table-row!important;
+}
+.changeTable td,
+.changeTable th{
+  display:table-cell!important;
+}

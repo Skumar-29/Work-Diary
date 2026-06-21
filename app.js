@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 33;
-const APP_BUILD_NAME = "d-scenario-qa";
+const APP_SCHEMA_VERSION = 34;
+const APP_BUILD_NAME = "change-table-blank-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -2807,36 +2807,56 @@ function setChangeRowLocationFromCurrent(index, btn){
 
 
 function ensureChangeDetailsVisible(){
-  const editor = $("changeDetailsEditor");
-  if(editor){
-    editor.hidden = false;
-    editor.style.display = "block";
-    editor.style.visibility = "visible";
-    editor.style.opacity = "1";
-  }
+  const holder = $("changeDetailsEditor");
+  if(!holder) return;
+  holder.classList.add("changeDetailsReady");
+  holder.style.minHeight = "";
+  holder.style.height = "";
+  holder.style.display = "block";
+  holder.style.visibility = "visible";
+  holder.style.opacity = "1";
+}
+
+
+function changeDetailsMessage(text){
+  return `<div class="changeEmptyMessage">${escapeHtml(text)}</div>`;
 }
 
 function renderChangeDetailsEditor(){
   ensureChangeDetailsVisible();
   const holder = $("changeDetailsEditor");
   if(!holder) return;
-  const rows = syncChangeRowsForDay(state.selectedDate);
-  if(!rows.length){
-    holder.innerHTML = `<p class="hint">No work/rest changes yet.</p>`;
+
+  let rows = [];
+  try{
+    rows = syncChangeRowsForDay(state.selectedDate) || [];
+  }catch(err){
+    console.error("Change details sync failed", err);
+    holder.innerHTML = changeDetailsMessage("Could not build the work/rest change table. Tap refresh, or change one block and save again.");
     return;
   }
-  const htmlRows = rows.map((r, i) => {
-    const locked = rowDetailsNotRequired(r);
-    const continuation = isAutoContinuationRow(r);
-    const returnShort = isAutoShortReturnRow(r);
+
+  if(!Array.isArray(rows) || !rows.length){
+    holder.innerHTML = changeDetailsMessage("No work/rest change rows on this page yet. Select Work or Rest blocks above and tap refresh if needed.");
+    return;
+  }
+
+  const safeRows = rows.map((r, i) => {
+    r = r || {};
+    const locked = typeof rowDetailsNotRequired === "function" ? rowDetailsNotRequired(r) : !!(r.noDetails || r.autoNoDetails);
+    const continuation = typeof isAutoContinuationRow === "function" ? isAutoContinuationRow(r) : !!(r.autoNoDetails && r.autoReason === "continuation");
+    const returnShort = typeof isAutoShortReturnRow === "function" ? isAutoShortReturnRow(r) : !!(r.autoNoDetails && r.autoReason === "shortBreakReturn");
     const disabled = locked ? "disabled" : "";
+    const activity = r.activity || "rest";
+    const label = typeof compactChangeActivityLabel === "function" ? compactChangeActivityLabel(activity) : (activity === "work" ? "Work" : "Rest");
     const lockTitle = continuation ? "Continuation from previous day — not a new details/rest-type row" :
       (returnShort ? "Return to work after short break — odometer/location not required" :
       "Tick if odometer/location are not required for this row");
+
     let restCell = "";
     if(continuation){
       restCell = `<span class="continuationBadge">Continuation</span>`;
-    }else if(r.activity === "rest"){
+    }else if(activity === "rest"){
       restCell = `
           <select class="restTypeSelect" data-change-index="${i}" data-change-field="restType">
             <option value="" ${!r.restType ? "selected" : ""}>Select rest type</option>
@@ -2845,33 +2865,40 @@ function renderChangeDetailsEditor(){
             <option value="sleeper" ${r.restType==="sleeper" ? "selected" : ""}>Sleeper berth rest</option>
             <option value="night" ${r.restType==="night" ? "selected" : ""}>Night rest</option>
             <option value="24h" ${r.restType==="24h" ? "selected" : ""}>24h rest</option>
-          </select>${r.restType === "rest" ? `<span class="shortBreakBadge">Rest</span>` : ""}`;
+          </select>`;
     }else{
       restCell = `<span class="readonlyCell">Work</span>`;
     }
+
     return `
     <tr class="${locked ? "detailsLockedRow" : ""} ${continuation ? "continuationRow" : ""}">
       <td class="ndCell" title="${escapeHtml(lockTitle)}">
         <input type="checkbox" class="ndCheck" data-change-index="${i}" data-change-field="noDetails" ${r.noDetails ? "checked" : ""} ${r.autoNoDetails ? "disabled" : ""}>
       </td>
-      <td class="readonlyCell timeCell">${escapeHtml(r.time)}</td>
-      <td class="readonlyCell activityCell">${escapeHtml(compactChangeActivityLabel(r.activity))}</td>
-      <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${locked ? "" : escapeHtml(r.odometer)}" placeholder="${locked ? "N/D" : "Odometer"}" ${disabled}></td>
+      <td class="readonlyCell timeCell">${escapeHtml(r.time || "")}</td>
+      <td class="readonlyCell activityCell">${escapeHtml(label)}</td>
+      <td><input data-change-index="${i}" data-change-field="odometer" inputmode="numeric" pattern="[0-9]*" data-numeric-only="true" value="${locked ? "" : escapeHtml(r.odometer || "")}" placeholder="${locked ? "N/D" : "Odometer"}" ${disabled}></td>
       <td>
         <div class="locPickerWrap">
-          <input data-change-index="${i}" data-change-field="location" value="${locked ? "" : escapeHtml(r.location)}" placeholder="${locked ? "N/D" : "Suburb/town/rest area"}" ${disabled}>
+          <input data-change-index="${i}" data-change-field="location" value="${locked ? "" : escapeHtml(r.location || "")}" placeholder="${locked ? "N/D" : "Suburb/town/rest area"}" ${disabled}>
           <button type="button" class="locBtn" data-location-index="${i}" title="Use current location" ${disabled}>📍</button>
         </div>
       </td>
       <td>${restCell}</td>
-      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note)}" placeholder="${continuation ? "Continuation" : (locked ? "Reason optional" : "Optional")}"></td>
+      <td><input data-change-index="${i}" data-change-field="note" value="${escapeHtml(r.note || "")}" placeholder="${continuation ? "Continuation" : (locked ? "Reason optional" : "Optional")}"></td>
     </tr>`;
   }).join("");
+
   holder.innerHTML = `
     <table class="changeTable">
-      <thead><tr><th>N/D</th><th>Time</th><th>Activity</th><th>Odometer</th><th>Location</th><th>Rest type</th><th>Note</th></tr></thead>
-      <tbody>${htmlRows}</tbody>
+      <thead>
+        <tr>
+          <th>N/D</th><th>Time</th><th>Activity</th><th>Odometer</th><th>Location</th><th>Rest type</th><th>Note</th>
+        </tr>
+      </thead>
+      <tbody>${safeRows}</tbody>
     </table>`;
+
   ensureChangeDetailsVisible();
 }
 
