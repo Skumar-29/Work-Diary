@@ -546,3 +546,11 @@ BFM 24h anchor repair:
 - Added a Work Diary alert for the first NHVR helper breach on the selected page.
 - Added/updated console self-test: nhvrEngineSelfTest()
 - No N/D, diary book, page numbering, vehicle records, Find/Refresh or layout settings were changed.
+
+
+NHVR engine QA final:
+- Fixed long-period fallback anchors: if a relevant major-rest anchor is not available, 24h+ periods are counted from the end of any rest break.
+- Added an obvious daily over-limit safety check so a BFM day with more than 14h work or Standard day with more than 12h work cannot stay green.
+- Added console self-test: nhvrEngineSelfTest()
+- Ran automated scenario tests, including the user's BFM 15h45m and 20h+ screenshots plus a 30-day mixed scenario battery.
+- No N/D, smart short-break, diary book history, page numbering, vehicle records, Find/Refresh or graph layout settings were changed.

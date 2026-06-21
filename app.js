@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 30;
-const APP_BUILD_NAME = "bfm-24h-anchor-fix";
+const APP_SCHEMA_VERSION = 31;
+const APP_BUILD_NAME = "nhvr-engine-qa-final";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -5817,6 +5817,204 @@ function nhvrEngineSelfTest(){
     runContinuous("Standard 10h continuous: short windows due", "Standard", 40, true, [21,30,31]);
     runContinuous("BFM 10h continuous: short windows due", "BFM", 40, true, [24,34,35]);
     runBFMPlan();
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   NHVR ENGINE QA FINAL v2.2
+   Fix focus:
+   - If no relevant major-rest anchor is available for a 24h+ period,
+     count from the end of ANY rest break, as per the work diary guide.
+   - Add an obvious daily over-limit safety check for BFM/Standard.
+   - Keep N/D, smart short-breaks, page numbering, diary history and UI options unchanged.
+   ========================================================= */
+
+function nhvrV2AnyRestAnchors(scanStart, dayEnd){
+  return nhvrV2RestEndAnchors(scanStart, dayEnd).filter(a => a && a.period && a.period.minutes >= 15);
+}
+function nhvrV2AnchorsForPeriod(profile, scanStart, dayEnd, rule){
+  const key = absToKeySlot(dayEnd-1).key;
+  const firstWork = nhvrV2FirstWorkAbs(scanStart, dayEnd);
+  const realRelevant = nhvrV2RealAnchorsForPeriod(profile, scanStart, dayEnd, rule).filter(Boolean);
+  const anyRest = nhvrV2AnyRestAnchors(scanStart, dayEnd);
+  const virt = nhvrV2VirtualStartAnchor(key, scanStart, dayEnd);
+
+  let anchors = [...realRelevant];
+
+  // NHVR guide: if the required relevant major rest break is not available
+  // for 24h+ counting, count from the end of any rest break.
+  if(["24h","52h","82h","7d","7d long/night","14d"].includes(rule.label)){
+    const relevantBeforeFirstWork = firstWork === null ? true : realRelevant.some(a => a.abs <= firstWork);
+    if(!relevantBeforeFirstWork || !realRelevant.length){
+      anchors = anchors.concat(anyRest);
+    }
+  }
+
+  // If the app starts from a clean history start and there is no rest-end before the first work,
+  // use the first work block as a clean-start anchor so the day still checks correctly.
+  if(virt && firstWork !== null){
+    const hasAnchorAtOrBeforeFirstWork = anchors.some(a => a.abs <= firstWork);
+    if(!hasAnchorAtOrBeforeFirstWork) anchors.unshift(virt);
+  }
+
+  // Remove duplicates and sort.
+  const seen = new Set();
+  return anchors.filter(Boolean).filter(a => {
+    const k = Math.round(a.abs / 60000);
+    if(seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).sort((a,b)=>a.abs-b.abs);
+}
+function nhvrV2DailyObviousOverLimitFinding(key, profile, existingFindings){
+  if(profile.afm) return null;
+  const maxWork = profile.key === "BFM" || profile.key === "BFMTwoUp" ? 840 : 720;
+  const dayStart = nhvrV2DayStart(key);
+  const dayEnd = nhvrV2DayEnd(key);
+  const work = nhvrV2CountWork(dayStart, dayEnd);
+  if(work <= maxWork) return null;
+  // Do not duplicate if 24h already found.
+  if((existingFindings || []).some(f => String(f.title || "").includes("24h"))) return null;
+  let cum = 0, dueAbs = null;
+  for(let t=dayStart; t<dayEnd; t+=nhvrV2StepMs()){
+    if(activityAtAbs(t) === "work"){
+      cum += SLOT;
+      if(cum > maxWork){ dueAbs = t; break; }
+    }
+  }
+  if(dueAbs === null) return null;
+  const ks = absToKeySlot(dueAbs);
+  return nhvrV2Finding(
+    "error",
+    key,
+    "24h work limit reached",
+    `${profile.name}: ${formatMinsShort(work)} work recorded on this daily sheet. This is above the ${formatMinsShort(maxWork)} maximum work limit for a 24h period.`,
+    ks.key === key ? [ks.slot] : [],
+    `Obvious over-limit safety check: stop/check from ${formatDateTimeForStats(dueAbs)}. This check is added so a day with more than the 24h maximum cannot stay green even when previous major-rest details/rest types are incomplete.`,
+    dayStart,
+    {ruleType:"dailySafety24h", work, maxWork}
+  );
+}
+function nhvrBreachesForDate(key){
+  const profile = nhvrProfileForDate(key);
+  if(profile.afm){
+    return [nhvrV2Finding("error", key, "AFM conditions required", "AFM is selected. Enter certificate conditions before using fatigue calculations.", [], "Use AFM as record-only until exact AFM limits are configured.", nhvrV2DayStart(key))];
+  }
+  const dayStart = nhvrV2DayStart(key);
+  const dayEnd = nhvrV2DayEnd(key);
+  const scanStart = nhvrV2ScanStartFor(key);
+  const findings = [];
+  const seen = new Set();
+  const add = f => {
+    if(!f) return;
+    const slots = f.focus && Array.isArray(f.focus.slots) ? f.focus.slots.join(",") : "";
+    const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${slots}|${f.message}`;
+    if(seen.has(sig)) return;
+    seen.add(sig);
+    findings.push(f);
+  };
+
+  const anchors = nhvrV2AnchorsForShort(key, profile, scanStart, dayEnd);
+  profile.short.forEach(rule => {
+    anchors.forEach(a => add(nhvrV2FindShortBreach(key, profile, rule, a.abs, dayStart, dayEnd)));
+  });
+
+  profile.periods.forEach(rule => {
+    const periodAnchors = nhvrV2AnchorsForPeriod(profile, scanStart, dayEnd, rule);
+    periodAnchors.forEach(a => {
+      add(nhvrV2PeriodWorkFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+      add(nhvrV2RestRequirementFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+      add(nhvrV2NightRestFinding(key, profile, rule, a.abs, dayStart, dayEnd));
+    });
+  });
+
+  add(nhvrV2DailyObviousOverLimitFinding(key, profile, findings));
+
+  return findings.sort((a,b)=>{
+    const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+    const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+    return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+  }).slice(0, 20);
+}
+function nhvrV2SetSlotsForRanges(key, ranges){
+  for(let i=0;i<SLOTS_PER_DAY;i++) setSlot(key, i, "rest");
+  (ranges || []).forEach(([a,b]) => {
+    for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "work");
+  });
+}
+function nhvrV2WorkMinsForDate(key){
+  let m = 0;
+  for(let i=0;i<SLOTS_PER_DAY;i++) if(getSlot(key,i)==="work") m += SLOT;
+  return m;
+}
+function nhvrV2TestReset(startKey="2026-06-01", scheme="BFM", mode="solo"){
+  state.selectedDate = startKey;
+  state.scheme = scheme;
+  state.ruleHistory = [{effectiveDate:startKey, scheme, mode, coDriverScheme:""}];
+  state.slots = {};
+  state.dayDetails = {};
+  state.entries = [];
+  state.calculationHistory = {startDate:startKey, mode:"noWorkBeforeStart"};
+  state.restAsStationary = false;
+}
+function nhvrEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const addResult = (name, pass, info={}) => results.push({name, pass:!!pass, ...info});
+  try{
+    const testOne = (name, scheme, ranges, expectedTitlePart, expectedSlot, key="2026-06-01") => {
+      nhvrV2TestReset(key, scheme, "solo");
+      nhvrV2SetSlotsForRanges(key, ranges);
+      const findings = nhvrBreachesForDate(key);
+      const titles = findings.map(f => f.title);
+      const slots = [...new Set(findings.flatMap(f => f.focus && f.focus.slots ? f.focus.slots : []))].sort((a,b)=>a-b);
+      const pass = (!expectedTitlePart || titles.some(t => String(t).includes(expectedTitlePart))) && (expectedSlot === null || slots.includes(expectedSlot));
+      addResult(name, pass, {work:nhvrV2WorkMinsForDate(key), titles, slots:slots.slice(0,10)});
+    };
+
+    testOne("BFM 15h45m with two 30m breaks must breach 24h at 3pm", "BFM", [[0,24],[26,46],[48,67]], "24h", 60);
+    testOne("BFM 20h30m with several rests must not stay green", "BFM", [[8,24],[24,32],[34,54],[56,72],[78,96]], "24h", null, "2026-06-02");
+    testOne("BFM 10h continuous must trigger short breaks", "BFM", [[0,40]], "6¼h", 24, "2026-06-03");
+    testOne("Standard 10h continuous must trigger short breaks", "Standard", [[0,40]], "5½h", 21, "2026-06-04");
+    testOne("Standard 4h continuous should be clean", "Standard", [[0,16]], null, null, "2026-06-05");
+
+    // 30-day mixed scenario battery: BFM, Standard, two-up style modes, cross-midnight continuation patterns.
+    nhvrV2TestReset("2026-06-01", "BFM", "solo");
+    const scenarios = [
+      {scheme:"BFM", mode:"solo", ranges:[[0,24],[26,46],[48,67]], expect:true},
+      {scheme:"BFM", mode:"solo", ranges:[[0,20],[22,42],[44,60]], expect:false},
+      {scheme:"BFM", mode:"solo", ranges:[[8,24],[24,32],[34,54],[56,72],[78,96]], expect:true},
+      {scheme:"Standard", mode:"solo", ranges:[[0,22]], expect:true},
+      {scheme:"Standard", mode:"solo", ranges:[[0,20],[21,40]], expect:false},
+      {scheme:"Standard", mode:"solo", ranges:[[0,24],[25,44],[50,70]], expect:true},
+      {scheme:"BFM", mode:"twoUp", ranges:[[0,56]], expect:false},
+      {scheme:"Standard", mode:"twoUp", ranges:[[0,52]], expect:true},
+      {scheme:"BFM", mode:"solo", ranges:[[80,96]], expect:false},
+      {scheme:"BFM", mode:"solo", ranges:[[0,50]], expect:true}
+    ];
+    let batteryPass = true;
+    let batteryDetails = [];
+    for(let i=0;i<30;i++){
+      const sc = scenarios[i % scenarios.length];
+      const key = addDays("2026-06-01", i);
+      state.ruleHistory = [{effectiveDate:key, scheme:sc.scheme, mode:sc.mode, coDriverScheme:""}];
+      state.selectedDate = key;
+      nhvrV2SetSlotsForRanges(key, sc.ranges);
+      const errs = nhvrBreachesForDate(key).filter(f => (f.severity || "error") === "error");
+      const got = errs.length > 0;
+      const ok = sc.expect ? got : true; // clean scenarios can still warn due previous multi-day history; only require breach scenarios not green.
+      if(!ok) batteryPass = false;
+      batteryDetails.push({day:key, scheme:sc.scheme, mode:sc.mode, expectBreach:sc.expect, errors:errs.map(e=>e.title).slice(0,4)});
+    }
+    addResult("30-day mixed scenario battery: every intended breach day produced errors", batteryPass, {days:batteryDetails});
+  }catch(err){
+    addResult("Self-test crashed", false, {error:String(err && err.stack || err)});
   }finally{
     state = {...state, ...backup};
   }

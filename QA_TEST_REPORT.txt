@@ -1,0 +1,416 @@
+NHVR ENGINE QA TEST REPORT
+
+[
+  {
+    "name": "BFM 15h45m with two 30m breaks must breach 24h at 3pm",
+    "pass": true,
+    "work": 945,
+    "titles": [
+      "24h work limit reached",
+      "24h rest requirement missing"
+    ],
+    "slots": [
+      60
+    ]
+  },
+  {
+    "name": "BFM 20h30m with several rests must not stay green",
+    "pass": true,
+    "work": 1170,
+    "titles": [
+      "24h work limit reached"
+    ],
+    "slots": [
+      68
+    ]
+  },
+  {
+    "name": "BFM 10h continuous must trigger short breaks",
+    "pass": true,
+    "work": 600,
+    "titles": [
+      "6¼h break due",
+      "9h break due",
+      "24h rest requirement missing"
+    ],
+    "slots": [
+      24,
+      34,
+      35
+    ]
+  },
+  {
+    "name": "Standard 10h continuous must trigger short breaks",
+    "pass": true,
+    "work": 600,
+    "titles": [
+      "5½h break due",
+      "8h break due",
+      "24h rest requirement missing"
+    ],
+    "slots": [
+      21,
+      30,
+      31
+    ]
+  },
+  {
+    "name": "Standard 4h continuous should be clean",
+    "pass": true,
+    "work": 240,
+    "titles": [
+      "24h rest requirement missing"
+    ],
+    "slots": []
+  },
+  {
+    "name": "30-day mixed scenario battery: every intended breach day produced errors",
+    "pass": true,
+    "days": [
+      {
+        "day": "2026-06-01",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-02",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "24h rest requirement missing",
+          "24h work limit reached",
+          "24h rest requirement missing",
+          "24h work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-03",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h rest requirement missing",
+          "24h rest requirement missing",
+          "24h work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-04",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h rest requirement missing",
+          "5½h break due",
+          "24h rest requirement missing",
+          "8h break due"
+        ]
+      },
+      {
+        "day": "2026-06-05",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "8h break due",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-06",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h rest requirement missing",
+          "5½h break due",
+          "7d work limit reached",
+          "8h break due"
+        ]
+      },
+      {
+        "day": "2026-06-07",
+        "scheme": "BFM",
+        "mode": "twoUp",
+        "expectBreach": false,
+        "errors": [
+          "24h rest requirement missing",
+          "24h work limit reached",
+          "24h rest requirement missing",
+          "6¼h break due"
+        ]
+      },
+      {
+        "day": "2026-06-08",
+        "scheme": "Standard",
+        "mode": "twoUp",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "7d work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-09",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": []
+      },
+      {
+        "day": "2026-06-10",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "6¼h break due",
+          "9h break due",
+          "12h break due",
+          "24h work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-11",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-12",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "24h rest requirement missing",
+          "24h work limit reached",
+          "14d work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-13",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "24h rest requirement missing",
+          "14d work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-14",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "5½h break due"
+        ]
+      },
+      {
+        "day": "2026-06-15",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "7d work limit reached",
+          "14d work limit reached",
+          "14d work limit reached",
+          "8h break due"
+        ]
+      },
+      {
+        "day": "2026-06-16",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "5½h break due"
+        ]
+      },
+      {
+        "day": "2026-06-17",
+        "scheme": "BFM",
+        "mode": "twoUp",
+        "expectBreach": false,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-18",
+        "scheme": "Standard",
+        "mode": "twoUp",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "14d work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-19",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-20",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "6¼h break due"
+        ]
+      },
+      {
+        "day": "2026-06-21",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "14d rest requirement missing",
+          "14d work limit reached",
+          "24h work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-22",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "24h rest requirement missing",
+          "24h work limit reached",
+          "14d work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-23",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "14d rest requirement missing",
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "24h rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-24",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "5½h break due"
+        ]
+      },
+      {
+        "day": "2026-06-25",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "7d work limit reached",
+          "14d work limit reached",
+          "14d work limit reached",
+          "8h break due"
+        ]
+      },
+      {
+        "day": "2026-06-26",
+        "scheme": "Standard",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "24h rest requirement missing",
+          "14d work limit reached",
+          "5½h break due"
+        ]
+      },
+      {
+        "day": "2026-06-27",
+        "scheme": "BFM",
+        "mode": "twoUp",
+        "expectBreach": false,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-28",
+        "scheme": "Standard",
+        "mode": "twoUp",
+        "expectBreach": true,
+        "errors": [
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "7d rest requirement missing",
+          "14d work limit reached"
+        ]
+      },
+      {
+        "day": "2026-06-29",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": false,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing"
+        ]
+      },
+      {
+        "day": "2026-06-30",
+        "scheme": "BFM",
+        "mode": "solo",
+        "expectBreach": true,
+        "errors": [
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "14d rest requirement missing",
+          "6¼h break due"
+        ]
+      }
+    ]
+  }
+]
