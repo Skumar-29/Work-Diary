@@ -1642,3 +1642,37 @@ body.location-picker-off .locPickerWrap input{
     background:#142016;
   }
 }
+
+/* Header overlap / breach alert scroll-position fix */
+:root{
+  --fixedHeaderSafeOffset: 170px;
+}
+html{
+  scroll-padding-top: var(--fixedHeaderSafeOffset);
+}
+[id],
+.alertCard,
+.errorCard,
+.breachCard,
+.nhvrAlert,
+.fatigueAlert,
+#alerts,
+#driverAlerts,
+#fatigueAlerts,
+#bfmChecker,
+#diaryGrid,
+#workDiaryScreen,
+#diaryScreen{
+  scroll-margin-top: var(--fixedHeaderSafeOffset);
+}
+.alertList,
+.driverAlerts,
+.fatigueAlerts,
+.nhvrAlerts{
+  scroll-margin-top: var(--fixedHeaderSafeOffset);
+}
+@media (max-width: 520px){
+  :root{
+    --fixedHeaderSafeOffset: 184px;
+  }
+}

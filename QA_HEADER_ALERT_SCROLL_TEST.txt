@@ -1,0 +1,10 @@
+HEADER ALERT SCROLL TEST REPORT
+
+{
+  "css_scroll_padding_added": true,
+  "css_scroll_margin_added": true,
+  "js_safe_scroll_helper_added": true,
+  "js_scroll_patch_added": true,
+  "build_name": true,
+  "cache_version": true
+}

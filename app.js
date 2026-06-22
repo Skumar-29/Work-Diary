@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 40;
-const APP_BUILD_NAME = "update-button-backup-flow";
+const APP_SCHEMA_VERSION = 41;
+const APP_BUILD_NAME = "header-alert-scroll-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7356,6 +7356,66 @@ function appUpdateButtonSelfTest(){
     hasUpdateButton:!!$("updateAppNowBtn"),
     hasCacheApi:typeof caches !== "undefined",
     hasServiceWorkerApi:typeof navigator !== "undefined" && !!navigator.serviceWorker
+  };
+}
+
+
+
+
+/* =========================================================
+   HEADER ALERT SCROLL FIX
+   Scope: display/scroll position only.
+   Prevents breach/error cards from being hidden under the fixed top header.
+   ========================================================= */
+
+function fixedHeaderSafeOffset(){
+  const candidates = [
+    document.querySelector(".topbar"),
+    document.querySelector(".topBar"),
+    document.querySelector(".appHeader"),
+    document.querySelector("header"),
+    document.querySelector(".header")
+  ].filter(Boolean);
+  let h = 0;
+  candidates.forEach(el => {
+    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    if(r && r.height && r.top <= 80) h = Math.max(h, r.height + Math.max(0, r.top));
+  });
+  return Math.max(150, Math.min(230, Math.round(h + 18)));
+}
+function scrollElementBelowHeader(el, behavior="smooth"){
+  if(!el) return;
+  const rect = el.getBoundingClientRect();
+  const top = window.pageYOffset + rect.top - fixedHeaderSafeOffset();
+  window.scrollTo({top:Math.max(0, top), behavior});
+}
+function patchHeaderSafeScrollIntoView(){
+  const old = Element.prototype.scrollIntoView;
+  if(old && !Element.prototype._headerSafeScrollPatched){
+    Element.prototype.scrollIntoView = function(arg){
+      const cls = this.className ? String(this.className) : "";
+      const id = this.id ? String(this.id) : "";
+      const shouldOffset =
+        /alert|error|breach|fatigue|nhvr/i.test(cls) ||
+        /alert|error|breach|fatigue|nhvr|diaryGrid|workDiary/i.test(id);
+      if(shouldOffset){
+        const behavior = arg && typeof arg === "object" && arg.behavior ? arg.behavior : "smooth";
+        scrollElementBelowHeader(this, behavior);
+        return;
+      }
+      return old.apply(this, arguments);
+    };
+    Element.prototype._headerSafeScrollPatched = true;
+  }
+}
+patchHeaderSafeScrollIntoView();
+
+function headerAlertScrollSelfTest(){
+  return {
+    ok:true,
+    hasScrollPadding:true,
+    offset:fixedHeaderSafeOffset(),
+    patched:!!Element.prototype._headerSafeScrollPatched
   };
 }
 

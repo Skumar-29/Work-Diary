@@ -636,3 +636,11 @@ Update button + backup prompt flow:
 - Force Reload App Files uses the same backup prompt and cache refresh flow.
 - Diary data, settings, vehicle records, book history, N/D data and saved records are not cleared.
 - Added current app version display and appUpdateButtonSelfTest().
+
+
+Header alert scroll fix:
+- Fixed breach/error notification cards being partly hidden under the fixed top header.
+- Added safe scroll padding and scroll margins for alert/error/breach/fatigue cards.
+- Added a safe scroll helper so Open error / scroll-to-alert actions position the card below the header.
+- This is display/scroll only. It does not change fatigue rules, graph, stats calculations, smart major rest, update button, N/D, page numbering, diary history or settings.
+- Added self-test helper: headerAlertScrollSelfTest()

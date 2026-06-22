@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v76-update-button-backup-flow";
+const CACHE = "truck-work-diary-v77-header-alert-scroll-fix";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 self.addEventListener("install", e => {
