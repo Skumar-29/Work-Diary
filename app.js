@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 39;
-const APP_BUILD_NAME = "stats-14day-accumulated-table";
+const APP_SCHEMA_VERSION = 40;
+const APP_BUILD_NAME = "update-button-backup-flow";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7200,5 +7200,162 @@ function stats14DayTableSelfTest(){
     state = {...state, ...backup};
   }
   return results;
+}
+
+
+
+
+/* =========================================================
+   APP UPDATE BUTTON + BACKUP PROMPT FLOW
+   Scope: update/cache refresh only. Does not clear diary data.
+   ========================================================= */
+
+const APP_UPDATE_FLOW_VERSION = "update-button-backup-flow";
+
+function appUpdateCurrentLabel(){
+  return `${APP_BUILD_NAME} / schema ${APP_SCHEMA_VERSION}`;
+}
+function renderAppUpdateSettings(){
+  const label = $("currentAppVersion");
+  if(label) label.textContent = `Current app version: ${appUpdateCurrentLabel()}`;
+}
+function appUpdateStatus(text){
+  const el = $("appUpdateStatus");
+  if(el) el.textContent = text;
+}
+function appUpdateShowBackupPanel(reason){
+  const panel = $("appUpdateBackupPanel");
+  const ready = $("appUpdateReadyPanel");
+  const readyText = $("appUpdateReadyText");
+  if(panel) panel.hidden = false;
+  if(ready) ready.hidden = true;
+  if(readyText) readyText.textContent = reason || "Ready to update.";
+}
+function appUpdateHideBackupPanel(){
+  const panel = $("appUpdateBackupPanel");
+  const ready = $("appUpdateReadyPanel");
+  if(panel) panel.hidden = true;
+  if(ready) ready.hidden = true;
+}
+function appUpdateShowReady(text){
+  const ready = $("appUpdateReadyPanel");
+  const readyText = $("appUpdateReadyText");
+  if(ready) ready.hidden = false;
+  if(readyText) readyText.textContent = text || "Ready to update.";
+}
+async function appUpdateFetchRemoteBuild(){
+  const url = `app.js?updateCheck=${Date.now()}`;
+  const res = await fetch(url, {cache:"no-store"});
+  if(!res.ok) throw new Error(`Could not check update (${res.status})`);
+  const txt = await res.text();
+  const build = (txt.match(/const\s+APP_BUILD_NAME\s*=\s*"([^"]+)"/) || [])[1] || "";
+  const schema = (txt.match(/const\s+APP_SCHEMA_VERSION\s*=\s*(\d+)/) || [])[1] || "";
+  return {build, schema, rawLength:txt.length};
+}
+async function checkAppUpdate(){
+  renderAppUpdateSettings();
+  appUpdateHideBackupPanel();
+  appUpdateStatus("Checking for latest app files…");
+  try{
+    const remote = await appUpdateFetchRemoteBuild();
+    if(remote.build && remote.build !== APP_BUILD_NAME){
+      appUpdateStatus(`New version found: ${remote.build} / schema ${remote.schema || "?"}. Save backup first or skip backup.`);
+      appUpdateShowBackupPanel(`New version found: ${remote.build}.`);
+    }else{
+      appUpdateStatus(`No newer build detected. Current: ${appUpdateCurrentLabel()}. If the app still looks old, use Force Reload App Files.`);
+    }
+  }catch(err){
+    appUpdateStatus(`Could not check online update. Check internet connection, then try again. ${err && err.message ? err.message : ""}`);
+  }
+}
+function forceReloadAppFilesFlow(){
+  renderAppUpdateSettings();
+  appUpdateStatus("Force reload will clear only cached app files and keep diary data.");
+  appUpdateShowBackupPanel("Force reload selected.");
+}
+async function saveBackupBeforeUpdate(){
+  ensureBackupReminder();
+  const before = state.backupReminder && state.backupReminder.lastBackupAt || "";
+  appUpdateStatus("Starting backup save…");
+  try{
+    if(typeof shareJsonBackup === "function"){
+      await shareJsonBackup();
+    }else if(typeof exportJsonBackup === "function"){
+      exportJsonBackup();
+    }
+  }catch(err){
+    try{ exportJsonBackup(); }catch(e){}
+  }
+
+  const after = state.backupReminder && state.backupReminder.lastBackupAt || "";
+  if(after && after !== before){
+    appUpdateStatus("Backup saved. You can update now.");
+    appUpdateShowReady("Backup saved. Tap Update App Now.");
+  }else{
+    appUpdateStatus("Backup was cancelled or not confirmed. Save backup again or tap Skip Backup.");
+    appUpdateShowReady("Backup was not confirmed. Tap Update App Now only if you want to continue without backup.");
+  }
+}
+function skipBackupBeforeUpdate(){
+  appUpdateStatus("Backup skipped. Your diary data should stay, but backup is recommended before updating.");
+  appUpdateShowReady("Backup skipped. Tap Update App Now.");
+}
+async function updateAppNow(){
+  appUpdateStatus("Updating app files… Please wait.");
+  try{
+    if(typeof flushSaveSoon === "function") flushSaveSoon();
+    if(typeof save === "function") save();
+
+    if(typeof addAuditLog === "function"){
+      addAuditLog("App update requested", `From ${APP_BUILD_NAME}. Cache files only; diary data kept.`);
+    }
+
+    if("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs){
+        try{ await reg.update(); }catch(e){}
+        try{ if(reg.waiting) reg.waiting.postMessage({type:"SKIP_WAITING"}); }catch(e){}
+      }
+    }
+
+    if("caches" in window){
+      const keys = await caches.keys();
+      await Promise.all(keys
+        .filter(k => /truck-work-diary|work-diary|diary/i.test(k))
+        .map(k => caches.delete(k)));
+    }
+
+    appUpdateStatus("Latest files requested. Reloading…");
+    const base = location.origin + location.pathname;
+    const hash = location.hash || "";
+    location.replace(`${base}?appUpdate=${Date.now()}${hash}`);
+  }catch(err){
+    appUpdateStatus(`Update reload failed: ${err && err.message ? err.message : err}. Try closing and reopening the Home Screen app.`);
+  }
+}
+function setupAppUpdateButtons(){
+  renderAppUpdateSettings();
+  if($("checkAppUpdateBtn")) $("checkAppUpdateBtn").onclick = checkAppUpdate;
+  if($("forceReloadAppFilesBtn")) $("forceReloadAppFilesBtn").onclick = forceReloadAppFilesFlow;
+  if($("saveBackupBeforeUpdateBtn")) $("saveBackupBeforeUpdateBtn").onclick = saveBackupBeforeUpdate;
+  if($("skipBackupBeforeUpdateBtn")) $("skipBackupBeforeUpdateBtn").onclick = skipBackupBeforeUpdate;
+  if($("updateAppNowBtn")) $("updateAppNowBtn").onclick = updateAppNow;
+  if($("cancelAppUpdateBtn")) $("cancelAppUpdateBtn").onclick = () => {
+    appUpdateHideBackupPanel();
+    appUpdateStatus("Update cancelled.");
+  };
+}
+setTimeout(setupAppUpdateButtons, 0);
+
+function appUpdateButtonSelfTest(){
+  return {
+    ok:true,
+    current:appUpdateCurrentLabel(),
+    hasCheckButton:!!$("checkAppUpdateBtn"),
+    hasBackupPanel:!!$("appUpdateBackupPanel"),
+    hasUpdateButton:!!$("updateAppNowBtn"),
+    hasCacheApi:typeof caches !== "undefined",
+    hasServiceWorkerApi:typeof navigator !== "undefined" && !!navigator.serviceWorker
+  };
 }
 

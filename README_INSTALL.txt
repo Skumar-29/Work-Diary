@@ -624,3 +624,15 @@ Stats 14-day accumulated hours table:
 - Date column is frozen. Table is horizontally scrollable for readability.
 - This is display-only and does not change fatigue breach detection, graph layout, N/D, page numbering, vehicle records, diary history or settings.
 - Added self-test helper: stats14DayTableSelfTest()
+
+
+Update button + backup prompt flow:
+- Added Settings > App updates.
+- Check for Update checks the deployed app.js build using a no-cache request.
+- Before updating, the app asks: Save Backup or Skip Backup.
+- Save Backup starts JSON backup save/share first, then shows Update App Now.
+- Skip Backup directly shows Update App Now with a warning.
+- Update App Now clears cached app files only, updates service worker/cache, and reloads the app.
+- Force Reload App Files uses the same backup prompt and cache refresh flow.
+- Diary data, settings, vehicle records, book history, N/D data and saved records are not cleared.
+- Added current app version display and appUpdateButtonSelfTest().

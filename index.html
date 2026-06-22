@@ -562,7 +562,32 @@
           <button id="exportJsonBackup" class="secondary">Export Backup JSON</button>
           <button id="shareJsonBackup" class="secondary">Share / Save Backup JSON</button>
 
-          <button id="checkDataHealth" class="secondary">Check data health</button>
+          
+          <div class="appUpdateBox">
+            <h3>App updates</h3>
+            <p id="currentAppVersion" class="hint">Current app version: checking…</p>
+            <div class="updateButtonRow">
+              <button id="checkAppUpdateBtn" class="secondary" type="button">Check for Update</button>
+              <button id="forceReloadAppFilesBtn" class="secondary" type="button">Force Reload App Files</button>
+            </div>
+            <p id="appUpdateStatus" class="hint">Use this when Cloudflare/GitHub has a newer version but the Home Screen app still shows the old version.</p>
+
+            <div id="appUpdateBackupPanel" class="appUpdatePanel" hidden>
+              <h4>Before updating, save a backup?</h4>
+              <p class="hint">Your diary data should stay, but saving a backup first is safest.</p>
+              <div class="updateButtonRow">
+                <button id="saveBackupBeforeUpdateBtn" class="primary" type="button">Save Backup</button>
+                <button id="skipBackupBeforeUpdateBtn" class="secondary" type="button">Skip Backup</button>
+              </div>
+              <div id="appUpdateReadyPanel" hidden>
+                <p id="appUpdateReadyText" class="hint">Ready to update.</p>
+                <button id="updateAppNowBtn" class="primary full" type="button">Update App Now</button>
+              </div>
+              <button id="cancelAppUpdateBtn" class="secondary full" type="button">Cancel</button>
+            </div>
+          </div>
+
+<button id="checkDataHealth" class="secondary">Check data health</button>
           <p id="dataHealthStatus" class="hint">Data health not checked yet.</p>
           <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
           <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">

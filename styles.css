@@ -1593,3 +1593,52 @@ body.location-picker-off .locPickerWrap input{
   .stats14Table th,.stats14Table td{border-color:#333}
   .stats14Note{background:#111}
 }
+
+/* App update backup flow */
+.appUpdateBox{
+  margin:12px 0;
+  padding:12px;
+  border:1px solid #d7e8df;
+  border-radius:16px;
+  background:#f7fcf9;
+}
+.appUpdateBox h3{
+  margin-top:0;
+}
+.updateButtonRow{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.updateButtonRow button{
+  flex:1 1 150px;
+}
+.appUpdatePanel{
+  margin-top:10px;
+  padding:10px;
+  border:1px dashed #9bb9aa;
+  border-radius:14px;
+  background:#fff;
+}
+.appUpdatePanel h4{
+  margin:0 0 6px;
+}
+#appUpdateReadyPanel{
+  margin:10px 0;
+  padding:10px;
+  border-radius:12px;
+  background:#eefaf2;
+}
+@media (prefers-color-scheme:dark){
+  .appUpdateBox{
+    background:#0e1b12;
+    border-color:#244c31;
+  }
+  .appUpdatePanel{
+    background:#111;
+    border-color:#35543e;
+  }
+  #appUpdateReadyPanel{
+    background:#142016;
+  }
+}

@@ -1,0 +1,11 @@
+APP UPDATE BUTTON TEST REPORT
+
+{
+  "index_has_check_button": true,
+  "index_has_save_backup": true,
+  "index_has_update_now": true,
+  "app_has_update_functions": true,
+  "service_worker_skip_waiting": true,
+  "cache_version": true,
+  "build_name": true
+}
