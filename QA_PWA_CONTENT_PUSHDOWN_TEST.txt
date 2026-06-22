@@ -1,0 +1,13 @@
+PWA CONTENT PUSHDOWN TEST REPORT
+
+{
+  "pwa_content_pushdown_css": true,
+  "pwa_only_class_js": true,
+  "no_global_scroll_padding_fix": true,
+  "no_prototype_scroll_patch": true,
+  "status_bar_default": true,
+  "stats14_kept": true,
+  "legacy_stats_removed": true,
+  "build_name": true,
+  "cache_version": true
+}

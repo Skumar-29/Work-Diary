@@ -1673,3 +1673,32 @@ body.homeScreenPwa .card{
     background:#111;
   }
 }
+
+/* Home Screen PWA content push-down fix */
+:root{
+  --pwaContentPushDown: 26px;
+}
+body.homeScreenPwa main{
+  padding-top:var(--pwaContentPushDown);
+}
+body.homeScreenPwa #diaryScreen.screen.active,
+body.homeScreenPwa #drivingScreen.screen.active,
+body.homeScreenPwa #statsScreen.screen.active,
+body.homeScreenPwa #graphScreen.screen.active,
+body.homeScreenPwa #vehiclesScreen.screen.active,
+body.homeScreenPwa #settingsScreen.screen.active{
+  padding-top:0;
+}
+body.homeScreenPwa #alerts{
+  margin-top:0;
+}
+body.homeScreenPwa .alerts .alert:first-child{
+  margin-top:0;
+}
+body.homeScreenPwa .auditFocusBox,
+body.homeScreenPwa #diaryGrid,
+body.homeScreenPwa #auditFixPanel,
+body.homeScreenPwa #changeDetailsEditor,
+body.homeScreenPwa .card{
+  scroll-margin-top:calc(var(--pwaHeaderBottom, 150px) + var(--pwaContentPushDown) + 16px);
+}

@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 42;
-const APP_BUILD_NAME = "pwa-header-safe-remove-legacy-stats";
+const APP_SCHEMA_VERSION = 43;
+const APP_BUILD_NAME = "pwa-content-pushdown-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7412,6 +7412,46 @@ function pwaHeaderSafeSelfTest(){
     standalone:isHomeScreenPwaMode(),
     headerBottom:getComputedStyle(document.documentElement).getPropertyValue("--pwaHeaderBottom") || "",
     mode:"pwa-only-no-global-prototype-no-zoom"
+  };
+}
+
+
+
+
+/* =========================================================
+   HOME SCREEN PWA CONTENT PUSHDOWN
+   Scope: installed Home Screen/PWA only.
+   Adds a small real top spacer under the header. No zoom/width changes.
+   ========================================================= */
+
+function applyPwaContentPushDownClass(){
+  const standalone = !!(window.navigator && window.navigator.standalone) ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  document.body.classList.toggle("homeScreenPwa", standalone);
+  return standalone;
+}
+applyPwaContentPushDownClass();
+window.addEventListener("resize", applyPwaContentPushDownClass);
+window.addEventListener("orientationchange", () => setTimeout(applyPwaContentPushDownClass, 200));
+
+(function(){
+  if(typeof renderAll === "function" && !renderAll._pwaPushDownPatched){
+    const coreRenderAllForPwaPushDown = renderAll;
+    renderAll = function(){
+      coreRenderAllForPwaPushDown();
+      applyPwaContentPushDownClass();
+    };
+    renderAll._pwaPushDownPatched = true;
+  }
+})();
+
+function pwaContentPushDownSelfTest(){
+  return {
+    ok:true,
+    standalone:applyPwaContentPushDownClass(),
+    pushDown:getComputedStyle(document.documentElement).getPropertyValue("--pwaContentPushDown") || "",
+    bodyClass:document.body.className || "",
+    mode:"pwa-only-main-padding-no-zoom-no-width-change"
   };
 }
 

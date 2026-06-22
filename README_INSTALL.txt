@@ -646,3 +646,13 @@ PWA header safe + remove legacy Stats card:
 - Kept update button, smart major rest, BFM long/night, BFM 84h checkpoint, graph, N/D, page numbering, diary history and settings.
 - No fatigue rule calculations were changed.
 - Added self-test helper: pwaHeaderSafeSelfTest()
+
+
+PWA content push-down fix:
+- Added a real small top spacer under the header only when opened from iPhone Home Screen / standalone PWA.
+- This physically pushes Diary, Driving, Stats, Graph, Vehicles and Settings content a little lower so it is not hidden under the header.
+- Safari browser layout is unchanged.
+- No app width, zoom, grid scale, or global scroll behaviour changed.
+- Kept the compact 14-day Stats table and removed the old 7-day/14-day stats card from the previous update.
+- No fatigue rules, BFM long/night, BFM 84h checkpoint, smart major rest, update button, N/D, page numbering, diary history or settings were changed.
+- Added self-test helper: pwaContentPushDownSelfTest()
