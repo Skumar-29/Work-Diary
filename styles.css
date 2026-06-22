@@ -1702,3 +1702,113 @@ body.homeScreenPwa #changeDetailsEditor,
 body.homeScreenPwa .card{
   scroll-margin-top:calc(var(--pwaHeaderBottom, 150px) + var(--pwaContentPushDown) + 16px);
 }
+
+/* Landscape compact mode */
+@media (orientation: landscape) and (max-height: 520px){
+  body.landscapeCompact{
+    --landscapeTopGap: 6px;
+    --landscapeNavHeight: 66px;
+  }
+
+  body.landscapeCompact .topbar{
+    padding-top:calc(env(safe-area-inset-top, 0px) + 4px)!important;
+    padding-bottom:6px!important;
+    min-height:auto!important;
+  }
+
+  body.landscapeCompact .headerRow,
+  body.landscapeCompact .topRow,
+  body.landscapeCompact .navRow{
+    min-height:36px!important;
+  }
+
+  body.landscapeCompact .title,
+  body.landscapeCompact .screenTitle,
+  body.landscapeCompact #screenTitle{
+    font-size:22px!important;
+    line-height:1.05!important;
+  }
+
+  body.landscapeCompact .dateLine,
+  body.landscapeCompact #dateLabel,
+  body.landscapeCompact #currentDateLabel{
+    font-size:18px!important;
+    line-height:1.1!important;
+  }
+
+  body.landscapeCompact .schemeLabel,
+  body.landscapeCompact #schemeLabel{
+    font-size:18px!important;
+    line-height:1.1!important;
+  }
+
+  body.landscapeCompact .findBtn,
+  body.landscapeCompact #findBtn,
+  body.landscapeCompact .refreshBtn,
+  body.landscapeCompact #refreshBtn{
+    transform:scale(.88);
+    transform-origin:left center;
+  }
+
+  body.landscapeCompact .prevNext,
+  body.landscapeCompact .dateNav,
+  body.landscapeCompact .navButtons{
+    transform:scale(.9);
+    transform-origin:right center;
+  }
+
+  body.landscapeCompact main{
+    padding-bottom:calc(var(--landscapeNavHeight) + env(safe-area-inset-bottom, 0px) + 8px)!important;
+  }
+
+  body.landscapeCompact .bottomNav,
+  body.landscapeCompact .bottom-nav,
+  body.landscapeCompact #bottomNav,
+  body.landscapeCompact nav.bottom{
+    min-height:var(--landscapeNavHeight)!important;
+    height:var(--landscapeNavHeight)!important;
+    padding:6px 12px calc(env(safe-area-inset-bottom, 0px) + 5px)!important;
+    border-radius:28px!important;
+  }
+
+  body.landscapeCompact .bottomNav button,
+  body.landscapeCompact .bottom-nav button,
+  body.landscapeCompact #bottomNav button,
+  body.landscapeCompact nav.bottom button{
+    font-size:11px!important;
+    padding:3px 6px!important;
+    min-height:48px!important;
+  }
+
+  body.landscapeCompact .bottomNav .icon,
+  body.landscapeCompact .bottom-nav .icon,
+  body.landscapeCompact #bottomNav .icon,
+  body.landscapeCompact nav.bottom .icon{
+    font-size:20px!important;
+    line-height:1!important;
+  }
+
+  body.landscapeCompact .hint,
+  body.landscapeCompact .instruction,
+  body.landscapeCompact .helpBox{
+    font-size:13px!important;
+    padding-top:6px!important;
+    padding-bottom:6px!important;
+  }
+
+  body.landscapeCompact .card{
+    margin-top:8px!important;
+    margin-bottom:8px!important;
+    padding-top:10px!important;
+    padding-bottom:10px!important;
+  }
+
+  body.landscapeCompact .stats14Table{
+    font-size:11px!important;
+  }
+
+  body.landscapeCompact .stats14Table th,
+  body.landscapeCompact .stats14Table td{
+    padding:4px 5px!important;
+  }
+}

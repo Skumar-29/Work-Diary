@@ -1,0 +1,11 @@
+LANDSCAPE COMPACT MODE TEST REPORT
+
+{
+  "landscape_js_added": true,
+  "landscape_css_added": true,
+  "portrait_unaffected_by_media": true,
+  "self_test_added": true,
+  "service_worker_no_redirect_kept": true,
+  "build_name": true,
+  "cache_version": true
+}

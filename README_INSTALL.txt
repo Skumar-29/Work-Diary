@@ -665,3 +665,11 @@ Service worker no-redirect fix:
 - Old app caches are deleted on activation, but diary data and localStorage are not cleared.
 - Added helper: repairServiceWorkerRedirectIssue()
 - If the broken old service worker prevents the app from opening, open the Cloudflare link in Safari and use Force Reload App Files. If it still cannot open, clear website data for this domain once, then reopen.
+
+
+Landscape compact mode:
+- Added a display-only compact layout when the iPhone is rotated horizontally.
+- Portrait mode is unchanged.
+- Landscape mode reduces top header height, bottom nav height, labels and padding so more of the diary grid/stats table is visible.
+- It does not change app width, zoom, grid calculations, fatigue rules, service worker no-redirect fix, BFM long/night, BFM 84h checkpoint, smart major rest, stats table data, update button, N/D, page numbering, diary history or settings.
+- Added self-test helper: landscapeCompactSelfTest()

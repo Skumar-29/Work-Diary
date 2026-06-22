@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 44;
-const APP_BUILD_NAME = "service-worker-no-redirect-fix";
+const APP_SCHEMA_VERSION = 45;
+const APP_BUILD_NAME = "landscape-compact-mode";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7488,6 +7488,45 @@ function serviceWorkerNoRedirectSelfTest(){
     build:APP_BUILD_NAME,
     schema:APP_SCHEMA_VERSION,
     helper:"repairServiceWorkerRedirectIssue"
+  };
+}
+
+
+
+
+/* =========================================================
+   LANDSCAPE COMPACT MODE
+   Scope: display only.
+   Adds a class when phone is horizontal so CSS can reduce header/bottom-nav height.
+   ========================================================= */
+
+function applyLandscapeCompactClass(){
+  const landscape = window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
+  const shortScreen = window.innerHeight <= 520;
+  document.body.classList.toggle("landscapeCompact", !!(landscape && shortScreen));
+  return !!(landscape && shortScreen);
+}
+applyLandscapeCompactClass();
+window.addEventListener("resize", applyLandscapeCompactClass);
+window.addEventListener("orientationchange", () => setTimeout(applyLandscapeCompactClass, 250));
+
+(function(){
+  if(typeof renderAll === "function" && !renderAll._landscapeCompactPatched){
+    const coreRenderAllForLandscapeCompact = renderAll;
+    renderAll = function(){
+      coreRenderAllForLandscapeCompact();
+      applyLandscapeCompactClass();
+    };
+    renderAll._landscapeCompactPatched = true;
+  }
+})();
+
+function landscapeCompactSelfTest(){
+  return {
+    ok:true,
+    compact:applyLandscapeCompactClass(),
+    mode:"landscape-display-only",
+    build:APP_BUILD_NAME
   };
 }
 
