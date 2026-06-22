@@ -656,3 +656,12 @@ PWA content push-down fix:
 - Kept the compact 14-day Stats table and removed the old 7-day/14-day stats card from the previous update.
 - No fatigue rules, BFM long/night, BFM 84h checkpoint, smart major rest, update button, N/D, page numbering, diary history or settings were changed.
 - Added self-test helper: pwaContentPushDownSelfTest()
+
+
+Service worker no-redirect fix:
+- Fixed iPhone/PWA error: "Response served by service worker has redirections."
+- The service worker no longer caches "./" or any redirected response.
+- Navigation/app launch now safely loads index.html and falls back to a non-redirect cached index.html.
+- Old app caches are deleted on activation, but diary data and localStorage are not cleared.
+- Added helper: repairServiceWorkerRedirectIssue()
+- If the broken old service worker prevents the app from opening, open the Cloudflare link in Safari and use Force Reload App Files. If it still cannot open, clear website data for this domain once, then reopen.

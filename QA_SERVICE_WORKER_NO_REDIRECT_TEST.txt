@@ -1,0 +1,12 @@
+SERVICE WORKER NO-REDIRECT TEST REPORT
+
+{
+  "sw_does_not_cache_dot_slash": true,
+  "sw_ignores_redirected_responses": true,
+  "navigation_uses_index_html": true,
+  "clear_cache_message": true,
+  "old_caches_deleted": true,
+  "repair_helper_added": true,
+  "build_name": true,
+  "cache_version": true
+}

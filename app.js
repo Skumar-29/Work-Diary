@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 43;
-const APP_BUILD_NAME = "pwa-content-pushdown-fix";
+const APP_SCHEMA_VERSION = 44;
+const APP_BUILD_NAME = "service-worker-no-redirect-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7452,6 +7452,42 @@ function pwaContentPushDownSelfTest(){
     pushDown:getComputedStyle(document.documentElement).getPropertyValue("--pwaContentPushDown") || "",
     bodyClass:document.body.className || "",
     mode:"pwa-only-main-padding-no-zoom-no-width-change"
+  };
+}
+
+
+
+
+/* =========================================================
+   SERVICE WORKER REDIRECT REPAIR HELPER
+   Scope: cache/SW repair only. Does not clear diary data.
+   ========================================================= */
+
+async function repairServiceWorkerRedirectIssue(){
+  try{
+    if("caches" in window){
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => /truck-work-diary|work-diary|diary/i.test(k)).map(k => caches.delete(k)));
+    }
+    if("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs){
+        try{ await reg.update(); }catch(e){}
+        try{ if(reg.waiting) reg.waiting.postMessage({type:"SKIP_WAITING"}); }catch(e){}
+      }
+    }
+    if(typeof addAuditLog === "function") addAuditLog("Service worker cache repaired", "Redirected cached responses cleared; diary data kept.");
+    location.replace(location.origin + location.pathname + "?swRepair=" + Date.now() + (location.hash || ""));
+  }catch(err){
+    alert("Repair failed. If the app will not open, clear only this website data in iPhone Safari settings, then reopen the Cloudflare link.");
+  }
+}
+function serviceWorkerNoRedirectSelfTest(){
+  return {
+    ok:true,
+    build:APP_BUILD_NAME,
+    schema:APP_SCHEMA_VERSION,
+    helper:"repairServiceWorkerRedirectIssue"
   };
 }
 
