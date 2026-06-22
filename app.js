@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 41;
-const APP_BUILD_NAME = "header-alert-scroll-fix";
+const APP_SCHEMA_VERSION = 42;
+const APP_BUILD_NAME = "pwa-header-safe-remove-legacy-stats";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -737,7 +737,7 @@ function openVehicleEditor(id=null){
   $("vehicleNotes").value = v && v.notes || "";
   $("deleteVehicleBtn").style.display = id ? "" : "none";
   $("vehicleEditCard").hidden = false;
-  $("vehicleEditCard").scrollIntoView({behavior:"smooth", block:"start"});
+  if(typeof pwaSafeScrollToElement === "function") pwaSafeScrollToElement($("vehicleEditCard"), "smooth", "start"); else $("vehicleEditCard").scrollIntoView({behavior:"smooth", block:"start"});
 }
 function closeVehicleEditor(){
   editingVehicleId = null;
@@ -816,7 +816,7 @@ function openSavedDriverEditor(id=null){
   $("savedDriverNotes").value = d && d.notes || "";
   $("deleteSavedDriverBtn").style.display = id ? "" : "none";
   $("driverEditCard").hidden = false;
-  $("driverEditCard").scrollIntoView({behavior:"smooth", block:"start"});
+  if(typeof pwaSafeScrollToElement === "function") pwaSafeScrollToElement($("driverEditCard"), "smooth", "start"); else $("driverEditCard").scrollIntoView({behavior:"smooth", block:"start"});
 }
 function closeSavedDriverEditor(){
   editingDriverId = null;
@@ -2503,8 +2503,9 @@ function openAuditError(err){
       target = $("diaryGrid");
       if(target) target.classList.add("auditFocusBox");
     }
-    if(target && target.scrollIntoView){
-      target.scrollIntoView({behavior:"smooth", block:"center"});
+    if(target){
+      if(typeof pwaSafeScrollToElement === "function") pwaSafeScrollToElement(target, "smooth", "center");
+      else if(target.scrollIntoView) target.scrollIntoView({behavior:"smooth", block:"center"});
     }
   }, 300);
 }
@@ -4144,17 +4145,7 @@ function renderStatistics(){
       <div class="statRow"><strong>Current 24h period ends</strong><span>${active24 ? formatDateTimeForStats(active24.endAbs) : "Not found"}<small>${active24 ? "This 24h count does not reset early if another major rest occurs inside it." : "Enter previous major rest/work blocks if needed."}</small></span></div>`;
   }
 
-  const work7 = countWorkBetweenAbs(asOfAbs - 7*DAY_MS, asOfAbs);
-  const work14 = countWorkBetweenAbs(asOfAbs - 14*DAY_MS, asOfAbs);
-  const nights14 = nhvrNightRestDates(asOfAbs - 14*DAY_MS, asOfAbs);
-  const longRange = $("statsLongRange");
-  if(longRange){
-    longRange.innerHTML = `
-      <div class="statRow"><strong>Last 24h work</strong><span>${formatMinsShort(countWorkBetweenAbs(asOfAbs-DAY_MS, asOfAbs))}</span></div>
-      <div class="statRow"><strong>Last 7 days work</strong><span>${formatMinsShort(work7)}</span></div>
-      <div class="statRow"><strong>Last 14 days work</strong><span>${formatMinsShort(work14)}</span></div>
-      <div class="statRow"><strong>Night rests found in last 14 days</strong><span>${nights14.length}<small>${escapeHtml(nights14.join(", ") || "None found")}</small></span></div>`;
-  }
+  // Legacy 7d/14d stats card removed. Compact 14-day accumulated table now covers planning totals.
 
   const lastFinished = findLastFinishedDrivingAbs(asOfAbs);
   const lastBox = $("statsLastDriving");
@@ -7363,59 +7354,64 @@ function appUpdateButtonSelfTest(){
 
 
 /* =========================================================
-   HEADER ALERT SCROLL FIX
-   Scope: display/scroll position only.
-   Prevents breach/error cards from being hidden under the fixed top header.
+   HOME SCREEN PWA HEADER SAFE POSITION
+   Scope: installed iPhone Home Screen mode only.
+   Does not change Safari layout, width, zoom, or global scrolling.
    ========================================================= */
 
-function fixedHeaderSafeOffset(){
-  const candidates = [
-    document.querySelector(".topbar"),
-    document.querySelector(".topBar"),
-    document.querySelector(".appHeader"),
-    document.querySelector("header"),
-    document.querySelector(".header")
-  ].filter(Boolean);
-  let h = 0;
-  candidates.forEach(el => {
-    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
-    if(r && r.height && r.top <= 80) h = Math.max(h, r.height + Math.max(0, r.top));
-  });
-  return Math.max(150, Math.min(230, Math.round(h + 18)));
+function isHomeScreenPwaMode(){
+  return !!(window.navigator && window.navigator.standalone) ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
 }
-function scrollElementBelowHeader(el, behavior="smooth"){
+function updatePwaHeaderSafeVars(){
+  const standalone = isHomeScreenPwaMode();
+  document.body.classList.toggle("homeScreenPwa", standalone);
+  const tb = document.querySelector(".topbar");
+  if(!tb) return;
+  const r = tb.getBoundingClientRect();
+  const bottom = Math.max(120, Math.min(240, Math.ceil(r.bottom || r.height || 150)));
+  document.documentElement.style.setProperty("--pwaHeaderBottom", `${bottom}px`);
+}
+function pwaSafeScrollToElement(el, behavior="smooth", block="start"){
   if(!el) return;
+  if(!isHomeScreenPwaMode()){
+    el.scrollIntoView({behavior, block});
+    return;
+  }
+  updatePwaHeaderSafeVars();
+  const headerPx = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--pwaHeaderBottom")) || 150;
   const rect = el.getBoundingClientRect();
-  const top = window.pageYOffset + rect.top - fixedHeaderSafeOffset();
+  const top = window.pageYOffset + rect.top - headerPx - 10;
   window.scrollTo({top:Math.max(0, top), behavior});
 }
-function patchHeaderSafeScrollIntoView(){
-  const old = Element.prototype.scrollIntoView;
-  if(old && !Element.prototype._headerSafeScrollPatched){
-    Element.prototype.scrollIntoView = function(arg){
-      const cls = this.className ? String(this.className) : "";
-      const id = this.id ? String(this.id) : "";
-      const shouldOffset =
-        /alert|error|breach|fatigue|nhvr/i.test(cls) ||
-        /alert|error|breach|fatigue|nhvr|diaryGrid|workDiary/i.test(id);
-      if(shouldOffset){
-        const behavior = arg && typeof arg === "object" && arg.behavior ? arg.behavior : "smooth";
-        scrollElementBelowHeader(this, behavior);
-        return;
-      }
-      return old.apply(this, arguments);
-    };
-    Element.prototype._headerSafeScrollPatched = true;
-  }
-}
-patchHeaderSafeScrollIntoView();
+(function(){
+  updatePwaHeaderSafeVars();
+  window.addEventListener("resize", updatePwaHeaderSafeVars);
+  window.addEventListener("orientationchange", () => setTimeout(updatePwaHeaderSafeVars, 250));
 
-function headerAlertScrollSelfTest(){
+  const coreRenderAllForPwaHeaderSafe = renderAll;
+  renderAll = function(){
+    coreRenderAllForPwaHeaderSafe();
+    updatePwaHeaderSafeVars();
+    const a = $("alerts");
+    if(a) a.classList.toggle("hasAlerts", !!a.children.length);
+  };
+
+  const coreRenderDiaryFastForPwaHeaderSafe = renderDiaryFast;
+  renderDiaryFast = function(){
+    coreRenderDiaryFastForPwaHeaderSafe();
+    updatePwaHeaderSafeVars();
+    const a = $("alerts");
+    if(a) a.classList.toggle("hasAlerts", !!a.children.length);
+  };
+})();
+
+function pwaHeaderSafeSelfTest(){
   return {
     ok:true,
-    hasScrollPadding:true,
-    offset:fixedHeaderSafeOffset(),
-    patched:!!Element.prototype._headerSafeScrollPatched
+    standalone:isHomeScreenPwaMode(),
+    headerBottom:getComputedStyle(document.documentElement).getPropertyValue("--pwaHeaderBottom") || "",
+    mode:"pwa-only-no-global-prototype-no-zoom"
   };
 }
 

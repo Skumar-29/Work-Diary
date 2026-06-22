@@ -638,9 +638,11 @@ Update button + backup prompt flow:
 - Added current app version display and appUpdateButtonSelfTest().
 
 
-Header alert scroll fix:
-- Fixed breach/error notification cards being partly hidden under the fixed top header.
-- Added safe scroll padding and scroll margins for alert/error/breach/fatigue cards.
-- Added a safe scroll helper so Open error / scroll-to-alert actions position the card below the header.
-- This is display/scroll only. It does not change fatigue rules, graph, stats calculations, smart major rest, update button, N/D, page numbering, diary history or settings.
-- Added self-test helper: headerAlertScrollSelfTest()
+PWA header safe + remove legacy Stats card:
+- Fixed installed Home Screen/PWA header overlap without changing Safari layout, app width, zoom, or grid scale.
+- The fix runs only when the app is opened as a Home Screen/standalone PWA.
+- Removed the old "Last 7 days / 14 days" Stats card because the compact 14-day accumulated table replaces it.
+- Kept the compact 14-day accumulated table.
+- Kept update button, smart major rest, BFM long/night, BFM 84h checkpoint, graph, N/D, page numbering, diary history and settings.
+- No fatigue rule calculations were changed.
+- Added self-test helper: pwaHeaderSafeSelfTest()

@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v77-header-alert-scroll-fix";
+const CACHE = "truck-work-diary-v78-pwa-header-safe-remove-legacy-stats";
 const ASSETS = ["./","index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 self.addEventListener("install", e => {

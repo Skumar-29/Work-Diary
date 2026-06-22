@@ -1643,36 +1643,33 @@ body.location-picker-off .locPickerWrap input{
   }
 }
 
-/* Header overlap / breach alert scroll-position fix */
+/* Home Screen PWA header-safe layout fix */
 :root{
-  --fixedHeaderSafeOffset: 170px;
+  --pwaHeaderBottom: 150px;
 }
-html{
-  scroll-padding-top: var(--fixedHeaderSafeOffset);
+body.homeScreenPwa .topbar{
+  top:0;
 }
-[id],
-.alertCard,
-.errorCard,
-.breachCard,
-.nhvrAlert,
-.fatigueAlert,
-#alerts,
-#driverAlerts,
-#fatigueAlerts,
-#bfmChecker,
-#diaryGrid,
-#workDiaryScreen,
-#diaryScreen{
-  scroll-margin-top: var(--fixedHeaderSafeOffset);
+body.homeScreenPwa .alerts.hasAlerts{
+  position:sticky;
+  top:calc(var(--pwaHeaderBottom) + 4px);
+  z-index:6;
+  background:#fff;
+  padding-top:6px;
+  margin-top:0;
 }
-.alertList,
-.driverAlerts,
-.fatigueAlerts,
-.nhvrAlerts{
-  scroll-margin-top: var(--fixedHeaderSafeOffset);
+body.homeScreenPwa .auditFocusBox,
+body.homeScreenPwa #diaryGrid,
+body.homeScreenPwa #auditFixPanel,
+body.homeScreenPwa #changeDetailsEditor,
+body.homeScreenPwa .card{
+  scroll-margin-top:calc(var(--pwaHeaderBottom) + 12px);
 }
-@media (max-width: 520px){
-  :root{
-    --fixedHeaderSafeOffset: 184px;
+.legacyStatsHidden{
+  display:none!important;
+}
+@media (prefers-color-scheme:dark){
+  body.homeScreenPwa .alerts.hasAlerts{
+    background:#111;
   }
 }

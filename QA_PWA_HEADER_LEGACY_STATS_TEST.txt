@@ -1,0 +1,13 @@
+PWA HEADER + LEGACY STATS TEST REPORT
+
+{
+  "bad_global_scroll_padding_absent": true,
+  "bad_global_prototype_patch_absent": true,
+  "pwa_only_class_added": true,
+  "safe_scroll_helper_added": true,
+  "legacy_stats_card_removed_from_index": true,
+  "stats14_table_kept": true,
+  "status_bar_not_translucent": true,
+  "build_name": true,
+  "cache_version": true
+}
