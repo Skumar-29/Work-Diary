@@ -1,0 +1,33 @@
+STATS 14-DAY TABLE TEST REPORT
+
+[
+  {
+    "name": "Stats 14-day table produces 14 rows",
+    "pass": true,
+    "actual": {
+      "count": 14
+    }
+  },
+  {
+    "name": "BFM table includes long/night values",
+    "pass": true,
+    "actual": {
+      "ln": 0,
+      "ln7": 840
+    }
+  },
+  {
+    "name": "BFM table includes 84h major left value",
+    "pass": true,
+    "actual": {
+      "major": "50h"
+    }
+  },
+  {
+    "name": "Standard table hides L/N values",
+    "pass": true,
+    "actual": {
+      "ln": null
+    }
+  }
+]

@@ -613,3 +613,14 @@ Smart major rest classification:
 - Sleeper berth rest no longer counts as stationary rest; Stationary/Night/24h are stationary.
 - This focused update keeps the BFM long/night and 84h checkpoint fixes unchanged.
 - Added self-test helper: smartMajorRestSelfTest()
+
+
+Stats 14-day accumulated hours table:
+- Added compact scrollable table to Stats screen.
+- Columns: Date, Work, Acc, Left, Major, L/N, L/N 7d, L/N Left, Warn.
+- Shows 14 rows ending on selected date.
+- BFM solo shows long/night planning values and 84h checkpoint remaining.
+- BFM two-up / Standard solo / Standard two-up show rolling work planning values while L/N columns show dash.
+- Date column is frozen. Table is horizontally scrollable for readability.
+- This is display-only and does not change fatigue breach detection, graph layout, N/D, page numbering, vehicle records, diary history or settings.
+- Added self-test helper: stats14DayTableSelfTest()

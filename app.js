@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 38;
-const APP_BUILD_NAME = "smart-major-rest-classification";
+const APP_SCHEMA_VERSION = 39;
+const APP_BUILD_NAME = "stats-14day-accumulated-table";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -6912,6 +6912,288 @@ function smartMajorRestSelfTest(){
     syncChangeRowsForDay(d2);
     add("24h+ continuous rest auto-counts as 24h rest", restTypeForSlot(d2,0) === "24h", {type:restTypeForSlot(d2,0), rows:ensureDayDetail(d2).changeRows});
 
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
+}
+
+
+
+
+/* =========================================================
+   STATS 14-DAY ACCUMULATED HOURS TABLE
+   Scope: Stats screen display only.
+   Adds compact scrollable table:
+   Date | Work | Acc | Left | Major | L/N | L/N 7d | L/N Left | Warn
+   Adapts limits for BFM solo, BFM two-up, Standard solo and Standard two-up.
+   ========================================================= */
+
+function stats14ProfileForKey(key){
+  const p = nhvrProfileForDate(key);
+  const k = p && p.key ? p.key : "BFM";
+  if(k === "BFMTwoUp") return {
+    key:k, name:"BFM two-up", work14Limit:8400, work7Limit:4200, majorLimit:8400, majorLabel:"14d",
+    longNight:false, majorText:"82h stat", show7:true, show14:true
+  };
+  if(k === "StandardTwoUp") return {
+    key:k, name:"Standard two-up", work14Limit:7200, work7Limit:3600, majorLimit:7200, majorLabel:"14d",
+    longNight:false, majorText:"52h/14d", show7:true, show14:true
+  };
+  if(k === "Standard") return {
+    key:k, name:"Standard solo", work14Limit:8640, work7Limit:4320, majorLimit:8640, majorLabel:"14d",
+    longNight:false, majorText:"Night rest", show7:true, show14:true
+  };
+  if(k === "AFM") return {
+    key:k, name:"AFM", work14Limit:null, work7Limit:null, majorLimit:null, majorLabel:"AFM",
+    longNight:false, majorText:"AFM", show7:false, show14:false
+  };
+  return {
+    key:"BFM", name:"BFM solo", work14Limit:8640, work7Limit:null, majorLimit:5040, majorLabel:"84h",
+    longNight:true, longNightLimit:2160, majorText:"84h", show7:false, show14:true
+  };
+}
+function stats14AbsForKeySlot(key, slot){
+  return fromKey(key).getTime() + Number(slot || 0) * SLOT * 60000;
+}
+function stats14DayWorkMins(key){
+  let total = 0;
+  for(let i=0;i<SLOTS_PER_DAY;i++){
+    if(getSlot(key,i) === "work") total += SLOT;
+  }
+  return total;
+}
+function stats14WorkBetween(startAbs, endAbs){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t += SLOT*60000){
+    if(activityAtAbs(t) === "work") total += SLOT;
+  }
+  return total;
+}
+function stats14BfmIsNightAbs(abs){
+  const d = new Date(abs);
+  return d.getHours() >= 0 && d.getHours() < 6;
+}
+function stats14BfmDailyWorkBeforeSlot(abs){
+  const key = toKey(new Date(abs));
+  const dayStart = fromKey(key).getTime();
+  let total = 0;
+  for(let t=dayStart; t<=abs; t += SLOT*60000){
+    if(activityAtAbs(t) === "work") total += SLOT;
+  }
+  return total;
+}
+function stats14BfmLongNightSlot(abs){
+  if(activityAtAbs(abs) !== "work") return false;
+  if(typeof nhvrBfmSoloIsLongNightSlot === "function") return nhvrBfmSoloIsLongNightSlot(abs);
+  if(stats14BfmIsNightAbs(abs)) return true;
+  return stats14BfmDailyWorkBeforeSlot(abs) > 720;
+}
+function stats14BfmLongNightBetween(startAbs, endAbs){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t += SLOT*60000){
+    if(stats14BfmLongNightSlot(t)) total += SLOT;
+  }
+  return total;
+}
+function stats14DayLongNightMins(key){
+  const start = fromKey(key).getTime();
+  return stats14BfmLongNightBetween(start, start + DAY_MS);
+}
+function stats14CheckpointWorkSince24hRest(endAbs){
+  const scanStart = endAbs - 14*DAY_MS;
+  let work = 0;
+  let restRun = 0;
+  for(let t=scanStart; t<endAbs; t += SLOT*60000){
+    if(activityAtAbs(t) === "work"){
+      restRun = 0;
+      work += SLOT;
+    }else{
+      let okRest = true;
+      if(typeof nhvrBfm84IsCheckpointRest === "function") okRest = nhvrBfm84IsCheckpointRest(t);
+      if(okRest){
+        restRun += SLOT;
+        if(restRun >= 1440) work = 0;
+      }else{
+        restRun = 0;
+      }
+    }
+  }
+  return work;
+}
+function stats14Fmt(mins){
+  if(mins === null || mins === undefined || Number.isNaN(Number(mins))) return "—";
+  mins = Math.round(Number(mins));
+  if(mins < 0) mins = 0;
+  const h = Math.floor(mins/60), m = mins%60;
+  if(h && m) return `${h}h${String(m).padStart(2,"0")}`;
+  if(h) return `${h}h`;
+  return `${m}m`;
+}
+function stats14DateShort(key){
+  const d = fromKey(key);
+  return `${d.getDate()} ${d.toLocaleString(undefined,{month:"short"})}`;
+}
+function stats14Warning(row, profile){
+  if(row.errors.length) return row.errors[0].title.replace(" work limit reached"," limit").replace("BFM ","").slice(0,20);
+  if(profile.key === "BFM"){
+    if(row.majorLeft <= 0) return "84h due";
+    if(row.lnLeft <= 0) return "L/N full";
+    if(row.lnLeft <= 60) return "L/N low";
+    if(row.majorLeft <= 120) return "84h soon";
+  }
+  if(profile.key === "BFMTwoUp"){
+    if(row.acc7 > 4200) return "7d over";
+    if(row.acc14 > 8400) return "14d over";
+    if(4200-row.acc7 <= 120) return "7d low";
+  }
+  if(profile.key === "StandardTwoUp"){
+    if(row.acc7 > 3600) return "7d over";
+    if(row.acc14 > 7200) return "14d over";
+  }
+  if(profile.key === "Standard"){
+    if(row.acc7 > 4320) return "7d over";
+    if(row.acc14 > 8640) return "14d over";
+  }
+  return "—";
+}
+function stats14RowsForSelectedDate(){
+  const selected = state.selectedDate || toKey(new Date());
+  const profile = stats14ProfileForKey(selected);
+  const rows = [];
+  for(let offset=-13; offset<=0; offset++){
+    const key = addDays(selected, offset);
+    const dayStart = fromKey(key).getTime();
+    const dayEnd = dayStart + DAY_MS;
+    const work = stats14DayWorkMins(key);
+    const acc14 = stats14WorkBetween(dayEnd - 14*DAY_MS, dayEnd);
+    const acc7 = stats14WorkBetween(dayEnd - 7*DAY_MS, dayEnd);
+    const ln = profile.longNight ? stats14DayLongNightMins(key) : null;
+    const ln7 = profile.longNight ? stats14BfmLongNightBetween(dayEnd - 7*DAY_MS, dayEnd) : null;
+    const errors = (typeof nhvrBreachesForDate === "function") ? (nhvrBreachesForDate(key) || []).filter(e => (e.severity || "error") === "error") : [];
+    let majorLeft = null;
+    let major = "—";
+    if(profile.key === "BFM"){
+      const since = stats14CheckpointWorkSince24hRest(dayEnd);
+      majorLeft = 5040 - since;
+      major = stats14Fmt(majorLeft);
+    }else if(profile.key === "BFMTwoUp"){
+      major = "82h stat";
+    }else if(profile.key === "StandardTwoUp"){
+      major = "52h/14d";
+    }else if(profile.key === "Standard"){
+      major = "Night";
+    }else{
+      major = "AFM";
+    }
+    const left = profile.work14Limit != null ? profile.work14Limit - acc14 : null;
+    const lnLeft = profile.longNight ? 2160 - ln7 : null;
+    rows.push({key, profile, work, acc14, acc7, left, major, majorLeft, ln, ln7, lnLeft, errors});
+  }
+  return rows;
+}
+function renderStats14DayAccumulatedTable(){
+  const host = $("stats14DayTable");
+  if(!host) return;
+  const rows = stats14RowsForSelectedDate();
+  if(!rows.length){
+    host.innerHTML = `<div class="stats14Empty">No stats available.</div>`;
+    return;
+  }
+  const profile = rows[rows.length-1].profile;
+  const sub = profile.key === "BFM"
+    ? "BFM solo: L/N = 12am–6am work + work after 12h. L/N 7d limit is 36h."
+    : `${profile.name}: table shows rolling 7d/14d work planning. L/N columns are only used for BFM solo.`;
+  host.innerHTML = `
+    <div class="stats14Header">
+      <strong>14-day accumulated hours</strong>
+      <span>${escapeHtml(profile.name)}</span>
+    </div>
+    <div class="stats14Scroll">
+      <table class="stats14Table">
+        <thead>
+          <tr>
+            <th class="stick">Date</th>
+            <th>Work</th>
+            <th>Acc</th>
+            <th>Left</th>
+            <th>Major</th>
+            <th>L/N</th>
+            <th>L/N 7d</th>
+            <th>L/N Left</th>
+            <th>Warn</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => {
+            const warn = stats14Warning(row, row.profile);
+            const warnClass = warn !== "—" ? "warnCell" : "";
+            return `<tr>
+              <td class="stick">${escapeHtml(stats14DateShort(row.key))}</td>
+              <td>${stats14Fmt(row.work)}</td>
+              <td>${stats14Fmt(row.acc14)}</td>
+              <td>${stats14Fmt(row.left)}</td>
+              <td>${escapeHtml(row.major)}</td>
+              <td>${stats14Fmt(row.ln)}</td>
+              <td>${stats14Fmt(row.ln7)}</td>
+              <td>${stats14Fmt(row.lnLeft)}</td>
+              <td class="${warnClass}">${escapeHtml(warn)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="stats14Note">${escapeHtml(sub)}</div>`;
+}
+(function(){
+  const coreRenderStatisticsForStats14 = renderStatistics;
+  renderStatistics = function(){
+    coreRenderStatisticsForStats14();
+    renderStats14DayAccumulatedTable();
+  };
+})();
+
+function stats14DayTableSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+  try{
+    const start = "2026-06-23";
+    state.selectedDate = addDays(start, 7);
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {};
+    state.dayDetails = {};
+    state.entries = [];
+    state.calculationHistory = {startDate:start, mode:"noWorkBeforeStart"};
+    const setRanges = (key, ranges) => {
+      state.selectedDate = key;
+      ensureDayDetail(key).ruleScheme = "BFM";
+      ensureDayDetail(key).driverMode = "solo";
+      for(let i=0;i<SLOTS_PER_DAY;i++) setSlot(key, i, "rest");
+      ranges.forEach(([a,b]) => {
+        for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key, i, "work");
+      });
+      syncChangeRowsForDay(key);
+    };
+    // A few sample days to confirm table returns values.
+    setRanges(start, [[0,24],[28,56]]);
+    setRanges(addDays(start,1), [[0,24],[30,58]]);
+    setRanges(addDays(start,2), [[24,56]]);
+    state.selectedDate = addDays(start,2);
+    const rows = stats14RowsForSelectedDate();
+    const last = rows[rows.length-1];
+    add("Stats 14-day table produces 14 rows", rows.length === 14, {count:rows.length});
+    add("BFM table includes long/night values", last.ln !== null && last.ln7 !== null, {ln:last.ln, ln7:last.ln7});
+    add("BFM table includes 84h major left value", last.major !== "—", {major:last.major});
+    state.scheme = "Standard";
+    state.ruleHistory = [{effectiveDate:start, scheme:"Standard", mode:"solo", coDriverScheme:""}];
+    state.selectedDate = start;
+    ensureDayDetail(start).ruleScheme = "Standard";
+    const stdRows = stats14RowsForSelectedDate();
+    add("Standard table hides L/N values", stdRows[stdRows.length-1].ln === null, {ln:stdRows[stdRows.length-1].ln});
   }catch(err){
     add("Self-test crashed", false, String(err && err.stack || err));
   }finally{
