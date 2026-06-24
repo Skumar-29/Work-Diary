@@ -673,3 +673,15 @@ Landscape compact mode:
 - Landscape mode reduces top header height, bottom nav height, labels and padding so more of the diary grid/stats table is visible.
 - It does not change app width, zoom, grid calculations, fatigue rules, service worker no-redirect fix, BFM long/night, BFM 84h checkpoint, smart major rest, stats table data, update button, N/D, page numbering, diary history or settings.
 - Added self-test helper: landscapeCompactSelfTest()
+
+
+NHVR counted-period engine fix:
+- Added focused counted-period patch for Standard solo, Standard two-up, BFM solo and BFM two-up.
+- Work-limit breaches are no longer based on diary-date total.
+- 24h / 7d / 14d work-limit checks now use active counted periods started from the relevant major rest break.
+- Overlapping old/new 24h periods are checked together. A new major rest can start a new counted period, but the old period still restricts work until it finishes.
+- Red block for work-limit breach is now the first 15-minute block where cumulative work exceeds the limit.
+- BFM solo long/night now counts midnight-6am work plus work above 12h in an active counted 24h period, not just above 12h on the diary date.
+- Removed the previous daily-sheet safety false positive for high daily totals when counted 24h periods are still legal.
+- Keeps existing rest requirement checks, night rest checks, 84h checkpoint, smart major rest, stats table, service-worker fix, landscape mode, update button, graph, N/D, page numbering, diary history and settings.
+- Added self-test helper: nhvrCountedPeriodEngineSelfTest()

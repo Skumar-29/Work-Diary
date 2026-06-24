@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v81-landscape-compact-mode";
+const CACHE = "truck-work-diary-v82-counted-period-engine-fix";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

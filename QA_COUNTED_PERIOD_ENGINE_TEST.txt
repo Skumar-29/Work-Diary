@@ -1,0 +1,81 @@
+NHVR COUNTED-PERIOD ENGINE TEST REPORT
+
+[
+  {
+    "name": "BFM 21:30 start after major rest is allowed when old period reaches exactly 14h",
+    "pass": true,
+    "actual": []
+  },
+  {
+    "name": "BFM 21:00 start breaches old active 24h period at 21:30",
+    "pass": true,
+    "actual": {
+      "hit": {
+        "title": "24h work limit reached",
+        "slots": [
+          86
+        ],
+        "message": "BFM solo: 14h 30m counted in 24h from Mon, 22 June 2026 10:00 pm. Limit is 14h."
+      },
+      "all": [
+        "24h work limit reached",
+        "24h work limit reached"
+      ]
+    }
+  },
+  {
+    "name": "Standard 20:00 start breaches at 20:30 when old 24h has only 30m left",
+    "pass": true,
+    "actual": {
+      "hit": {
+        "title": "24h work limit reached",
+        "slots": [
+          82
+        ],
+        "message": "Standard solo: 14h counted in 24h from Wed, 1 July 2026 10:30 pm. Limit is 12h."
+      },
+      "all": [
+        "5½h break due",
+        "8h break due",
+        "11h break due",
+        "24h work limit reached",
+        "24h work limit reached"
+      ]
+    }
+  },
+  {
+    "name": "Standard 22:00 start can work 5h without 24h work-limit breach",
+    "pass": true,
+    "actual": [
+      {
+        "title": "5½h break due",
+        "slots": [
+          15
+        ]
+      },
+      {
+        "title": "8h break due",
+        "slots": [
+          24,
+          25
+        ]
+      },
+      {
+        "title": "11h break due",
+        "slots": [
+          34,
+          35,
+          36,
+          37
+        ]
+      }
+    ]
+  },
+  {
+    "name": "BFM long/night counts non-night work above 12h in counted 24h",
+    "pass": true,
+    "actual": {
+      "longNight": "2h"
+    }
+  }
+]

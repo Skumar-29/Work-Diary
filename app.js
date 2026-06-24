@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 45;
-const APP_BUILD_NAME = "landscape-compact-mode";
+const APP_SCHEMA_VERSION = 46;
+const APP_BUILD_NAME = "counted-period-engine-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7528,5 +7528,348 @@ function landscapeCompactSelfTest(){
     mode:"landscape-display-only",
     build:APP_BUILD_NAME
   };
+}
+
+
+
+
+/* =========================================================
+   NHVR COUNTED-PERIOD ENGINE PATCH
+   Scope: fatigue calculation only.
+   Purpose:
+   - Stop using diary-date total as a work-limit breach.
+   - Check active counted 24h / 7d / 14d periods from relevant major rest ends.
+   - Allow overlapping old/new counted periods after a major rest.
+   - First over-limit red block is based on cumulative work, not elapsed clock time.
+   - BFM solo long/night uses midnight-6am plus work over 12h in active counted 24h periods.
+   ========================================================= */
+
+const NHVR_COUNTED_PERIOD_PATCH_VERSION = "counted-period-overlap-v2";
+
+function nhvrCpStepMs(){ return SLOT * 60000; }
+
+function nhvrCpRestReqForProfilePeriod(profile, rule){
+  if(!profile || !rule) return null;
+  if(rule.label === "24h") return profile.anchor24 || null;
+  if(rule.label === "52h") return {mins:300, kind:"stationaryOrSleeper"};
+  if(rule.label === "82h") return {mins:15, kind:"anyRest"};
+  if(rule.label === "7d" || rule.label === "7d long/night" || rule.label === "14d"){
+    return profile.anchor24 || {mins:420, kind:"stationary"};
+  }
+  return profile.anchor24 || null;
+}
+
+function nhvrCpRestPeriodQualifiesForAnchor(period, req){
+  if(!period) return false;
+  if(nhvrRestPeriodQualifies(period, {mins:1440, kind:"stationary"})) return true;
+  if(!req) return false;
+  return nhvrRestPeriodQualifies(period, req);
+}
+
+function nhvrCpAnchorEnds(profile, startAbs, endAbs, rule){
+  const req = nhvrCpRestReqForProfilePeriod(profile, rule);
+  const restEnds = nhvrRestBreakEnds(startAbs, endAbs);
+  const anchors = [];
+  restEnds.forEach(e => {
+    if(nhvrCpRestPeriodQualifiesForAnchor(e.period, req)) anchors.push(e);
+  });
+
+  const first = nhvrCpFirstWorkAbs(startAbs, endAbs);
+  if(first !== null && !anchors.some(a => a.abs <= first)){
+    anchors.unshift({abs:first, period:{minutes:1440, bestStationary:1440, bestStationaryOrSleeper:1440}, virtual:true});
+  }
+
+  const seen = new Set();
+  return anchors
+    .filter(a => {
+      const k = Math.round(a.abs / nhvrCpStepMs());
+      if(seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a,b)=>a.abs-b.abs);
+}
+
+function nhvrCpFirstWorkAbs(startAbs, endAbs){
+  for(let t=startAbs; t<endAbs; t+=nhvrCpStepMs()){
+    if(activityAtAbs(t) === "work") return t;
+  }
+  return null;
+}
+
+function nhvrCpFirstOverLimitSlot(key, startAbs, endAbs, limitMins, counterFn){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t+=nhvrCpStepMs()){
+    const add = counterFn ? counterFn(t, startAbs, total) : (activityAtAbs(t)==="work" ? SLOT : 0);
+    total += add;
+    if(total > limitMins){
+      const ks = absToKeySlot(t);
+      if(ks.key === key && activityAtAbs(t) === "work") return {abs:t, slot:ks.slot, total};
+    }
+  }
+  return null;
+}
+
+function nhvrCpFindingExists(findings, title, slot){
+  return (findings || []).some(f =>
+    String(f.title || "") === title &&
+    f.focus &&
+    Array.isArray(f.focus.slots) &&
+    (slot === undefined || f.focus.slots.includes(slot))
+  );
+}
+
+function nhvrCpWorkLimitFindingsForDate(key, profile){
+  if(!profile || profile.afm) return [];
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const scanStart = Math.max(dayStart - 30*DAY_MS, (typeof nhvrV2ScanStartFor === "function" ? nhvrV2ScanStartFor(key) : dayStart - 30*DAY_MS));
+  const findings = [];
+  const rules = (profile.periods || []).filter(r => r.maxWork !== null && r.maxWork !== undefined && (r.label === "24h" || r.label === "7d" || r.label === "14d"));
+  const add = (f) => {
+    if(!f || !f.focus || !Array.isArray(f.focus.slots) || !f.focus.slots.length) return;
+    const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${f.focus.slots.join(",")}`;
+    if(findings.some(x => `${x.title}|${Math.round((x.anchorAbs||0)/60000)}|${(x.focus&&x.focus.slots||[]).join(",")}` === sig)) return;
+    findings.push(f);
+  };
+
+  rules.forEach(rule => {
+    const anchors = nhvrCpAnchorEnds(profile, scanStart, dayEnd, rule);
+    anchors.forEach(a => {
+      const s = a.abs, winEnd = s + rule.minutes*60000;
+      if(winEnd <= dayStart || s >= dayEnd) return;
+      const over = nhvrCpFirstOverLimitSlot(key, s, Math.min(winEnd, dayEnd), rule.maxWork);
+      if(over){
+        add(nhvrV2Finding(
+          "error",
+          key,
+          `${rule.label} work limit reached`,
+          `${profile.name}: ${formatMinsShort(over.total)} work counted in the ${rule.label} period from ${formatDateTimeForStats(s)}. Limit is ${formatMinsShort(rule.maxWork)}.`,
+          [over.slot],
+          `This block pushes the active ${rule.label} counted period over the limit. A later major rest can start a new period, but the old period must still stay within the limit until it finishes.`,
+          s,
+          {ruleType:"countedPeriodWorkLimit", period:rule.label, total:over.total, limit:rule.maxWork}
+        ));
+      }
+    });
+  });
+  return findings;
+}
+
+function nhvrCpBfmActive24hAnchorsForSlot(abs){
+  const key = absToKeySlot(abs).key;
+  const profile = nhvrProfileForDate(key);
+  if(!profile || profile.key !== "BFM") return [];
+  const rule = {label:"24h", minutes:1440};
+  const start = Math.max(abs - 30*DAY_MS, (typeof nhvrV2ScanStartFor === "function" ? nhvrV2ScanStartFor(key) : abs - 30*DAY_MS));
+  return nhvrCpAnchorEnds(profile, start, abs + nhvrCpStepMs(), rule)
+    .map(a => a.abs)
+    .filter(s => s <= abs && abs < s + DAY_MS);
+}
+
+function nhvrCpBfmWorkInActive24hAtSlot(abs){
+  let best = 0;
+  nhvrCpBfmActive24hAnchorsForSlot(abs).forEach(s => {
+    const total = nhvrWorkBetween(s, abs + nhvrCpStepMs());
+    best = Math.max(best, total);
+  });
+  if(best === 0) best = nhvrWorkBetween(abs + nhvrCpStepMs() - DAY_MS, abs + nhvrCpStepMs());
+  return best;
+}
+
+function nhvrCpBfmLongNightSlot(abs){
+  if(activityAtAbs(abs) !== "work") return false;
+  const d = new Date(abs);
+  if(d.getHours() >= 0 && d.getHours() < 6) return true;
+  return nhvrCpBfmWorkInActive24hAtSlot(abs) > 720;
+}
+
+function nhvrCpBfmLongNightMinsBetween(startAbs, endAbs){
+  let total = 0;
+  for(let t=startAbs; t<endAbs; t+=nhvrCpStepMs()){
+    if(nhvrCpBfmLongNightSlot(t)) total += SLOT;
+  }
+  return total;
+}
+
+function nhvrCpBfmLongNightFindingForDate(key, profile, existingFindings){
+  if(!profile || profile.key !== "BFM") return null;
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const limit = 2160;
+  let due = null, total = 0, before = 0;
+  for(let t=dayStart; t<dayEnd; t+=nhvrCpStepMs()){
+    if(activityAtAbs(t) !== "work") continue;
+    const end = t + nhvrCpStepMs();
+    const count = nhvrCpBfmLongNightMinsBetween(end - 7*DAY_MS, end);
+    if(count > limit){
+      due = t;
+      total = count;
+      before = nhvrCpBfmLongNightMinsBetween(t - 7*DAY_MS, t);
+      break;
+    }
+  }
+  if(due === null) return null;
+  const ks = absToKeySlot(due);
+  if(ks.key !== key) return null;
+  if(nhvrCpFindingExists(existingFindings, "7d long/night work limit reached", ks.slot)) return null;
+  return nhvrV2Finding(
+    "error",
+    key,
+    "7d long/night work limit reached",
+    `${profile.name}: ${formatMinsShort(total)} long/night work counted in the rolling 7-day period. Limit is 36h. Before this block: ${formatMinsShort(before)}.`,
+    [ks.slot],
+    `Long/night work is not available from ${formatDateTimeForStats(due)}. This uses counted 24h periods: midnight-6am work plus work above 12h in any active 24h period.`,
+    due - 7*DAY_MS,
+    {ruleType:"bfmSoloLongNight7dCounted", totalAtDue:total, before, limit}
+  );
+}
+
+function nhvrCpFilterOldWorkLimitFindings(findings){
+  return (findings || []).filter(f => {
+    const t = String(f.title || "");
+    const msg = String(f.message || "");
+    const rt = f && f.meta ? String(f.meta.ruleType || "") : "";
+    if(/^(24h|7d|14d) rest due$/.test(t)) return false;
+    if(t === "7d long/night work limit") return false;
+    if(t === "24h work limit reached" && (rt === "dailySafety24h" || msg.includes("daily sheet"))) return false;
+    return true;
+  });
+}
+
+(function(){
+  const coreNhvrBreachesForDateForCountedPeriods = nhvrBreachesForDate;
+  nhvrBreachesForDate = function(key){
+    const profile = nhvrProfileForDate(key);
+    let findings = nhvrCpFilterOldWorkLimitFindings(coreNhvrBreachesForDateForCountedPeriods(key) || []);
+    const counted = nhvrCpWorkLimitFindingsForDate(key, profile);
+    counted.forEach(f => findings.push(f));
+    const ln = nhvrCpBfmLongNightFindingForDate(key, profile, findings);
+    if(ln) findings.push(ln);
+
+    const seen = new Set();
+    return findings.filter(f => {
+      const slots = f && f.focus && Array.isArray(f.focus.slots) ? f.focus.slots.join(",") : "";
+      const sig = `${f.title}|${Math.round((f.anchorAbs||0)/60000)}|${slots}|${f.message}`;
+      if(seen.has(sig)) return false;
+      seen.add(sig);
+      return true;
+    }).sort((a,b)=>{
+      const sa = (a.focus && a.focus.slots && a.focus.slots.length) ? Math.min(...a.focus.slots) : 999;
+      const sb = (b.focus && b.focus.slots && b.focus.slots.length) ? Math.min(...b.focus.slots) : 999;
+      return sa - sb || (a.anchorAbs||0) - (b.anchorAbs||0);
+    }).slice(0, 24);
+  };
+
+  nhvrBfmSoloIsLongNightSlot = function(abs){ return nhvrCpBfmLongNightSlot(abs); };
+  nhvrBfmSoloLongNightMinsBetween = function(startAbs, endAbs){ return nhvrCpBfmLongNightMinsBetween(startAbs, endAbs); };
+  nhvrLongNightWorkBetween = function(startAbs, endAbs){ return nhvrCpBfmLongNightMinsBetween(startAbs, endAbs); };
+  nhvrLongNightSlotCounter = function(abs){ return nhvrCpBfmLongNightSlot(abs) ? SLOT : 0; };
+})();
+
+function nhvrCountedPeriodEngineSelfTest(){
+  const backup = safeClone(state);
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+
+  try{
+    const setAllRest = (key, scheme="BFM", mode="solo") => {
+      state.selectedDate = key;
+      ensureDayDetail(key).ruleScheme = scheme;
+      ensureDayDetail(key).driverMode = mode;
+      if(mode === "twoUp") ensureDayDetail(key).twoUpEnabled = true;
+      state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+      ensureDayDetail(key).changeRows = [];
+    };
+    const setWork = (key, a, b) => {
+      if(!state.slots[key]) state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+      for(let i=a;i<b;i++) if(i>=0 && i<SLOTS_PER_DAY) setSlot(key,i,"work");
+    };
+    const setup = (start, scheme="BFM", mode="solo") => {
+      state.selectedDate = start;
+      state.scheme = scheme;
+      state.ruleHistory = [{effectiveDate:start, scheme, mode, coDriverScheme:scheme}];
+      state.slots = {};
+      state.dayDetails = {};
+      state.entries = [];
+      state.calculationHistory = {startDate:start, mode:"noWorkBeforeStart"};
+      state.restAsStationary = false;
+      state.smartMajorRestSettings = {enabled:true, twoUpNotice:true};
+    };
+
+    // BFM solo approved-app style overlap: daily sheet can exceed 14h if active counted periods stay legal.
+    setup("2026-06-22", "BFM", "solo");
+    setAllRest("2026-06-22", "BFM", "solo");
+    setWork("2026-06-22", 88, 94); // 22:00-23:30 = 1h30
+    syncChangeRowsForDay("2026-06-22");
+    setAllRest("2026-06-23", "BFM", "solo");
+    setWork("2026-06-23", 0, 19);
+    setWork("2026-06-23", 25, 43);
+    setWork("2026-06-23", 45, 56); // total before long rest = 12h on 23rd
+    setWork("2026-06-23", 86, 96); // 21:30-24:00
+    syncChangeRowsForDay("2026-06-23");
+    setAllRest("2026-06-24", "BFM", "solo");
+    setWork("2026-06-24", 0, 14); // continue to 03:30
+    syncChangeRowsForDay("2026-06-24");
+    let f = nhvrBreachesForDate("2026-06-23").concat(nhvrBreachesForDate("2026-06-24"));
+    add("BFM 21:30 start after major rest is allowed when old period reaches exactly 14h", !f.some(x => String(x.title).includes("24h work limit")), f.map(x=>({title:x.title, slots:x.focus&&x.focus.slots, msg:x.message})));
+
+    // Starting at 21:00 instead exceeds the old 22:00-22:00 period at 21:30.
+    setup("2026-06-22", "BFM", "solo");
+    setAllRest("2026-06-22", "BFM", "solo");
+    setWork("2026-06-22", 88, 94);
+    syncChangeRowsForDay("2026-06-22");
+    setAllRest("2026-06-23", "BFM", "solo");
+    setWork("2026-06-23", 0, 19);
+    setWork("2026-06-23", 25, 43);
+    setWork("2026-06-23", 45, 56);
+    setWork("2026-06-23", 84, 96); // 21:00-24:00
+    syncChangeRowsForDay("2026-06-23");
+    f = nhvrBreachesForDate("2026-06-23");
+    const bfmHit = f.find(x => String(x.title).includes("24h work limit"));
+    add("BFM 21:00 start breaches old active 24h period at 21:30", !!bfmHit && bfmHit.focus && bfmHit.focus.slots.includes(86), {hit:bfmHit && {title:bfmHit.title, slots:bfmHit.focus.slots, message:bfmHit.message}, all:f.map(x=>x.title)});
+
+    // Standard solo: old period 22:30-22:30 has 11h30 used. Start 20:00 breaches at 20:30.
+    setup("2026-07-01", "Standard", "solo");
+    setAllRest("2026-07-01", "Standard", "solo");
+    setWork("2026-07-01", 90, 96); // 22:30-00:00 = 1h30
+    syncChangeRowsForDay("2026-07-01");
+    setAllRest("2026-07-02", "Standard", "solo");
+    setWork("2026-07-02", 0, 40);  // 00:00-10:00 = 10h; total old used 11h30
+    setWork("2026-07-02", 80, 96); // 20:00-24:00
+    syncChangeRowsForDay("2026-07-02");
+    f = nhvrBreachesForDate("2026-07-02");
+    const stdHit = f.find(x => String(x.title).includes("24h work limit"));
+    add("Standard 20:00 start breaches at 20:30 when old 24h has only 30m left", !!stdHit && stdHit.focus && stdHit.focus.slots.includes(82), {hit:stdHit && {title:stdHit.title, slots:stdHit.focus.slots, message:stdHit.message}, all:f.map(x=>x.title)});
+
+    // Standard start 22:00 for 5h uses 30m before old period ends and should be OK for 24h work limit.
+    setup("2026-07-01", "Standard", "solo");
+    setAllRest("2026-07-01", "Standard", "solo");
+    setWork("2026-07-01", 90, 96);
+    syncChangeRowsForDay("2026-07-01");
+    setAllRest("2026-07-02", "Standard", "solo");
+    setWork("2026-07-02", 0, 40);
+    setWork("2026-07-02", 88, 96); // 22:00-24:00
+    syncChangeRowsForDay("2026-07-02");
+    setAllRest("2026-07-03", "Standard", "solo");
+    setWork("2026-07-03", 0, 12); // continue to 03:00 = total 5h
+    syncChangeRowsForDay("2026-07-03");
+    f = nhvrBreachesForDate("2026-07-02").concat(nhvrBreachesForDate("2026-07-03"));
+    add("Standard 22:00 start can work 5h without 24h work-limit breach", !f.some(x => String(x.title).includes("24h work limit")), f.map(x=>({title:x.title, slots:x.focus&&x.focus.slots})));
+
+    // BFM long/night: non-night work above 12h in an active counted 24h is counted.
+    setup("2026-08-01", "BFM", "solo");
+    setAllRest("2026-08-01", "BFM", "solo");
+    setWork("2026-08-01", 32, 88); // 08:00-22:00 = 14h, last 2h should be long/night
+    syncChangeRowsForDay("2026-08-01");
+    const ln = nhvrCpBfmLongNightMinsBetween(fromKey("2026-08-01").getTime(), fromKey("2026-08-02").getTime());
+    add("BFM long/night counts non-night work above 12h in counted 24h", ln >= 120, {longNight:formatMinsShort(ln)});
+
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+  }
+  return results;
 }
 
