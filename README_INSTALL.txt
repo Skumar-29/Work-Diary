@@ -685,3 +685,12 @@ NHVR counted-period engine fix:
 - Removed the previous daily-sheet safety false positive for high daily totals when counted 24h periods are still legal.
 - Keeps existing rest requirement checks, night rest checks, 84h checkpoint, smart major rest, stats table, service-worker fix, landscape mode, update button, graph, N/D, page numbering, diary history and settings.
 - Added self-test helper: nhvrCountedPeriodEngineSelfTest()
+
+
+Performance cache fix:
+- Added caching for repeated fatigue calculations during app open/render/Stats.
+- Cached activity lookups, work-between-window counts, rest-break anchors, counted-period anchors, long/night totals, breach results by date, breach slot sets and Stats 14-day rows.
+- Cache is cleared automatically when diary data/settings are saved or blocks are changed.
+- This is a speed-only patch and does not change the NHVR counted-period algorithm or any fatigue rule limits.
+- Keeps counted-period engine, service-worker fix, landscape mode, smart major rest, Stats table, graph, N/D, page numbering, diary history, update button and settings.
+- Added self-test helper: performanceCacheSelfTest()

@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 46;
-const APP_BUILD_NAME = "counted-period-engine-fix";
+const APP_SCHEMA_VERSION = 47;
+const APP_BUILD_NAME = "performance-cache-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7871,5 +7871,224 @@ function nhvrCountedPeriodEngineSelfTest(){
     state = {...state, ...backup};
   }
   return results;
+}
+
+
+
+
+/* =========================================================
+   PERFORMANCE CACHE FIX
+   Scope: speed only. Does not change NHVR calculation results.
+   Reuses repeated fatigue calculations during render/open/Stats.
+   ========================================================= */
+
+const PERF_CACHE_FIX_VERSION = "perf-cache-v1";
+let perfRevision = 1;
+let perfCache = {
+  breachByDate:new Map(),
+  breachSlots:new Map(),
+  activityByAbs:new Map(),
+  workBetween:new Map(),
+  restEnds:new Map(),
+  cpAnchors:new Map(),
+  cpLongNight:new Map(),
+  statsRows:new Map()
+};
+
+function perfBump(reason=""){
+  perfRevision++;
+  perfCache = {
+    breachByDate:new Map(),
+    breachSlots:new Map(),
+    activityByAbs:new Map(),
+    workBetween:new Map(),
+    restEnds:new Map(),
+    cpAnchors:new Map(),
+    cpLongNight:new Map(),
+    statsRows:new Map()
+  };
+}
+function perfKey(){
+  const rh = Array.isArray(state.ruleHistory) ? state.ruleHistory.length : 0;
+  const dh = state.dayDetails ? Object.keys(state.dayDetails).length : 0;
+  const sk = state.slots ? Object.keys(state.slots).length : 0;
+  return `${perfRevision}|${rh}|${dh}|${sk}`;
+}
+
+// Clear cached calculation results when data can change.
+(function(){
+  if(typeof setSlot === "function" && !setSlot._perfPatched){
+    const coreSetSlot = setSlot;
+    setSlot = function(){
+      const out = coreSetSlot.apply(this, arguments);
+      perfBump("setSlot");
+      return out;
+    };
+    setSlot._perfPatched = true;
+  }
+  if(typeof save === "function" && !save._perfPatched){
+    const coreSave = save;
+    save = function(){
+      const out = coreSave.apply(this, arguments);
+      perfBump("save");
+      return out;
+    };
+    save._perfPatched = true;
+  }
+  if(typeof saveSoon === "function" && !saveSoon._perfPatched){
+    const coreSaveSoon = saveSoon;
+    saveSoon = function(){
+      perfBump("saveSoon");
+      return coreSaveSoon.apply(this, arguments);
+    };
+    saveSoon._perfPatched = true;
+  }
+  if(typeof load === "function" && !load._perfPatched){
+    const coreLoad = load;
+    load = function(){
+      const out = coreLoad.apply(this, arguments);
+      perfBump("load");
+      return out;
+    };
+    load._perfPatched = true;
+  }
+})();
+
+// Cache low-level timeline lookups.
+(function(){
+  if(typeof activityAtAbs === "function" && !activityAtAbs._perfPatched){
+    const coreActivityAtAbs = activityAtAbs;
+    activityAtAbs = function(abs){
+      const k = `${perfKey()}|${Math.round(Number(abs)/60000)}`;
+      if(perfCache.activityByAbs.has(k)) return perfCache.activityByAbs.get(k);
+      const v = coreActivityAtAbs(abs);
+      perfCache.activityByAbs.set(k, v);
+      return v;
+    };
+    activityAtAbs._perfPatched = true;
+  }
+
+  if(typeof countWorkBetweenAbs === "function" && !countWorkBetweenAbs._perfPatched){
+    const coreCountWorkBetweenAbs = countWorkBetweenAbs;
+    countWorkBetweenAbs = function(startAbs, endAbs){
+      const k = `${perfKey()}|${Math.round(startAbs/60000)}|${Math.round(endAbs/60000)}`;
+      if(perfCache.workBetween.has(k)) return perfCache.workBetween.get(k);
+      const v = coreCountWorkBetweenAbs(startAbs, endAbs);
+      perfCache.workBetween.set(k, v);
+      return v;
+    };
+    countWorkBetweenAbs._perfPatched = true;
+  }
+
+  if(typeof nhvrRestBreakEnds === "function" && !nhvrRestBreakEnds._perfPatched){
+    const coreNhvrRestBreakEnds = nhvrRestBreakEnds;
+    nhvrRestBreakEnds = function(startAbs, endAbs){
+      const k = `${perfKey()}|${Math.round(startAbs/60000)}|${Math.round(endAbs/60000)}`;
+      if(perfCache.restEnds.has(k)) return perfCache.restEnds.get(k);
+      const v = coreNhvrRestBreakEnds(startAbs, endAbs);
+      perfCache.restEnds.set(k, v);
+      return v;
+    };
+    nhvrRestBreakEnds._perfPatched = true;
+  }
+
+  if(typeof nhvrCpAnchorEnds === "function" && !nhvrCpAnchorEnds._perfPatched){
+    const coreNhvrCpAnchorEnds = nhvrCpAnchorEnds;
+    nhvrCpAnchorEnds = function(profile, startAbs, endAbs, rule){
+      const k = `${perfKey()}|${profile&&profile.key}|${rule&&rule.label}|${Math.round(startAbs/60000)}|${Math.round(endAbs/60000)}`;
+      if(perfCache.cpAnchors.has(k)) return perfCache.cpAnchors.get(k);
+      const v = coreNhvrCpAnchorEnds(profile, startAbs, endAbs, rule);
+      perfCache.cpAnchors.set(k, v);
+      return v;
+    };
+    nhvrCpAnchorEnds._perfPatched = true;
+  }
+
+  if(typeof nhvrCpBfmLongNightMinsBetween === "function" && !nhvrCpBfmLongNightMinsBetween._perfPatched){
+    const coreNhvrCpBfmLongNightMinsBetween = nhvrCpBfmLongNightMinsBetween;
+    nhvrCpBfmLongNightMinsBetween = function(startAbs, endAbs){
+      const k = `${perfKey()}|${Math.round(startAbs/60000)}|${Math.round(endAbs/60000)}`;
+      if(perfCache.cpLongNight.has(k)) return perfCache.cpLongNight.get(k);
+      const v = coreNhvrCpBfmLongNightMinsBetween(startAbs, endAbs);
+      perfCache.cpLongNight.set(k, v);
+      return v;
+    };
+    nhvrCpBfmLongNightMinsBetween._perfPatched = true;
+    if(typeof nhvrBfmSoloLongNightMinsBetween === "function") nhvrBfmSoloLongNightMinsBetween = nhvrCpBfmLongNightMinsBetween;
+    if(typeof nhvrLongNightWorkBetween === "function") nhvrLongNightWorkBetween = nhvrCpBfmLongNightMinsBetween;
+  }
+})();
+
+// Cache final breach results by date. This is the biggest speed-up for grid + stats.
+(function(){
+  if(typeof nhvrBreachesForDate === "function" && !nhvrBreachesForDate._perfPatched){
+    const coreNhvrBreachesForDate = nhvrBreachesForDate;
+    nhvrBreachesForDate = function(key){
+      const k = `${perfKey()}|${key}`;
+      if(perfCache.breachByDate.has(k)) return perfCache.breachByDate.get(k);
+      if(typeof dayHasAnyWork === "function" && !dayHasAnyWork(key)){
+        perfCache.breachByDate.set(k, []);
+        return [];
+      }
+      const v = coreNhvrBreachesForDate(key) || [];
+      perfCache.breachByDate.set(k, v);
+      return v;
+    };
+    nhvrBreachesForDate._perfPatched = true;
+  }
+
+  if(typeof breachSlotSetForGrid === "function" && !breachSlotSetForGrid._perfPatched){
+    const coreBreachSlotSetForGrid = breachSlotSetForGrid;
+    breachSlotSetForGrid = function(key){
+      const k = `${perfKey()}|${key}`;
+      if(perfCache.breachSlots.has(k)) return new Set(perfCache.breachSlots.get(k));
+      const set = coreBreachSlotSetForGrid(key);
+      perfCache.breachSlots.set(k, [...set]);
+      return set;
+    };
+    breachSlotSetForGrid._perfPatched = true;
+  }
+})();
+
+// Stats table can be heavy; cache 14-row table data until diary changes.
+(function(){
+  if(typeof stats14RowsForSelectedDate === "function" && !stats14RowsForSelectedDate._perfPatched){
+    const coreStats14RowsForSelectedDate = stats14RowsForSelectedDate;
+    stats14RowsForSelectedDate = function(){
+      const k = `${perfKey()}|${state.selectedDate}|${activeRuleKeyForDate(state.selectedDate || toKey(new Date()))}`;
+      if(perfCache.statsRows.has(k)) return perfCache.statsRows.get(k);
+      const v = coreStats14RowsForSelectedDate();
+      perfCache.statsRows.set(k, v);
+      return v;
+    };
+    stats14RowsForSelectedDate._perfPatched = true;
+  }
+
+  if(typeof renderStatistics === "function" && !renderStatistics._perfPatched){
+    const coreRenderStatistics = renderStatistics;
+    renderStatistics = function(){
+      const start = performance && performance.now ? performance.now() : Date.now();
+      coreRenderStatistics();
+      const ms = Math.round((performance && performance.now ? performance.now() : Date.now()) - start);
+      if(ms > 800 && $("appUpdateStatus")){
+        // Quietly record slow stats render in console only.
+        console.info("Stats render took", ms, "ms");
+      }
+    };
+    renderStatistics._perfPatched = true;
+  }
+})();
+
+function performanceCacheSelfTest(){
+  return {
+    ok:true,
+    version:PERF_CACHE_FIX_VERSION,
+    revision:perfRevision,
+    cachedBreaches:perfCache.breachByDate.size,
+    cachedActivity:perfCache.activityByAbs.size,
+    cachedWorkBetween:perfCache.workBetween.size,
+    cachedStatsRows:perfCache.statsRows.size,
+    build:APP_BUILD_NAME
+  };
 }
 

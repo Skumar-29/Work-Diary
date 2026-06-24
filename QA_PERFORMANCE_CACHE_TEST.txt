@@ -1,0 +1,13 @@
+PERFORMANCE CACHE TEST REPORT
+
+{
+  "perf_patch_added": true,
+  "breach_cache_added": true,
+  "activity_cache_added": true,
+  "work_between_cache_added": true,
+  "rest_anchor_cache_added": true,
+  "stats_cache_added": true,
+  "counted_engine_kept": true,
+  "build_name": true,
+  "cache_version": true
+}
