@@ -1,4 +1,4 @@
-BUILD: clean-engine-stats-asof-speed-fix
+BUILD: clean-engine-diary-no-letters-fix
 
 Update focus:
 - Automatic safe post-update cache cleanup.
@@ -732,3 +732,10 @@ Rest-default + performance fix update (clean-engine-rest-default-perf-fix):
 - Stats 14-day accumulated table dark-mode readability fixed.
 - Performance cache improved to reduce slow screen opening and repeated audit/stat calculations.
 - NHVR counted-period calculation logic was not intentionally changed in this update.
+
+DIARY NUMBER LETTERS FIX
+- Fixed New work diary no setup field so it accepts letters/alphabets as well as numbers.
+- Removed the incorrect page-number-only filter from the work diary number box.
+- Added uppercase text handling to work diary number fields.
+- Page number fields still remain numbers/spaces only.
+- NHVR counted-period engine unchanged.

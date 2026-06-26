@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 51;
-const APP_BUILD_NAME = "clean-engine-stats-asof-speed-fix";
+const APP_SCHEMA_VERSION = 52;
+const APP_BUILD_NAME = "clean-engine-diary-no-letters-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -7224,7 +7224,7 @@ function stats14DayTableSelfTest(){
    ========================================================= */
 
 const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
-const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v87-stats-asof-speed-fix";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v88-diary-no-letters-fix";
 const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
 const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
 

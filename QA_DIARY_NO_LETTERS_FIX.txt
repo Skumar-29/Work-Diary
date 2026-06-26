@@ -1,0 +1,10 @@
+QA: Work diary number accepts letters
+Build: clean-engine-diary-no-letters-fix
+Schema: 52
+
+Checks:
+1. Settings > Work diary book setup > Default work diary no accepts letters and numbers.
+2. Settings > Start new diary book > New work diary no accepts letters and numbers.
+3. Page/Graph work diary no fields accept letters and numbers.
+4. Page number fields still remove letters because they are page numbers, not diary numbers.
+5. NHVR counted-period calculation engine unchanged.

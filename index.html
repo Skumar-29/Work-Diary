@@ -119,7 +119,7 @@
         <h2>Daily sheet details</h2>
         <p class="hint">Fill these details so the graph page matches your paper work diary sheet more closely.</p>
         <div id="graphDetailsForm" class="formGrid graphDetailsForm">
-          <label>Work diary no <input id="sheetWorkDiaryNo" data-day-detail="workDiaryNo" placeholder="e.g. VDW"></label>
+          <label>Work diary no <input id="sheetWorkDiaryNo" data-day-detail="workDiaryNo" data-work-diary-no="true" inputmode="text" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="e.g. VDW 4444"></label>
           <label>Page no <input id="sheetPageNo" data-day-detail="pageNo" placeholder="e.g. 491838" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
           <label>Page status
             <select id="sheetPageStatus" data-day-detail="pageStatus">
@@ -187,7 +187,7 @@
               <option value="WA">WA</option>
             </select>
           </label>
-          <label>Work diary no for this page <input id="pageWorkDiaryNo" data-page-override="workDiaryNo" placeholder="Work diary no"></label>
+          <label>Work diary no for this page <input id="pageWorkDiaryNo" data-page-override="workDiaryNo" data-work-diary-no="true" inputmode="text" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="Work diary no"></label>
           <label>Page no for this page <input id="pagePageNo" data-page-override="pageNo" placeholder="Page no" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
           <p class="smartTip fullWidth">If you cancelled a paper page and used the next page, mark the cancelled page status above, then manually set the correct page number on the usable page here if needed.</p>
           <label>Truck rego / number plate for this page <input id="pageNumberPlate" data-page-override="numberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="Truck rego"></label>
@@ -398,7 +398,7 @@
           <div class="formGrid">
             <label>First page date <input id="firstPageDate" type="date"></label>
             <label>First page number <input id="firstPageNumber" placeholder="e.g. 491838" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off"></label>
-            <label>Default work diary no <input id="defaultWorkDiaryNo" placeholder="e.g. VDW"></label>
+            <label>Default work diary no <input id="defaultWorkDiaryNo" data-work-diary-no="true" inputmode="text" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="e.g. VDW 4444"></label>
             <label>Default number plate <input id="defaultNumberPlate" data-uppercase-only="true" autocapitalize="characters" placeholder="e.g. XQ01QZ"></label>
           </div>
           <p class="hint">Example: if first used page is 491838, the next used work/cancelled/skipped page gets 491839 automatically. Full rest days with no page use do not consume a page number. You can still override a specific day on the Graph page.</p>
@@ -425,7 +425,7 @@
               <summary>Start new diary book</summary>
               <div class="formGrid">
                 <label>New book start date <input id="newBookStartDate" type="date"></label>
-                <label>New work diary no <input id="newBookDiaryNo" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 4444"></label>
+                <label>New work diary no <input id="newBookDiaryNo" inputmode="text" data-work-diary-no="true" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="e.g. VDW 4444"></label>
                 <label>New first page no <input id="newBookFirstPageNo" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 4444 01"></label>
                 <label class="fullWidth">Notes <input id="newBookNotes" placeholder="Optional note"></label>
               </div>
