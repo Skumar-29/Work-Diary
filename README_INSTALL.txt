@@ -704,3 +704,14 @@ Clean engine-test final update:
 - Short break detail handling is now automatic internally: smart mode ON, less than 7h threshold, matching Smart major rest classification.
 - Kept NHVR counted-period engine, performance cache, service-worker no-redirect fix, landscape mode, smart major rest, stats table, graph, N/D, page numbering, diary history, update button and settings.
 - Added self-test helper: cleanFinalAppSelfTest()
+
+
+Rest-default + performance fix update (clean-engine-rest-default-perf-fix):
+- Blank days / dates with no Work blocks are always counted as continuous Rest from the app/new diary setup.
+- The old Calculation History choice for No work / Unknown previous history has been removed from Settings.
+- The Work option / rule history screen no longer asks for a separate Rule effective from date; saving uses the selected page/date forward.
+- Driving audit wording changed from Open error to Fix.
+- No Work recorded reminders now show Fix and No Work. No Work confirms full rest, removes accidental page consumption, and hides the reminder.
+- Stats 14-day accumulated table dark-mode readability fixed.
+- Performance cache improved to reduce slow screen opening and repeated audit/stat calculations.
+- NHVR counted-period calculation logic was not intentionally changed in this update.

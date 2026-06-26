@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 48;
-const APP_BUILD_NAME = "clean-engine-test-final";
+const APP_SCHEMA_VERSION = 49;
+const APP_BUILD_NAME = "clean-engine-rest-default-perf-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -252,6 +252,9 @@ function isAuditDismissed(kind, date, extra){
 }
 function dismissOptionalAudit(kind, date, extra, label){
   ensureDismissedAudit();
+  if(kind === "no_work_day"){
+    markNoWorkDayConfirmed(date);
+  }
   const key = auditIgnoreKey(kind,date,extra);
   state.dismissedAudit[key] = {
     kind,
@@ -260,10 +263,11 @@ function dismissOptionalAudit(kind, date, extra, label){
     label: label || "Optional audit item",
     at: new Date().toISOString()
   };
-  addAuditLog("Audit item marked not required", `${date}: ${label || kind}`);
+  addAuditLog(kind === "no_work_day" ? "No work day confirmed" : "Audit item marked not required", `${date}: ${label || kind}`);
   save();
   renderAuditList();
   renderAuditLog();
+  if(typeof renderDate === "function") renderDate();
 }
 function restoreOptionalAudit(key){
   ensureDismissedAudit();
@@ -616,7 +620,7 @@ function migrateImportedBackup(backup){
   migrated.diaryBooks = migrated.diaryBooks.map(normalizeDiaryBook);
   migrated.calculationHistory = migrated.calculationHistory && typeof migrated.calculationHistory === "object" ? migrated.calculationHistory : {};
   migrated.calculationHistory.startDate = migrated.calculationHistory.startDate || migrated.bookSettings.firstPageDate || migrated.selectedDate;
-  migrated.calculationHistory.mode = ["noWorkBeforeStart","unknown","imported"].includes(migrated.calculationHistory.mode) ? migrated.calculationHistory.mode : "noWorkBeforeStart";
+  migrated.calculationHistory.mode = "noWorkBeforeStart";
   migrated.shortBreakSettings = migrated.shortBreakSettings && typeof migrated.shortBreakSettings === "object" ? migrated.shortBreakSettings : {mode:"smart", maxMinutes:60};
   migrated.shortBreakSettings.mode = ["manual","smart","strict"].includes(migrated.shortBreakSettings.mode) ? migrated.shortBreakSettings.mode : "smart";
   migrated.shortBreakSettings.maxMinutes = [15,30,45,60].includes(Number(migrated.shortBreakSettings.maxMinutes)) ? Number(migrated.shortBreakSettings.maxMinutes) : 60;
@@ -1572,9 +1576,9 @@ function ensureCalculationHistory(){
   if(!state.calculationHistory.startDate){
     state.calculationHistory.startDate = earliestRecordedDiaryDate();
   }
-  if(!["noWorkBeforeStart","unknown","imported"].includes(state.calculationHistory.mode)){
-    state.calculationHistory.mode = "noWorkBeforeStart";
-  }
+  // Blank/no-block days are always treated as full Rest from the app/new diary start.
+  // The old user-selectable unknown-history mode is no longer exposed.
+  state.calculationHistory.mode = "noWorkBeforeStart";
 }
 function calculationHistoryStartAbs(){
   ensureCalculationHistory();
@@ -1583,7 +1587,7 @@ function calculationHistoryStartAbs(){
 }
 function calculationHistoryMode(){
   ensureCalculationHistory();
-  return state.calculationHistory.mode || "noWorkBeforeStart";
+  return "noWorkBeforeStart";
 }
 function longPeriodRestCheckIsDue(winEnd, dayEnd){
   // Work-limit breaches can be known immediately, but a 7d/14d rest/night-rest requirement
@@ -1602,20 +1606,21 @@ function missingHistoryFinding(key, rule, profile, startAbs){
     `${rule.label} previous history needed`,
     `${profile.name}: ${rule.label} period starts before the app's calculation history start date. The app cannot confirm this long-period rest check from saved data only.`,
     [],
-    `Set Calculation History to “No work / full rest” only if that is true, or import/add earlier diary pages before relying on this ${rule.label} check.`,
+    `Blank/no-block days are treated as Rest by default. If you worked before this diary setup date, import or add those earlier work pages before relying on this ${rule.label} check.`,
     startAbs
   );
 }
 function renderCalculationHistorySettings(){
   ensureCalculationHistory();
+  state.calculationHistory.mode = "noWorkBeforeStart";
   if($("calculationHistoryStartDate")) $("calculationHistoryStartDate").value = state.calculationHistory.startDate || earliestRecordedDiaryDate();
-  if($("calculationHistoryMode")) $("calculationHistoryMode").value = state.calculationHistory.mode || "noWorkBeforeStart";
+  if($("calculationHistoryMode")) $("calculationHistoryMode").value = "noWorkBeforeStart";
 }
 function saveCalculationHistorySettings(){
   ensureCalculationHistory();
-  state.calculationHistory.startDate = $("calculationHistoryStartDate") ? $("calculationHistoryStartDate").value || earliestRecordedDiaryDate() : earliestRecordedDiaryDate();
-  state.calculationHistory.mode = $("calculationHistoryMode") ? $("calculationHistoryMode").value || "noWorkBeforeStart" : "noWorkBeforeStart";
-  addAuditLog("Calculation history changed", `Start ${state.calculationHistory.startDate}; before start: ${state.calculationHistory.mode}`);
+  state.calculationHistory.startDate = state.calculationHistory.startDate || earliestRecordedDiaryDate();
+  state.calculationHistory.mode = "noWorkBeforeStart";
+  addAuditLog("Calculation history confirmed", `Start ${state.calculationHistory.startDate}; blank days count as Rest`);
   save();
   refreshCurrentPageData({forceDefaults:false});
   renderAll();
@@ -2219,7 +2224,24 @@ function suggestRuleFixForSlots(key, badSlots){
   return `First issue is around ${time}: saved work is ${formatMinsShort(details.work)} in the ${r.label} window, about ${formatMinsShort(details.excess)} over the helper limit. Possible fix: review the ${r.label} period before ${time}; change at least ${formatMinsShort(excess)} of any incorrectly marked Work to Rest, or move/add a qualifying rest break earlier. Also check the previous page if this rolling window crosses midnight.`;
 }
 function fieldFix(fieldName){
-  return `Open the highlighted field, enter the correct ${fieldName}, then save the selected page only. If the change should apply to future pages, use Settings with the correct effective date.`;
+  return `Open the highlighted field, enter the correct ${fieldName}, then save the selected page only. If the change should apply to future pages, use Settings from the selected page/date forward.`;
+}
+
+function markNoWorkDayConfirmed(key){
+  if(!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+  const detail = ensureDayDetail(key);
+  // Blank days count as continuous Rest and should not consume a diary page.
+  if(!dayHasAnyWork(key) && (detail.pageStatus || "active") === "active"){
+    detail.usePage = false;
+    detail.usePageManual = false;
+    detail.pageNoManual = false;
+    detail.pageNo = "";
+    detail.changeRows = Array.isArray(detail.changeRows) ? detail.changeRows.filter(r => r && r.activity === "work") : [];
+  }
+  if(state.slots && Array.isArray(state.slots[key]) && !dayHasAnyWork(key)){
+    state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+  }
+  if(typeof recomputeAutoPageNumbers === "function") recomputeAutoPageNumbers();
 }
 
 function auditDate(key){
@@ -2303,8 +2325,10 @@ function auditDate(key){
   }
 
   const t = totalsForDay();
-  if(t.work === 0){
-    add("info","No work recorded","This page has no Work blocks recorded.",{type:"slot", slots:[]},"If this was a rest day, no action is needed. If you worked, add the correct Work blocks and locations.");
+  if(t.work === 0 && !isAuditDismissed("no_work_day", key, "rest")){
+    const beforeLen = errors.length;
+    add("info","No work recorded","No Work blocks are selected on this date, so the app is counting the whole time as continuous Rest.",{type:"slot", slots:[]},"Tap Fix to open this date and add Work blocks if you worked. Tap No Work to confirm this was a full-rest / no-work date and hide this reminder.");
+    errors[beforeLen].optionalDismiss = {kind:"no_work_day", date:key, extra:"rest", label:"No work / full rest confirmed", actionLabel:"No Work"};
   }
 
   state.selectedDate = oldDate;
@@ -2396,7 +2420,8 @@ function renderAuditList(){
     return;
   }
   holder.innerHTML = errors.slice(0,60).map((e,idx)=>{
-    const opt = e.optionalDismiss ? `<button type="button" class="auditOptionalBtn" data-audit-dismiss="${idx}">Skip</button>` : "";
+    const optLabel = e.optionalDismiss && e.optionalDismiss.actionLabel ? e.optionalDismiss.actionLabel : "Skip";
+    const opt = e.optionalDismiss ? `<button type="button" class="auditOptionalBtn" data-audit-dismiss="${idx}">${escapeHtml(optLabel)}</button>` : "";
     return `
     <div class="auditItem ${e.severity}" data-audit-card="${idx}">
       <strong>${escapeHtml(e.title)}</strong>
@@ -2404,7 +2429,7 @@ function renderAuditList(){
       <small>Date: ${escapeHtml(fmtDateLong(e.date))} • Page: ${escapeHtml(e.pageNo)}</small>
       <div class="suggestion"><strong>Possible fix:</strong> ${escapeHtml(e.suggestion)}</div>
       <div class="auditActions">
-        <button type="button" class="auditOpenBtn" data-audit-index="${idx}">Open error</button>
+        <button type="button" class="auditOpenBtn" data-audit-index="${idx}">Fix</button>
         ${opt}
       </div>
     </div>`}).join("") + dismissedOptionalAuditHtml();
@@ -7882,7 +7907,7 @@ function nhvrCountedPeriodEngineSelfTest(){
    Reuses repeated fatigue calculations during render/open/Stats.
    ========================================================= */
 
-const PERF_CACHE_FIX_VERSION = "perf-cache-v1";
+const PERF_CACHE_FIX_VERSION = "perf-cache-v2";
 let perfRevision = 1;
 let perfCache = {
   breachByDate:new Map(),
@@ -7892,7 +7917,8 @@ let perfCache = {
   restEnds:new Map(),
   cpAnchors:new Map(),
   cpLongNight:new Map(),
-  statsRows:new Map()
+  statsRows:new Map(),
+  auditErrors:new Map()
 };
 
 function perfBump(reason=""){
@@ -7905,14 +7931,14 @@ function perfBump(reason=""){
     restEnds:new Map(),
     cpAnchors:new Map(),
     cpLongNight:new Map(),
-    statsRows:new Map()
+    statsRows:new Map(),
+    auditErrors:new Map()
   };
 }
 function perfKey(){
-  const rh = Array.isArray(state.ruleHistory) ? state.ruleHistory.length : 0;
-  const dh = state.dayDetails ? Object.keys(state.dayDetails).length : 0;
-  const sk = state.slots ? Object.keys(state.slots).length : 0;
-  return `${perfRevision}|${rh}|${dh}|${sk}`;
+  // perfRevision is bumped whenever saved diary/settings data changes.
+  // Avoid Object.keys() inside every 15-minute scan; that was causing slow screen changes on larger diaries.
+  return String(perfRevision);
 }
 
 // Clear cached calculation results when data can change.
@@ -8076,6 +8102,22 @@ function perfKey(){
       }
     };
     renderStatistics._perfPatched = true;
+  }
+})();
+
+// Audit list can be heavy when many diary pages exist; cache it until diary/settings data changes.
+(function(){
+  if(typeof buildAuditErrors === "function" && !buildAuditErrors._perfPatched){
+    const coreBuildAuditErrors = buildAuditErrors;
+    buildAuditErrors = function(){
+      const dismissedCount = state && state.dismissedAudit ? Object.keys(state.dismissedAudit).length : 0;
+      const k = `${perfKey()}|${state.selectedDate || ""}|${dismissedCount}`;
+      if(perfCache.auditErrors.has(k)) return perfCache.auditErrors.get(k);
+      const v = coreBuildAuditErrors() || [];
+      perfCache.auditErrors.set(k, v);
+      return v;
+    };
+    buildAuditErrors._perfPatched = true;
   }
 })();
 

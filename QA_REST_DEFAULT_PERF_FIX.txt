@@ -1,0 +1,15 @@
+Build: clean-engine-rest-default-perf-fix
+
+Changes tested/checked:
+- Blank/no-block dates continue to be treated as Rest because getSlot()/activityAtAbs() default missing slots to Rest.
+- No Work audit reminder now has Fix + No Work actions.
+- No Work confirms the date as full rest, clears accidental page-use/page-number consumption, and dismisses the reminder.
+- Audit action wording changed from Open error to Fix.
+- Calculation History user setting removed from Settings; internal mode is fixed to noWorkBeforeStart.
+- Rule effective date input removed; saving Work option / rule history uses the selected page/date.
+- Stats 14-day table dark-mode text color fixed so rows/headers are visible.
+- Performance cache key simplified to avoid repeated Object.keys() during 15-minute scans.
+- Audit list results are cached until diary/settings data changes.
+
+NHVR calculation engine note:
+No counted-period rule logic was intentionally changed. The update only changes blank-day default handling/UI, display text, and performance caching.

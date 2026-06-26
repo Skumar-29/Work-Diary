@@ -1903,3 +1903,20 @@ body.homeScreenPwa .card{
     border-color:#333;
   }
 }
+
+/* Rest-default / stats readability fix */
+@media (prefers-color-scheme:dark){
+  .stats14DayTable,
+  .stats14Header strong,
+  .stats14Table,
+  .stats14Table th,
+  .stats14Table td{
+    color:#f2f2f2;
+  }
+  .stats14Table .stick{
+    color:#f2f2f2;
+  }
+  .stats14Empty{
+    color:#c8c8c8;
+  }
+}

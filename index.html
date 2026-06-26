@@ -466,30 +466,10 @@
           <button id="saveSmartMajorRestSettings" class="secondary full" type="button">Save smart major rest settings</button>
         </div>
 
-<div class="calculationHistoryBox">
-          <h3>Calculation history</h3>
-          <p class="smartTip">Use this to avoid false long-period warnings when the app does not contain older work diary history.</p>
-          <div class="formGrid">
-            <label>History starts from
-              <input id="calculationHistoryStartDate" type="date">
-            </label>
-            <label>Before this date, assume
-              <select id="calculationHistoryMode">
-                <option value="noWorkBeforeStart">No work / full rest</option>
-                <option value="unknown">Unknown previous history</option>
-                <option value="imported">Previous history imported</option>
-              </select>
-            </label>
-          </div>
-          <p class="hint">For a new app setup, choose “No work / full rest” only if you genuinely did not work before the start date or you intentionally start checking from a clean rest point.</p>
-          <button id="saveCalculationHistory" class="secondary full" type="button">Save calculation history</button>
-        </div>
-
         <div class="ruleHistoryBox">
           <h3>Work option / rule history</h3>
-          <p class="smartTip">Use this whenever you change Standard/BFM, solo/two-up, or co-driver option. It applies from the effective date forward and old pages stay protected.</p>
+          <p class="smartTip">Use this whenever you change Standard/BFM, solo/two-up, or co-driver option. The saved option applies from the selected page/date forward and old pages stay protected.</p>
           <div class="formGrid">
-            <label>Rule effective from date <input id="ruleEffectiveDate" type="date"></label>
             <label>My work option
               <select id="ruleMyScheme">
                 <option value="Standard">Standard</option>
