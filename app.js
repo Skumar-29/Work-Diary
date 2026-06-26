@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 49;
-const APP_BUILD_NAME = "clean-engine-rest-default-perf-fix";
+const APP_SCHEMA_VERSION = 50;
+const APP_BUILD_NAME = "clean-engine-auto-cache-cleanup";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -4991,6 +4991,7 @@ function setup(){
   setInterval(()=>{ $("fakeTime").textContent=new Date().toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit"}); }, 30000);
   renderAll();
   maybeShowBackupReminder();
+  scheduleSafePostUpdateMaintenance();
 }
 
 if("serviceWorker" in navigator){
@@ -7221,12 +7222,103 @@ function stats14DayTableSelfTest(){
 
 
 
+
+
+/* =========================================================
+   SAFE AUTO CACHE CLEANUP / POST-UPDATE MAINTENANCE
+   Scope: app-file cache + service worker maintenance only.
+   Does NOT delete diary data, settings, vehicles, drivers, books, or backups.
+   ========================================================= */
+
+const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v86-auto-cache-cleanup";
+const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
+const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
+
+function readAppMaintenanceMeta(){
+  try{ return JSON.parse(localStorage.getItem(APP_MAINTENANCE_META_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function writeAppMaintenanceMeta(meta){
+  try{ localStorage.setItem(APP_MAINTENANCE_META_KEY, JSON.stringify(meta || {})); }
+  catch(e){}
+}
+function isTruckDiaryCacheName(name){
+  return /truck-work-diary|work-diary|diary/i.test(String(name || ""));
+}
+async function deleteOldAppCachesSafe(options={}){
+  if(!("caches" in window)) return {supported:false, total:0, deleted:0, kept:0};
+  const keep = options.keep === false ? "" : (options.keep || CURRENT_SERVICE_WORKER_CACHE_NAME);
+  const keys = await caches.keys();
+  const targets = keys.filter(k => isTruckDiaryCacheName(k) && (!keep || k !== keep));
+  await Promise.all(targets.map(k => caches.delete(k).catch(()=>false)));
+  return {supported:true, total:keys.length, deleted:targets.length, kept:keep ? keys.filter(k => k === keep).length : 0};
+}
+async function askServiceWorkerForOldCacheCleanup(){
+  if(!("serviceWorker" in navigator)) return {supported:false};
+  try{
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for(const reg of regs){
+      try{ await reg.update(); }catch(e){}
+      try{ if(reg.waiting) reg.waiting.postMessage({type:"SKIP_WAITING"}); }catch(e){}
+      try{ if(reg.active) reg.active.postMessage({type:"CLEAR_OLD_APP_CACHES", keep:CURRENT_SERVICE_WORKER_CACHE_NAME}); }catch(e){}
+    }
+    return {supported:true, registrations:regs.length};
+  }catch(err){
+    return {supported:true, error:String(err && err.message || err)};
+  }
+}
+function clearSafeUpdateTempFlags(){
+  try{ localStorage.removeItem(APP_UPDATE_PENDING_CLEANUP_KEY); }catch(e){}
+}
+async function runSafeAppMaintenance(reason="auto", force=false){
+  const meta = readAppMaintenanceMeta();
+  const pending = !!localStorage.getItem(APP_UPDATE_PENDING_CLEANUP_KEY);
+  if(!force && !pending && meta.lastBuild === APP_BUILD_NAME && meta.version === SAFE_CACHE_MAINTENANCE_VERSION){
+    return {skipped:true, reason:"already-clean-for-this-build"};
+  }
+  const started = new Date().toISOString();
+  let cacheResult = {supported:false};
+  let swResult = {supported:false};
+  try{ swResult = await askServiceWorkerForOldCacheCleanup(); }catch(e){ swResult = {supported:true, error:String(e && e.message || e)}; }
+  try{ cacheResult = await deleteOldAppCachesSafe({keep:CURRENT_SERVICE_WORKER_CACHE_NAME}); }catch(e){ cacheResult = {supported:true, error:String(e && e.message || e)}; }
+  clearSafeUpdateTempFlags();
+  const done = {
+    version:SAFE_CACHE_MAINTENANCE_VERSION,
+    lastBuild:APP_BUILD_NAME,
+    lastSchema:APP_SCHEMA_VERSION,
+    lastRunAt:new Date().toISOString(),
+    reason,
+    cacheResult,
+    swResult,
+    note:"Only app-file caches/service-worker leftovers were cleaned. Diary data/settings are preserved in truckDiaryPWA."
+  };
+  writeAppMaintenanceMeta(done);
+  if(force){
+    const deleted = cacheResult && typeof cacheResult.deleted === "number" ? cacheResult.deleted : 0;
+    appUpdateStatus(`Safe cleanup finished. Deleted ${deleted} old app cache(s). Diary data was kept.`);
+    if(typeof showToast === "function") showToast("Safe cleanup done");
+  }
+  return {...done, started};
+}
+function scheduleSafePostUpdateMaintenance(){
+  setTimeout(() => {
+    runSafeAppMaintenance("startup", false).catch(err => console.info("Safe app maintenance skipped", err));
+  }, 1200);
+}
+function runSafeCleanupButton(){
+  appUpdateStatus("Cleaning old app caches safely… Diary data will be kept.");
+  runSafeAppMaintenance("manual", true).catch(err => {
+    appUpdateStatus(`Safe cleanup failed: ${err && err.message ? err.message : err}`);
+  });
+}
+
 /* =========================================================
    APP UPDATE BUTTON + BACKUP PROMPT FLOW
    Scope: update/cache refresh only. Does not clear diary data.
    ========================================================= */
 
-const APP_UPDATE_FLOW_VERSION = "update-button-backup-flow";
+const APP_UPDATE_FLOW_VERSION = "update-button-backup-flow-safe-cache";
 
 function appUpdateCurrentLabel(){
   return `${APP_BUILD_NAME} / schema ${APP_SCHEMA_VERSION}`;
@@ -7286,7 +7378,7 @@ async function checkAppUpdate(){
 }
 function forceReloadAppFilesFlow(){
   renderAppUpdateSettings();
-  appUpdateStatus("Force reload will clear only cached app files and keep diary data.");
+  appUpdateStatus("Force reload will clear old cached app files and keep diary data/settings.");
   appUpdateShowBackupPanel("Force reload selected.");
 }
 async function saveBackupBeforeUpdate(){
@@ -7317,13 +7409,14 @@ function skipBackupBeforeUpdate(){
   appUpdateShowReady("Backup skipped. Tap Update App Now.");
 }
 async function updateAppNow(){
-  appUpdateStatus("Updating app files… Please wait.");
+  appUpdateStatus("Updating app files and clearing old caches… Please wait.");
   try{
+    try{ localStorage.setItem(APP_UPDATE_PENDING_CLEANUP_KEY, JSON.stringify({from:APP_BUILD_NAME, at:new Date().toISOString()})); }catch(e){}
     if(typeof flushSaveSoon === "function") flushSaveSoon();
     if(typeof save === "function") save();
 
     if(typeof addAuditLog === "function"){
-      addAuditLog("App update requested", `From ${APP_BUILD_NAME}. Cache files only; diary data kept.`);
+      addAuditLog("App update requested", `From ${APP_BUILD_NAME}. Old app caches only; diary data/settings kept.`);
     }
 
     if("serviceWorker" in navigator){
@@ -7335,10 +7428,7 @@ async function updateAppNow(){
     }
 
     if("caches" in window){
-      const keys = await caches.keys();
-      await Promise.all(keys
-        .filter(k => /truck-work-diary|work-diary|diary/i.test(k))
-        .map(k => caches.delete(k)));
+      await deleteOldAppCachesSafe({keep:false});
     }
 
     appUpdateStatus("Latest files requested. Reloading…");
@@ -7353,6 +7443,7 @@ function setupAppUpdateButtons(){
   renderAppUpdateSettings();
   if($("checkAppUpdateBtn")) $("checkAppUpdateBtn").onclick = checkAppUpdate;
   if($("forceReloadAppFilesBtn")) $("forceReloadAppFilesBtn").onclick = forceReloadAppFilesFlow;
+  if($("safeCleanAppCacheBtn")) $("safeCleanAppCacheBtn").onclick = runSafeCleanupButton;
   if($("saveBackupBeforeUpdateBtn")) $("saveBackupBeforeUpdateBtn").onclick = saveBackupBeforeUpdate;
   if($("skipBackupBeforeUpdateBtn")) $("skipBackupBeforeUpdateBtn").onclick = skipBackupBeforeUpdate;
   if($("updateAppNowBtn")) $("updateAppNowBtn").onclick = updateAppNow;
@@ -7371,7 +7462,9 @@ function appUpdateButtonSelfTest(){
     hasBackupPanel:!!$("appUpdateBackupPanel"),
     hasUpdateButton:!!$("updateAppNowBtn"),
     hasCacheApi:typeof caches !== "undefined",
-    hasServiceWorkerApi:typeof navigator !== "undefined" && !!navigator.serviceWorker
+    hasServiceWorkerApi:typeof navigator !== "undefined" && !!navigator.serviceWorker,
+    hasSafeCleanup:typeof runSafeAppMaintenance === "function",
+    cacheName:CURRENT_SERVICE_WORKER_CACHE_NAME
   };
 }
 
@@ -7504,7 +7597,7 @@ async function repairServiceWorkerRedirectIssue(){
     if(typeof addAuditLog === "function") addAuditLog("Service worker cache repaired", "Redirected cached responses cleared; diary data kept.");
     location.replace(location.origin + location.pathname + "?swRepair=" + Date.now() + (location.hash || ""));
   }catch(err){
-    alert("Repair failed. If the app will not open, clear only this website data in iPhone Safari settings, then reopen the Cloudflare link.");
+    alert("Repair failed. If the app will not open, clear only this website data in iPhone Safari settings, then reopen the GitHub Pages link.");
   }
 }
 function serviceWorkerNoRedirectSelfTest(){
@@ -7907,7 +8000,7 @@ function nhvrCountedPeriodEngineSelfTest(){
    Reuses repeated fatigue calculations during render/open/Stats.
    ========================================================= */
 
-const PERF_CACHE_FIX_VERSION = "perf-cache-v2";
+const PERF_CACHE_FIX_VERSION = "perf-cache-v3-audit-reuse";
 let perfRevision = 1;
 let perfCache = {
   breachByDate:new Map(),
@@ -8111,7 +8204,7 @@ function perfKey(){
     const coreBuildAuditErrors = buildAuditErrors;
     buildAuditErrors = function(){
       const dismissedCount = state && state.dismissedAudit ? Object.keys(state.dismissedAudit).length : 0;
-      const k = `${perfKey()}|${state.selectedDate || ""}|${dismissedCount}`;
+      const k = `${perfKey()}|dismissed:${dismissedCount}`;
       if(perfCache.auditErrors.has(k)) return perfCache.auditErrors.get(k);
       const v = coreBuildAuditErrors() || [];
       perfCache.auditErrors.set(k, v);

@@ -1,0 +1,17 @@
+QA SAFE CACHE CLEANUP / PERFORMANCE MAINTENANCE
+
+Build: clean-engine-auto-cache-cleanup
+Schema: 50
+
+Scope:
+- Clears only app-file CacheStorage/service-worker leftovers.
+- Keeps localStorage key truckDiaryPWA, which contains diary data/settings.
+- Adds automatic post-update cleanup and manual Clean App Cache Safely button.
+- Does not change the NHVR counted-period calculation algorithm.
+
+Manual checks:
+1. Open Settings > App updates. Confirm current version shows clean-engine-auto-cache-cleanup / schema 50.
+2. Tap Clean App Cache Safely. Status should say old caches were cleaned and diary data kept.
+3. Close and reopen Home Screen app. Diary pages, settings, vehicles, drivers, page numbers and backup settings should remain.
+4. Check Update App Now flow: Save Backup/Skip Backup still appears first, then update clears old app caches and reloads.
+5. Run Engine Test. Counted-period scenarios should still pass.

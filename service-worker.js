@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v85-rest-default-perf-fix";
+const CACHE = "truck-work-diary-v86-auto-cache-cleanup";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){
@@ -40,6 +40,13 @@ self.addEventListener("message", event => {
     event.waitUntil((async () => {
       const keys = await caches.keys();
       await Promise.all(keys.filter(k => /truck-work-diary|work-diary|diary/i.test(k)).map(k => caches.delete(k)));
+    })());
+  }
+  if(event.data && event.data.type === "CLEAR_OLD_APP_CACHES"){
+    event.waitUntil((async () => {
+      const keep = event.data.keep || CACHE;
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => k !== keep && /truck-work-diary|work-diary|diary/i.test(k)).map(k => caches.delete(k)));
     })());
   }
 });

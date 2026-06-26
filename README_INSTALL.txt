@@ -1,3 +1,12 @@
+BUILD: clean-engine-auto-cache-cleanup
+
+Update focus:
+- Automatic safe post-update cache cleanup.
+- Manual Settings > App updates > Clean App Cache Safely button.
+- Old app-file caches/service-worker leftovers are cleared without deleting real diary data, settings, vehicles, drivers or backups.
+- Audit list cache reuses results across page changes for smoother screen opening.
+- NHVR counted-period engine unchanged.
+
 Truck Work Diary Checker - two rows + graph page version
 
 How to update GitHub:
@@ -664,7 +673,7 @@ Service worker no-redirect fix:
 - Navigation/app launch now safely loads index.html and falls back to a non-redirect cached index.html.
 - Old app caches are deleted on activation, but diary data and localStorage are not cleared.
 - Added helper: repairServiceWorkerRedirectIssue()
-- If the broken old service worker prevents the app from opening, open the Cloudflare link in Safari and use Force Reload App Files. If it still cannot open, clear website data for this domain once, then reopen.
+- If the broken old service worker prevents the app from opening, open the GitHub Pages link in Safari and use Force Reload App Files. If it still cannot open, clear website data for this domain once, then reopen.
 
 
 Landscape compact mode:
