@@ -84,13 +84,7 @@
         <div id="canDriveCard" class="canDriveCard"></div>
         <p id="nhvrEngineNote" class="hint">NHVR guide counting engine active.</p>
       </section>
-
-      <section class="card">
-        <h2>Driving limits</h2>
-        <div id="statsLimitCards" class="statsLimitCards"></div>
-      </section>
-
-      <section class="card">
+<section class="card">
         <h2>Breaks due</h2>
         <div id="statsBreaksDue" class="statsRows"></div>
       </section>
@@ -455,35 +449,7 @@
           <input id="restAsStationary" type="checkbox" checked>
           Count all rest as stationary rest for major-rest warning
         </label>
-
-        
-        
-        <div class="shortBreakBox">
-          <h3>Short break details</h3>
-          <p class="smartTip">Controls when the app can auto-use N/D for odometer/location on short breaks between work periods.</p>
-          <div class="formGrid">
-            <label>Short break detail rule
-              <select id="shortBreakDetailMode">
-                <option value="manual">Manual only</option>
-                <option value="smart">Smart short-break mode</option>
-                <option value="strict">Strict: always ask details</option>
-              </select>
-            </label>
-            <label>Short break limit
-              <select id="shortBreakMaxMinutes">
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="45">45 minutes</option>
-                <option value="60">60 minutes</option>
-              </select>
-            </label>
-          </div>
-          <p class="hint">Smart mode: rest-start row still needs odometer/location, but the return-to-work row after a short break is N/D automatically. Short rest rows auto-select Rest.</p>
-          <button id="saveShortBreakSettings" class="secondary full" type="button">Save short break settings</button>
-        </div>
-
-
-        <div class="smartMajorRestBox">
+<div class="smartMajorRestBox">
           <h3>Smart major rest classification</h3>
           <p class="smartTip">Automatically classifies long rest breaks so major-rest, night-rest, 84h checkpoint, and 24h reset calculations are less likely to be wrong if you forget to select rest type manually.</p>
           <label class="checkLabel">
@@ -495,7 +461,7 @@
             Show skippable reminder when two-up 7h+ rest is counted as Sleeper berth
           </label>
           <p class="hint">
-            Less than 7h = Rest. Solo 7h+ = Stationary/Night if it qualifies. Two-up 7h+ = Sleeper berth reminder. 24h+ = 24h rest unless you manually choose another rest type.
+            Less than 7h = normal Rest / short break handling. Solo 7h+ = Stationary/Night if it qualifies. Two-up 7h+ = Sleeper berth reminder. 24h+ = 24h rest unless you manually choose another rest type.
           </p>
           <button id="saveSmartMajorRestSettings" class="secondary full" type="button">Save smart major rest settings</button>
         </div>
@@ -557,7 +523,19 @@
           <button id="shareJsonBackup" class="secondary">Share / Save Backup JSON</button>
 
           
-          <div class="appUpdateBox">
+          
+          <div class="engineTestBox">
+            <h3>Engine test system</h3>
+            <p class="hint">Runs saved scenario tests without changing your diary data. Use this after updates to check counted 24h periods, BFM 84h checkpoint, smart rest, long/night and Stats helper behaviour.</p>
+            <div class="updateButtonRow">
+              <button id="engineTestRunBtn" class="primary" type="button">Run Engine Test</button>
+              <button id="engineTestClearBtn" class="secondary" type="button">Clear Test Report</button>
+            </div>
+            <div id="engineTestStatus" class="hint">Ready.</div>
+            <div id="engineTestReport" class="engineTestReport"></div>
+          </div>
+
+<div class="appUpdateBox">
             <h3>App updates</h3>
             <p id="currentAppVersion" class="hint">Current app version: checking…</p>
             <div class="updateButtonRow">

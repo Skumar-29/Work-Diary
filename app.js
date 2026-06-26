@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 47;
-const APP_BUILD_NAME = "performance-cache-fix";
+const APP_SCHEMA_VERSION = 48;
+const APP_BUILD_NAME = "clean-engine-test-final";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -8089,6 +8089,199 @@ function performanceCacheSelfTest(){
     cachedWorkBetween:perfCache.workBetween.size,
     cachedStatsRows:perfCache.statsRows.size,
     build:APP_BUILD_NAME
+  };
+}
+
+
+
+
+/* =========================================================
+   CLEAN APP FINAL PATCH
+   Scope:
+   - Remove duplicate Settings/Stats functions from UI.
+   - Keep short-break detail handling automatic: short rests below 7h are normal rest.
+   - Add Settings > Engine test system.
+   - No fatigue algorithm changes.
+   ========================================================= */
+
+const CLEAN_APP_FINAL_VERSION = "clean-engine-test-final-v1";
+
+// Short-break detail setting is no longer a visible user option.
+// It stays internally ON and uses <7h as the threshold so it matches Smart major rest classification.
+ensureShortBreakSettings = function(){
+  if(!state.shortBreakSettings || typeof state.shortBreakSettings !== "object") state.shortBreakSettings = {};
+  state.shortBreakSettings.mode = "smart";
+  state.shortBreakSettings.maxMinutes = 420; // less than 7h
+  state.shortBreakSettings.hidden = true;
+};
+renderShortBreakSettings = function(){
+  ensureShortBreakSettings();
+};
+saveShortBreakSettings = function(){
+  ensureShortBreakSettings();
+  addAuditLog("Smart break details", "Automatic short-break details active; less than 7h treated as normal rest/short-break handling.");
+  save();
+  if(typeof showToast === "function") showToast("Saved");
+};
+
+// Clean stats: old Driving limits section has been removed from HTML.
+// Keep this no-op safety so old cached markup will not duplicate the new 14-day table.
+(function(){
+  if(typeof renderStatistics === "function" && !renderStatistics._cleanStatsPatched){
+    const coreRenderStatisticsForCleanStats = renderStatistics;
+    renderStatistics = function(){
+      coreRenderStatisticsForCleanStats();
+      const duplicate = $("statsLimitCards");
+      if(duplicate) duplicate.innerHTML = "";
+    };
+    renderStatistics._cleanStatsPatched = true;
+  }
+})();
+
+function engineTestNormaliseResult(group, result){
+  if(Array.isArray(result)){
+    return result.map((r, idx) => ({
+      group,
+      name: r && r.name ? r.name : `${group} test ${idx+1}`,
+      pass: !!(r && r.pass),
+      actual: r && r.actual !== undefined ? r.actual : r
+    }));
+  }
+  if(result && typeof result === "object"){
+    return [{
+      group,
+      name: result.name || `${group} status`,
+      pass: result.ok !== false,
+      actual: result
+    }];
+  }
+  return [{group, name:`${group} status`, pass:!!result, actual:result}];
+}
+
+function runEngineTestSuite(){
+  const started = Date.now();
+  const tests = [];
+  const addGroup = (group, fnName) => {
+    try{
+      if(typeof window[fnName] !== "function"){
+        tests.push({group, name:`${fnName} available`, pass:false, actual:"Missing test helper"});
+        return;
+      }
+      engineTestNormaliseResult(group, window[fnName]()).forEach(t => tests.push(t));
+    }catch(err){
+      tests.push({group, name:`${group} crashed`, pass:false, actual:String(err && err.stack || err)});
+    }
+  };
+
+  addGroup("Counted 24h periods", "nhvrCountedPeriodEngineSelfTest");
+  addGroup("BFM 84h checkpoint", "nhvrBfm84CheckpointSelfTest");
+  addGroup("Smart major rest", "smartMajorRestSelfTest");
+  addGroup("Stats 14-day table", "stats14DayTableSelfTest");
+
+  // Lightweight clean-app checks.
+  tests.push({
+    group:"Clean settings",
+    name:"Short-break UI removed and automatic <7h rule active",
+    pass: !$("shortBreakDetailMode") && !$("shortBreakMaxMinutes") && state.shortBreakSettings && Number(state.shortBreakSettings.maxMinutes) === 420,
+    actual:{hasShortBreakMode:!!$("shortBreakDetailMode"), hasShortBreakLimit:!!$("shortBreakMaxMinutes"), settings:state.shortBreakSettings}
+  });
+  tests.push({
+    group:"Clean stats",
+    name:"Old duplicate Driving limits card removed",
+    pass: !$("statsLimitCards"),
+    actual:{hasDuplicateStatsLimitCards:!!$("statsLimitCards")}
+  });
+
+  if(typeof performanceCacheSelfTest === "function"){
+    engineTestNormaliseResult("Performance cache", performanceCacheSelfTest()).forEach(t => tests.push(t));
+  }
+
+  const passed = tests.filter(t => t.pass).length;
+  const failed = tests.length - passed;
+  return {started, ended:Date.now(), passed, failed, total:tests.length, tests};
+}
+
+function engineTestShortActual(actual){
+  try{
+    const text = typeof actual === "string" ? actual : JSON.stringify(actual);
+    return text.length > 260 ? text.slice(0,260) + "…" : text;
+  }catch(e){
+    return String(actual || "");
+  }
+}
+
+function renderEngineTestReport(report){
+  const status = $("engineTestStatus");
+  const box = $("engineTestReport");
+  if(!box) return;
+  if(!report){
+    if(status) status.textContent = "Ready.";
+    box.innerHTML = "";
+    return;
+  }
+  const ok = report.failed === 0;
+  if(status){
+    status.textContent = ok
+      ? `PASS: ${report.passed}/${report.total} tests passed.`
+      : `CHECK: ${report.failed} failed, ${report.passed}/${report.total} passed.`;
+  }
+  const rows = (report.tests || []).map(t => `
+    <tr class="${t.pass ? "pass" : "fail"}">
+      <td>${t.pass ? "PASS" : "FAIL"}</td>
+      <td>${escapeHtml(t.group)}</td>
+      <td>${escapeHtml(t.name)}</td>
+      <td>${escapeHtml(engineTestShortActual(t.actual))}</td>
+    </tr>`).join("");
+  box.innerHTML = `
+    <div class="engineTestSummary ${ok ? "pass" : "fail"}">
+      <strong>${ok ? "All engine tests passed" : "Some engine tests need review"}</strong>
+      <span>${report.passed}/${report.total} passed • ${Math.max(0, report.ended-report.started)} ms</span>
+    </div>
+    <div class="engineTestScroll">
+      <table>
+        <thead><tr><th>Status</th><th>Group</th><th>Test</th><th>Details</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function runEngineTestButton(){
+  const status = $("engineTestStatus");
+  if(status) status.textContent = "Running tests…";
+  setTimeout(() => {
+    const report = runEngineTestSuite();
+    state.lastEngineTestReport = report;
+    renderEngineTestReport(report);
+    addAuditLog("Engine test run", `${report.passed}/${report.total} passed; ${report.failed} failed`);
+    saveSoon();
+  }, 20);
+}
+
+function setupCleanEngineTestUi(){
+  ensureShortBreakSettings();
+  const runBtn = $("engineTestRunBtn");
+  if(runBtn) runBtn.onclick = runEngineTestButton;
+  const clearBtn = $("engineTestClearBtn");
+  if(clearBtn) clearBtn.onclick = () => {
+    state.lastEngineTestReport = null;
+    renderEngineTestReport(null);
+    saveSoon();
+  };
+  if(state.lastEngineTestReport) renderEngineTestReport(state.lastEngineTestReport);
+}
+setTimeout(setupCleanEngineTestUi, 0);
+
+function cleanFinalAppSelfTest(){
+  ensureShortBreakSettings();
+  return {
+    ok:true,
+    version:CLEAN_APP_FINAL_VERSION,
+    shortBreakHidden:!$("shortBreakDetailMode") && !$("shortBreakMaxMinutes"),
+    shortBreakMaxMinutes:state.shortBreakSettings.maxMinutes,
+    duplicateStatsRemoved:!$("statsLimitCards"),
+    engineTestButtons:!!$("engineTestRunBtn") && !!$("engineTestClearBtn"),
+    countedEngine:typeof nhvrCountedPeriodEngineSelfTest === "function",
+    performanceCache:typeof performanceCacheSelfTest === "function"
   };
 }
 

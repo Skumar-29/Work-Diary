@@ -694,3 +694,13 @@ Performance cache fix:
 - This is a speed-only patch and does not change the NHVR counted-period algorithm or any fatigue rule limits.
 - Keeps counted-period engine, service-worker fix, landscape mode, smart major rest, Stats table, graph, N/D, page numbering, diary history, update button and settings.
 - Added self-test helper: performanceCacheSelfTest()
+
+
+Clean engine-test final update:
+- Added Settings > Engine test system with Run Engine Test and Clear Test Report.
+- Engine test runs scenario helpers without changing diary data and reports PASS/FAIL inside the app.
+- Removed duplicate Stats > Driving limits card. The main "Can work" card and compact 14-day accumulated table remain.
+- Removed duplicate Short break details settings UI.
+- Short break detail handling is now automatic internally: smart mode ON, less than 7h threshold, matching Smart major rest classification.
+- Kept NHVR counted-period engine, performance cache, service-worker no-redirect fix, landscape mode, smart major rest, stats table, graph, N/D, page numbering, diary history, update button and settings.
+- Added self-test helper: cleanFinalAppSelfTest()

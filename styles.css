@@ -1812,3 +1812,94 @@ body.homeScreenPwa .card{
     padding:4px 5px!important;
   }
 }
+
+/* Clean final engine test system */
+.engineTestBox{
+  margin:12px 0;
+  padding:12px;
+  border:1px solid #d7e8df;
+  border-radius:16px;
+  background:#f7fcf9;
+}
+.engineTestBox h3{
+  margin-top:0;
+}
+.engineTestReport{
+  margin-top:8px;
+}
+.engineTestSummary{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 10px;
+  border-radius:12px;
+  font-size:13px;
+  margin-bottom:8px;
+}
+.engineTestSummary.pass{
+  background:#eaf8ee;
+  color:#0f5b2b;
+}
+.engineTestSummary.fail{
+  background:#fff0f0;
+  color:#9d1c1c;
+}
+.engineTestScroll{
+  max-height:280px;
+  overflow:auto;
+  border:1px solid #e5e5e5;
+  border-radius:12px;
+  background:#fff;
+}
+.engineTestScroll table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:720px;
+  font-size:12px;
+}
+.engineTestScroll th,
+.engineTestScroll td{
+  padding:6px 7px;
+  border-bottom:1px solid #eee;
+  text-align:left;
+  vertical-align:top;
+}
+.engineTestScroll th{
+  position:sticky;
+  top:0;
+  background:#fafafa;
+  z-index:1;
+}
+.engineTestScroll tr.pass td:first-child{
+  color:#0f6a32;
+  font-weight:900;
+}
+.engineTestScroll tr.fail td:first-child{
+  color:#b00020;
+  font-weight:900;
+}
+@media (prefers-color-scheme:dark){
+  .engineTestBox{
+    background:#0e1b12;
+    border-color:#244c31;
+  }
+  .engineTestSummary.pass{
+    background:#142016;
+    color:#9be6a8;
+  }
+  .engineTestSummary.fail{
+    background:#2a1111;
+    color:#ffb3b3;
+  }
+  .engineTestScroll{
+    background:#111;
+    border-color:#333;
+  }
+  .engineTestScroll th{
+    background:#171717;
+  }
+  .engineTestScroll th,
+  .engineTestScroll td{
+    border-color:#333;
+  }
+}
