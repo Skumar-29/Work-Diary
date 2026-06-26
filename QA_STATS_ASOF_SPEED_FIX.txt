@@ -1,0 +1,12 @@
+QA: Stats as-of + speed fix
+
+Build: clean-engine-stats-asof-speed-fix
+Schema: 51
+
+Checks:
+1. Stats 14-day accumulated table uses the Calculate as of date/time as the table end date.
+2. Pressing Calculate Statistics As Of Now updates both the as-of input and the 14-day table.
+3. Header-selected diary date can remain different; Stats table still follows as-of time.
+4. Current as-of day counts saved work only up to the as-of time, not future planned blocks later that day.
+5. Stats screen skips hidden Driving-screen cards while opening for better iPhone performance.
+6. NHVR counted-period engine was not changed.

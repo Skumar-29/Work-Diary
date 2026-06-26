@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v86-auto-cache-cleanup";
+const CACHE = "truck-work-diary-v87-stats-asof-speed-fix";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

@@ -1,4 +1,4 @@
-BUILD: clean-engine-auto-cache-cleanup
+BUILD: clean-engine-stats-asof-speed-fix
 
 Update focus:
 - Automatic safe post-update cache cleanup.
@@ -18,6 +18,14 @@ How to update GitHub:
 6. Refresh Safari / Home Screen app. If old app remains cached, delete and re-add the Home Screen icon.
 
 Changes in this version:
+
+Additional changes in this version:
+- Stats 14-day accumulated table now follows the Calculate as of date/time, not the header-selected diary date.
+- Calculate Statistics As Of Now refreshes the table to the current date/time.
+- Current as-of day only counts saved work up to the as-of time.
+- Stats screen opens faster by skipping hidden Driving-screen calculations and reducing repeated table scans.
+- NHVR counted-period engine unchanged.
+
 - Main diary grid is back to two rows only: Work and Rest.
 - Tap Work row to mark work.
 - Tap Rest row to mark rest.

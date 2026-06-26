@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 50;
-const APP_BUILD_NAME = "clean-engine-auto-cache-cleanup";
+const APP_SCHEMA_VERSION = 51;
+const APP_BUILD_NAME = "clean-engine-stats-asof-speed-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -4278,11 +4278,10 @@ function renderAll(){
   if(activeId === "workDiaryScreen") renderChangeDetailsIfPresent();
   if(activeId === "graphScreen") renderGraphPage();
   if(activeId === "statsScreen"){
-    renderRuleCards();
-    renderNextBreak();
-    renderTodayAdvice();
+    // Stats screen only: avoid hidden Driving-screen rule/audit rendering here.
+    // This keeps opening Stats fast on iPhone and avoids using the header-selected date
+    // for hidden cards that are not visible on the Stats page.
     renderStatistics();
-    renderComplianceConfidence();
   }
   if(activeId === "drivingScreen"){
     renderRuleCards();
@@ -4826,11 +4825,8 @@ function quickRefreshCurrentScreen(){
       renderComplianceConfidence();
       renderAuditFixPanel();
     } else if(activeId === "statsScreen"){
-      renderRuleCards();
-      renderNextBreak();
-      renderTodayAdvice();
+      // Stats screen only. Hidden Driving cards are intentionally not recalculated here.
       renderStatistics();
-      renderComplianceConfidence();
     } else if(activeId === "graphScreen"){
       renderGraphPage();
     } else if(activeId === "vehiclesScreen"){
@@ -4958,11 +4954,8 @@ function setup(){
           renderGraphPage();
         }
         if(btn.dataset.tab === "statsScreen"){
-          renderRuleCards();
-          renderNextBreak();
-          renderTodayAdvice();
+          // Open Stats quickly. Only calculate visible Stats content.
           renderStatistics();
-          renderComplianceConfidence();
         }
         if(btn.dataset.tab === "drivingScreen"){
           renderRuleCards();
@@ -7231,7 +7224,7 @@ function stats14DayTableSelfTest(){
    ========================================================= */
 
 const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
-const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v86-auto-cache-cleanup";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v87-stats-asof-speed-fix";
 const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
 const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
 
@@ -8312,6 +8305,7 @@ function runEngineTestSuite(){
   addGroup("BFM 84h checkpoint", "nhvrBfm84CheckpointSelfTest");
   addGroup("Smart major rest", "smartMajorRestSelfTest");
   addGroup("Stats 14-day table", "stats14DayTableSelfTest");
+  addGroup("Stats as-of speed fix", "statsAsOfSpeedFixSelfTest");
 
   // Lightweight clean-app checks.
   tests.push({
@@ -8420,3 +8414,196 @@ function cleanFinalAppSelfTest(){
   };
 }
 
+
+
+/* =========================================================
+   STATS AS-OF + SPEED FIX
+   Scope: Stats screen display only.
+   - 14-day table now follows the Calculate as of datetime, not the header-selected diary date.
+   - Current as-of day only counts saved work up to the as-of time.
+   - Table rows avoid repeated full NHVR breach scans for every row; NHVR counted-period engine is unchanged.
+   - Hidden Driving-screen cards are not rendered while Stats is active.
+   ========================================================= */
+const STATS_ASOF_SPEED_FIX_VERSION = "stats-asof-speed-fix-v1";
+
+function statsAsOfBaseDateInfo(){
+  const asOf = (typeof parseStatsAsOf === "function") ? parseStatsAsOf() : new Date();
+  const asOfAbs = asOf.getTime();
+  const key = (typeof absToKeySlot === "function") ? absToKeySlot(asOfAbs).key : toKey(asOf);
+  return {asOf, asOfAbs, key};
+}
+
+function stats14DayWorkMinsUntil(key, endAbs){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = Math.min(dayStart + DAY_MS, Number(endAbs || dayStart + DAY_MS));
+  if(dayEnd <= dayStart) return 0;
+  let total = 0;
+  for(let t=dayStart; t<dayEnd; t += SLOT*60000){
+    if(activityAtAbs(t) === "work") total += SLOT;
+  }
+  return total;
+}
+
+function stats14BfmDayLongNightMinsUntil(key, endAbs){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = Math.min(dayStart + DAY_MS, Number(endAbs || dayStart + DAY_MS));
+  if(dayEnd <= dayStart) return 0;
+  let total = 0;
+  let dayWorkSoFar = 0;
+  for(let t=dayStart; t<dayEnd; t += SLOT*60000){
+    if(activityAtAbs(t) === "work"){
+      dayWorkSoFar += SLOT;
+      const h = new Date(t).getHours();
+      if((h >= 0 && h < 6) || dayWorkSoFar > 720) total += SLOT;
+    }
+  }
+  return total;
+}
+
+function stats14BuildDailyMapsForAsOf(baseKey, asOfAbs, profile){
+  const work = new Map();
+  const ln = new Map();
+  const startOffset = -26; // first displayed row needs 14-day lookback
+  for(let offset=startOffset; offset<=0; offset++){
+    const key = addDays(baseKey, offset);
+    const dayEnd = Math.min(fromKey(key).getTime() + DAY_MS, asOfAbs);
+    work.set(key, stats14DayWorkMinsUntil(key, dayEnd));
+    if(profile && profile.longNight) ln.set(key, stats14BfmDayLongNightMinsUntil(key, dayEnd));
+  }
+  return {work, ln};
+}
+
+function stats14SumMap(map, baseKey, fromOffset, toOffset){
+  let total = 0;
+  for(let offset=fromOffset; offset<=toOffset; offset++){
+    total += Number(map.get(addDays(baseKey, offset)) || 0);
+  }
+  return total;
+}
+
+function stats14CheckpointWorkSince24hRestFast(baseKey, rowOffset, maps){
+  // Display helper for the BFM 84h checkpoint column. This does not change breach logic.
+  // It follows the existing table behaviour: reset display work after any 24h+ continuous rest.
+  const asOfAbs = statsAsOfBaseDateInfo().asOfAbs;
+  let work = 0;
+  let restRun = 0;
+  for(let offset=rowOffset-13; offset<=rowOffset; offset++){
+    const key = addDays(baseKey, offset);
+    const dayStart = fromKey(key).getTime();
+    const dayEnd = Math.min(dayStart + DAY_MS, asOfAbs);
+    const daySpanMins = Math.max(0, Math.round((dayEnd - dayStart) / 60000));
+    const dayWork = Number(maps.work.get(key) || 0);
+    if(dayWork <= 0){
+      restRun += daySpanMins;
+      if(restRun >= 1440) work = 0;
+    }else{
+      // Count day by slots so a 24h rest inside a mixed day can still reset this helper column.
+      for(let t=dayStart; t<dayEnd; t += SLOT*60000){
+        if(activityAtAbs(t) === "work"){
+          restRun = 0;
+          work += SLOT;
+        }else{
+          let okRest = true;
+          if(typeof nhvrBfm84IsCheckpointRest === "function") okRest = nhvrBfm84IsCheckpointRest(t);
+          if(okRest){
+            restRun += SLOT;
+            if(restRun >= 1440) work = 0;
+          }else{
+            restRun = 0;
+          }
+        }
+      }
+    }
+  }
+  return work;
+}
+
+// Override the compact table rows so the table follows the Stats as-of control.
+stats14RowsForSelectedDate = function(){
+  const info = statsAsOfBaseDateInfo();
+  const selected = info.key;
+  const profile = stats14ProfileForKey(selected);
+  const maps = stats14BuildDailyMapsForAsOf(selected, info.asOfAbs, profile);
+  const rows = [];
+  for(let offset=-13; offset<=0; offset++){
+    const key = addDays(selected, offset);
+    const work = Number(maps.work.get(key) || 0);
+    const acc14 = stats14SumMap(maps.work, selected, offset-13, offset);
+    const acc7 = stats14SumMap(maps.work, selected, offset-6, offset);
+    const ln = profile.longNight ? Number(maps.ln.get(key) || 0) : null;
+    const ln7 = profile.longNight ? stats14SumMap(maps.ln, selected, offset-6, offset) : null;
+    let majorLeft = null;
+    let major = "—";
+    if(profile.key === "BFM"){
+      const since = stats14CheckpointWorkSince24hRestFast(selected, offset, maps);
+      majorLeft = 5040 - since;
+      major = stats14Fmt(majorLeft);
+    }else if(profile.key === "BFMTwoUp"){
+      major = "82h stat";
+    }else if(profile.key === "StandardTwoUp"){
+      major = "52h/14d";
+    }else if(profile.key === "Standard"){
+      major = "Night";
+    }else{
+      major = "AFM";
+    }
+    const left = profile.work14Limit != null ? profile.work14Limit - acc14 : null;
+    const lnLeft = profile.longNight ? 2160 - ln7 : null;
+    rows.push({key, profile, work, acc14, acc7, left, major, majorLeft, ln, ln7, lnLeft, errors:[]});
+  }
+  return rows;
+};
+stats14RowsForSelectedDate._perfPatched = true;
+
+function statsScreenCurrentlyActive(){
+  const active = document.querySelector(".screen.active");
+  return !!(active && active.id === "statsScreen");
+}
+(function(){
+  const wrapNoStats = (name) => {
+    try{
+      const fn = window[name];
+      if(typeof fn !== "function" || fn._statsAsOfSpeedSkip) return;
+      window[name] = function(){
+        if(statsScreenCurrentlyActive()) return;
+        return fn.apply(this, arguments);
+      };
+      window[name]._statsAsOfSpeedSkip = true;
+    }catch(e){}
+  };
+  // Safety for older cached HTML/event handlers: these targets belong to Driving, not Stats.
+  wrapNoStats("renderRuleCards");
+  wrapNoStats("renderNextBreak");
+  wrapNoStats("renderTodayAdvice");
+  wrapNoStats("renderComplianceConfidence");
+})();
+
+function statsAsOfSpeedFixSelfTest(){
+  const backup = safeClone(state);
+  const oldValue = $("statsAsOf") ? $("statsAsOf").value : "";
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+  try{
+    const start = "2026-06-14";
+    state.selectedDate = "2026-06-22";
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:start, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {};
+    state.dayDetails = {};
+    if($("statsAsOf")) $("statsAsOf").value = "2026-06-27T07:45";
+    const workDay = "2026-06-27";
+    state.slots[workDay] = Array(SLOTS_PER_DAY).fill("rest");
+    for(let i=0;i<8;i++) state.slots[workDay][i] = "work"; // midnight-2am, before as-of
+    for(let i=60;i<68;i++) state.slots[workDay][i] = "work"; // future blocks after as-of, must not count
+    const rows = stats14RowsForSelectedDate();
+    const last = rows[rows.length-1];
+    add("Stats 14-day table ends on as-of date, not header date", last.key === "2026-06-27", {last:last.key, selected:state.selectedDate});
+    add("Current day counts only up to as-of time", last.work === 120, {work:last.work});
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+    if($("statsAsOf")) $("statsAsOf").value = oldValue;
+  }
+  return results;
+}
