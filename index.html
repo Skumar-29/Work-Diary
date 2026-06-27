@@ -502,20 +502,6 @@
           <button id="exportPdf" class="secondary">Export PDF report</button>
           <button id="exportJsonBackup" class="secondary">Export Backup JSON</button>
           <button id="shareJsonBackup" class="secondary">Share / Save Backup JSON</button>
-
-          
-          
-          <div class="engineTestBox">
-            <h3>Engine test system</h3>
-            <p class="hint">Runs saved scenario tests without changing your diary data. Use this after updates to check counted 24h periods, BFM 84h checkpoint, smart rest, long/night and Stats helper behaviour.</p>
-            <div class="updateButtonRow">
-              <button id="engineTestRunBtn" class="primary" type="button">Run Engine Test</button>
-              <button id="engineTestClearBtn" class="secondary" type="button">Clear Test Report</button>
-            </div>
-            <div id="engineTestStatus" class="hint">Ready.</div>
-            <div id="engineTestReport" class="engineTestReport"></div>
-          </div>
-
 <div class="appUpdateBox">
             <h3>App updates</h3>
             <p id="currentAppVersion" class="hint">Current app version: checking…</p>
@@ -542,12 +528,7 @@
           </div>
 
 <button id="checkDataHealth" class="secondary">Optimise saved diary data for speed</button>
-          <p id="dataHealthStatus" class="hint">Use this after importing an older backup. In this data-safety version it keeps page/book details and never allows optimisation to turn a meaningful diary into an empty diary.</p>
-          <div class="dataSafetyBox">
-            <button id="restoreSafetySnapshotBtn" class="secondary" type="button">Recover Safety Snapshot</button>
-            <button id="exportEmergencyRawDataBtn" class="secondary" type="button">Export Raw Recovery Data</button>
-            <p id="emergencyDataStatus" class="hint">Safety snapshot status will appear here.</p>
-          </div>
+          <p id="dataHealthStatus" class="hint">Use this after importing an older backup. It removes unnecessary full-rest blank days only; real work/rest data and important details are kept.</p>
           <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
           <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">
 
@@ -613,7 +594,6 @@
   </nav>
 </div>
 
-<script src="app.js"></script>
   <div id="toastMessage" class="toastMessage" role="status" aria-live="polite"></div>
 
   <div id="findModal" class="modalOverlay" hidden>
@@ -637,5 +617,6 @@
     </div>
   </div>
 
+<script src="app.js"></script>
 </body>
 </html>
