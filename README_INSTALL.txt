@@ -1,3 +1,8 @@
+Build: clean-engine-instant-grid-refresh / schema 57
+Service worker: truck-work-diary-v93-instant-grid-refresh
+
+This update keeps the NHVR counted-period calculation engine unchanged and adds instant Work/Rest grid repaint with deferred breach highlighting, deferred change-detail refresh, and delayed idle saving for smoother iPhone use.
+
 BUILD: clean-engine-fast-due-break-planner
 
 Update focus:

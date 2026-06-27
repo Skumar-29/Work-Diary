@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 56;
-const APP_BUILD_NAME = "clean-engine-final-stable-years";
+const APP_SCHEMA_VERSION = 57;
+const APP_BUILD_NAME = "clean-engine-instant-grid-refresh";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -9155,3 +9155,270 @@ function importSpeedOptimiserSelfTest(){
     runEngineTestSuite._importSpeedPatched = true;
   }
 })();
+
+
+/* =========================================================
+   INSTANT GRID REFRESH PATCH v1
+   Scope: speed and screen responsiveness only.
+   - Work/Rest block taps and horizontal swipes paint immediately.
+   - Heavy NHVR breach/highlight checks are debounced after the visible paint.
+   - Change-details table refresh is debounced so the grid does not freeze.
+   - Delayed/idle save reduces iPhone localStorage jank after large backup imports.
+   - NHVR counted-period calculation functions are not changed.
+   ========================================================= */
+const INSTANT_GRID_REFRESH_VERSION = "instant-grid-refresh-v1";
+let turboSaveTimer = null;
+let turboIdleSaveHandle = null;
+let turboChangeDetailsTimer = null;
+let turboBreachTimer = null;
+let turboLastDaySignatures = new Map();
+let turboBreachSetsBySignature = new Map();
+let turboGridRenderBusy = false;
+
+function turboSafeActiveScreenId(){
+  const active = document.querySelector(".screen.active");
+  return active ? active.id : "diaryScreen";
+}
+
+function turboDaySignature(key){
+  const arr = state && state.slots && Array.isArray(state.slots[key]) ? state.slots[key] : null;
+  if(!arr) return "blank-rest";
+  // 96 chars only; cheap even on older iPhones.
+  let out = "";
+  for(let i=0;i<SLOTS_PER_DAY;i++) out += arr[i] === "work" ? "W" : "R";
+  return out;
+}
+
+function turboMarkDayDirtyIfChanged(key){
+  if(!key) return false;
+  const sig = turboDaySignature(key);
+  const old = turboLastDaySignatures.get(key);
+  if(old !== sig){
+    turboLastDaySignatures.set(key, sig);
+    if(typeof perfBump === "function") perfBump("instant-grid-day-change");
+    return true;
+  }
+  return false;
+}
+
+function turboBreachCacheKey(key){
+  return `${key}|${turboDaySignature(key)}|${typeof activeRuleKeyForDate === "function" ? activeRuleKeyForDate(key) : "rule"}`;
+}
+
+function turboGetCachedBreachSet(key){
+  const k = turboBreachCacheKey(key);
+  const arr = turboBreachSetsBySignature.get(k);
+  return arr ? new Set(arr) : new Set();
+}
+
+function turboSlotCellClass(row, val, breach){
+  if(row === "work"){
+    if(val === "work") return breach ? "slot bad" : "slot work";
+    return "slot empty";
+  }
+  if(val === "rest") return "slot rest";
+  return "slot empty";
+}
+
+function turboRenderGridInstant(){
+  const grid = $("diaryGrid");
+  if(!grid || turboGridRenderBusy) return;
+  turboGridRenderBusy = true;
+  try{
+    const key = state.selectedDate;
+    turboMarkDayDirtyIfChanged(key);
+    const cachedBreaches = turboGetCachedBreachSet(key);
+    const sections = [
+      {start:0, labels:["midnight","1am","2am","3am","4am","5am"]},
+      {start:6, labels:["6am","7am","8am","9am","10am","11am"]},
+      {start:12, labels:["noon","1pm","2pm","3pm","4pm","5pm"]},
+      {start:18, labels:["6pm","7pm","8pm","9pm","10pm","11pm"]}
+    ];
+    const rows = [
+      {label:"Work", action:"work"},
+      {label:"Rest", action:"rest"}
+    ];
+    const cancelled = isPageCancelledOrSkipped(key);
+    let html = "";
+    for(const sec of sections){
+      html += `<div class="block"><div class="hourLabel blank"></div>`;
+      sec.labels.forEach(l => { html += `<div class="hourLabel" style="grid-column:span 4">${escapeHtml(l)}</div>`; });
+      rows.forEach(row => {
+        html += `<div class="rowLabel">${escapeHtml(row.label)}</div>`;
+        for(let i=0;i<24;i++){
+          const slotIndex = sec.start*4 + i;
+          const val = getSlot(key, slotIndex);
+          let cls = turboSlotCellClass(row.action, val, cachedBreaches.has(slotIndex));
+          if((i+1)%4===0) cls += " thick";
+          if(cancelled) cls += " locked";
+          if(auditFocus && auditFocus.date === key && auditFocus.type === "slot" && Array.isArray(auditFocus.slots) && auditFocus.slots.includes(slotIndex)) cls += " auditFocus";
+          html += `<button class="${cls}" title="${escapeHtml(fmtHM(slotIndex*15) + " " + row.label)}" data-slot="${slotIndex}" data-row="${row.action}"${cancelled ? " disabled" : ""}></button>`;
+        }
+      });
+      html += `</div>`;
+    }
+    grid.innerHTML = html;
+    scheduleTurboBreachRefresh(key);
+  }finally{
+    turboGridRenderBusy = false;
+  }
+}
+
+function turboApplyBreachHighlights(key, breachSet){
+  if(key !== state.selectedDate) return;
+  const grid = $("diaryGrid");
+  if(!grid) return;
+  const currentSig = turboDaySignature(key);
+  const cacheKey = turboBreachCacheKey(key);
+  if(!turboBreachSetsBySignature.has(cacheKey)) return;
+  grid.querySelectorAll(".slot[data-slot]").forEach(cell => {
+    const idx = Number(cell.dataset.slot);
+    const row = cell.dataset.row;
+    const val = getSlot(key, idx);
+    const isBreach = breachSet.has(idx);
+    cell.classList.toggle("bad", row === "work" && val === "work" && isBreach);
+    cell.classList.toggle("work", row === "work" && val === "work" && !isBreach);
+    cell.classList.toggle("rest", row === "rest" && val === "rest");
+    cell.classList.toggle("empty", row !== val);
+  });
+  // Make sure highlights were not applied to an old grid after another edit.
+  if(currentSig !== turboDaySignature(key)) scheduleTurboBreachRefresh(key);
+}
+
+function scheduleTurboBreachRefresh(key){
+  clearTimeout(turboBreachTimer);
+  const sigAtSchedule = turboDaySignature(key);
+  turboBreachTimer = setTimeout(() => {
+    const activeId = turboSafeActiveScreenId();
+    if(activeId !== "diaryScreen" && activeId !== "workDiaryScreen") return;
+    if(key !== state.selectedDate) return;
+    if(sigAtSchedule !== turboDaySignature(key)){
+      scheduleTurboBreachRefresh(key);
+      return;
+    }
+    try{
+      // This is the heavy NHVR check. It runs after the grid is already painted.
+      const set = new Set();
+      if(typeof dayHasAnyWork !== "function" || dayHasAnyWork(key)){
+        const findings = typeof nhvrBreachesForDate === "function" ? nhvrBreachesForDate(key) : [];
+        (findings || []).forEach(f => {
+          if((f.severity || "error") !== "error") return;
+          if(f.focus && Array.isArray(f.focus.slots)){
+            f.focus.slots.forEach(s => { const n = Number(s); if(!Number.isNaN(n)) set.add(n); });
+          }
+        });
+      }
+      turboBreachSetsBySignature.set(turboBreachCacheKey(key), [...set]);
+      turboApplyBreachHighlights(key, set);
+    }catch(err){
+      console.warn("Instant breach refresh skipped", err);
+    }
+  }, 90);
+}
+
+function scheduleTurboChangeDetailsRefresh(){
+  const holder = $("changeDetailsEditor");
+  if(!holder) return;
+  clearTimeout(turboChangeDetailsTimer);
+  turboChangeDetailsTimer = setTimeout(() => {
+    const activeId = turboSafeActiveScreenId();
+    if(activeId !== "diaryScreen" && activeId !== "workDiaryScreen") return;
+    try{ renderChangeDetailsIfPresent(); }catch(err){ console.warn("Deferred change details refresh failed", err); }
+  }, 220);
+}
+
+function turboRefreshTotalsOnly(){
+  try{ renderTotals(); }catch(e){}
+  try{ renderTimer(); }catch(e){}
+  try{ renderAlertsFast(); }catch(e){}
+}
+
+// Replace grid-heavy diary render with a two-stage render: immediate visible paint, then deferred details/breach checks.
+renderGrid = function(){
+  turboRenderGridInstant();
+};
+
+renderDiaryFast = function(){
+  try{ renderUiSettings(); }catch(e){}
+  try{ renderDate(); }catch(e){}
+  turboRenderGridInstant();
+  turboRefreshTotalsOnly();
+  scheduleTurboChangeDetailsRefresh();
+};
+
+// Keep full render lazy but make diary screen use the instant path.
+(function(){
+  const previousFastRenderActiveScreen = (typeof fastRenderActiveScreen === "function") ? fastRenderActiveScreen : null;
+  fastRenderActiveScreen = function(tabId){
+    const activeId = tabId || turboSafeActiveScreenId();
+    try{ renderDate(); }catch(e){}
+    try{ renderTimer(); }catch(e){}
+    try{ if(typeof applyLandscapeCompactClass === "function") applyLandscapeCompactClass(); }catch(e){}
+    if(activeId === "diaryScreen" || activeId === "workDiaryScreen"){
+      renderDiaryFast();
+    }else if(activeId === "graphScreen"){
+      refreshCurrentPageData({forceDefaults:false});
+      renderGraphPage();
+    }else if(activeId === "statsScreen"){
+      renderStatistics();
+    }else if(activeId === "drivingScreen"){
+      renderRuleCards();
+      renderNextBreak();
+      renderTodayAdvice();
+      renderAuditList();
+      renderComplianceConfidence();
+      if(typeof renderAuditFixPanel === "function") renderAuditFixPanel();
+    }else if(activeId === "vehiclesScreen"){
+      renderVehicleDriverRegistry();
+    }else if(activeId === "settingsScreen"){
+      renderDriverSettings();
+      if(typeof renderDiaryBookHistory === "function") renderDiaryBookHistory();
+      renderBackupReminderSettings();
+      renderAuditLog();
+      if(typeof renderAppUpdateSettings === "function") renderAppUpdateSettings();
+    }else if(previousFastRenderActiveScreen){
+      previousFastRenderActiveScreen(activeId);
+    }
+  };
+})();
+
+// Delayed idle save: prevents localStorage JSON writes from blocking the touch/swipe paint.
+saveSoon = function(){
+  if(turboIdleSaveHandle && typeof cancelIdleCallback === "function"){
+    try{ cancelIdleCallback(turboIdleSaveHandle); }catch(e){}
+    turboIdleSaveHandle = null;
+  }
+  clearTimeout(turboSaveTimer);
+  turboSaveTimer = setTimeout(() => {
+    const doSave = () => {
+      turboSaveTimer = null;
+      turboIdleSaveHandle = null;
+      try{ save(); }catch(err){ console.error("Delayed save failed", err); }
+    };
+    if(typeof requestIdleCallback === "function"){
+      turboIdleSaveHandle = requestIdleCallback(doSave, {timeout:1800});
+    }else{
+      setTimeout(doSave, 0);
+    }
+  }, 650);
+};
+
+flushSaveSoon = function(){
+  if(turboIdleSaveHandle && typeof cancelIdleCallback === "function"){
+    try{ cancelIdleCallback(turboIdleSaveHandle); }catch(e){}
+    turboIdleSaveHandle = null;
+  }
+  clearTimeout(turboSaveTimer);
+  turboSaveTimer = null;
+  save();
+};
+
+function instantGridRefreshSelfTest(){
+  const key = state.selectedDate || toKey(new Date());
+  return [
+    {name:"Instant grid renderer installed", pass: typeof renderGrid === "function" && typeof renderDiaryFast === "function", actual:INSTANT_GRID_REFRESH_VERSION},
+    {name:"Day signature is lightweight", pass: typeof turboDaySignature(key) === "string" && turboDaySignature(key).length > 0, actual:turboDaySignature(key).slice(0,20)},
+    {name:"Deferred breach refresh available", pass: typeof scheduleTurboBreachRefresh === "function", actual:"ready"},
+    {name:"Delayed save installed", pass: typeof saveSoon === "function" && String(saveSoon).includes("requestIdleCallback"), actual:"ready"}
+  ];
+}
