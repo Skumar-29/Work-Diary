@@ -1,9 +1,3 @@
-Truck Work Diary PWA update
-Build: clean-engine-safe-backup-book-edit-confirm
-Schema: 55
-
-Main changes: safe backup/export/import optimisation, diary book rename/reopen/delete, and confirmation before editing older Work/Rest blocks. NHVR counted-period calculation logic is preserved from the previous clean-engine builds.
-
 BUILD: clean-engine-fast-due-break-planner
 
 Update focus:

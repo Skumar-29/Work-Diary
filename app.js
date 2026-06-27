@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 55;
-const APP_BUILD_NAME = "clean-engine-safe-backup-book-edit-confirm";
+const APP_SCHEMA_VERSION = 56;
+const APP_BUILD_NAME = "clean-engine-final-stable-years";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -111,34 +111,6 @@ let state = {
 
 const $ = id => document.getElementById(id);
 let auditFocus = null;
-
-let olderPageEditConfirmSession = {};
-function selectedDateIsOlderPage(key){
-  const today = toKey(new Date());
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(key || "")) && key < today;
-}
-function confirmOlderPageBlockEdit(key, actionText="edit work/rest blocks"){
-  if(!selectedDateIsOlderPage(key)) return true;
-  if(olderPageEditConfirmSession[key]) return true;
-  const msg = `You are editing an older diary page (${key}).\n\nChanging old Work/Rest blocks can affect NHVR 24h, 7-day, 14-day and longer rolling calculations.\n\nContinue and ${actionText}?`;
-  if(!confirm(msg)) return false;
-  olderPageEditConfirmSession[key] = true;
-  addAuditLog("Older page edit confirmed", `User confirmed ${actionText} on ${key}`);
-  return true;
-}
-function confirmOlderRangeEdit(startKey, endKey, actionText="edit work/rest blocks"){
-  const today = toKey(new Date());
-  const start = startKey || endKey;
-  const end = endKey || startKey;
-  if(!start || !end || start >= today) return true;
-  const rangeKey = `${start}|${end}|${actionText}`;
-  if(olderPageEditConfirmSession[rangeKey]) return true;
-  const msg = `You are changing older diary block data.\n\nFrom: ${start}\nTo: ${end}\n\nThis can affect NHVR 24h, 7-day, 14-day and longer rolling calculations. Continue?`;
-  if(!confirm(msg)) return false;
-  olderPageEditConfirmSession[rangeKey] = true;
-  addAuditLog("Older date range edit confirmed", `User confirmed ${actionText}: ${start} to ${end}`);
-  return true;
-}
 
 let toastTimer = null;
 function showToast(message="Saved"){
@@ -605,7 +577,7 @@ function normalizeDayDetailForMigration(d){
    Since blank/no-block days count as continuous Rest, those all-rest arrays are
    not needed for calculation and make iPhone localStorage, import and render slow.
    ========================================================= */
-const IMPORT_SPEED_OPTIMISER_VERSION = "import-speed-v2-safe-backup";
+const IMPORT_SPEED_OPTIMISER_VERSION = "final-speed-v3";
 function isValidDiaryKeyFast(key){
   return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ""));
 }
@@ -626,12 +598,8 @@ function compactChangeRowsForRestDayFast(rows){
 function dayDetailIsMeaningfulForBlankRestFast(key, d){
   if(!d || typeof d !== "object") return false;
   const status = d.pageStatus || "active";
-  // Cancelled/skipped pages are real paper-diary evidence and must be kept.
   if(status !== "active") return true;
-  // Keep only deliberate page use or manual page overrides on blank/no-work dates.
-  // Older builds sometimes auto-created pageNo/workDiaryNo for full-rest dates; those
-  // are not needed now because blank dates count as continuous Rest by default.
-  if(d.usePageManual || d.pageNoManual || d.usePage === true) return true;
+  if(d.usePage || d.usePageManual || d.pageNoManual || d.pageNo) return true;
   if(d.workDiaryNoManual || d.numberPlateManual) return true;
   if(d.dailyCheckTime || d.comments || d.fitForDuty) return true;
   if(d.ruleManual) return true;
@@ -639,6 +607,21 @@ function dayDetailIsMeaningfulForBlankRestFast(key, d){
   const keptRows = compactChangeRowsForRestDayFast(d.changeRows);
   return keptRows.length > 0;
 }
+
+/* Final stable override: blank/no-work days are Rest by default, so auto-created blank page details are not kept. */
+function dayDetailIsMeaningfulForBlankRestFast(key, d){
+  if(!d || typeof d !== "object") return false;
+  const status = d.pageStatus || "active";
+  if(status !== "active") return true;
+  if(d.usePageManual || d.pageNoManual || d.usePage === true) return true;
+  if(d.workDiaryNoManual || d.numberPlateManual || d.selectedPageManual) return true;
+  if(d.dailyCheckTime || d.comments || d.fitForDuty) return true;
+  if(d.ruleManual) return true;
+  if(d.twoUpManual || d.twoUpEnabled || d.twoUpDriverName || d.twoUpLicenceNumber) return true;
+  const keptRows = compactChangeRowsForRestDayFast(d.changeRows);
+  return keptRows.length > 0;
+}
+
 function compactDiaryDataForPerformance(target, reason){
   if(!target || typeof target !== "object") return {removedRestSlotDays:0, removedBlankDetails:0, prunedDismissed:0};
   if(!target.slots || typeof target.slots !== "object") target.slots = {};
@@ -804,16 +787,272 @@ function migrateCurrentState(){
   try{ localStorage.setItem("truckDiaryPWA", JSON.stringify(state)); }catch(e){}
 }
 
+
+/* =========================================================
+   FINAL STABLE SAFETY/PERFORMANCE PATCH
+   - Adds missing vehicle/driver registry handlers so setup cannot freeze.
+   - Adds safe data optimiser and compact backup export.
+   - Adds older-page confirmation only when a real block edit is about to happen
+     (not during normal vertical scrolling).
+   - Does not change NHVR counted-period calculation functions.
+   ========================================================= */
+let olderPageEditConfirmSession = {};
+let editingVehicleId = null;
+let editingSavedDriverId = null;
+function selectedDateIsOlderPage(key){
+  const today = toKey(new Date());
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(key || "")) && key < today;
+}
+function confirmOlderPageBlockEdit(key, actionText="edit Work/Rest blocks"){
+  if(!selectedDateIsOlderPage(key)) return true;
+  const sessionKey = `${key}|${actionText}`;
+  if(olderPageEditConfirmSession[sessionKey]) return true;
+  const msg = `You are editing an older diary page (${key}).\n\nChanging old Work/Rest blocks can affect NHVR 24h, 7-day, 14-day and longer rolling calculations.\n\nContinue and ${actionText}?`;
+  if(!confirm(msg)) return false;
+  olderPageEditConfirmSession[sessionKey] = true;
+  try{ addAuditLog("Older page edit confirmed", `User confirmed ${actionText} on ${key}`); }catch(e){}
+  return true;
+}
+function confirmOlderRangeEdit(startKey, endKey, actionText="edit Work/Rest blocks"){
+  const today = toKey(new Date());
+  const start = startKey || endKey;
+  const end = endKey || startKey;
+  if(!start || !end || start >= today) return true;
+  const sessionKey = `${start}|${end}|${actionText}`;
+  if(olderPageEditConfirmSession[sessionKey]) return true;
+  const msg = `You are changing older diary block data.\n\nFrom: ${start}\nTo: ${end}\n\nThis can affect NHVR 24h, 7-day, 14-day and longer rolling calculations. Continue?`;
+  if(!confirm(msg)) return false;
+  olderPageEditConfirmSession[sessionKey] = true;
+  try{ addAuditLog("Older date range edit confirmed", `User confirmed ${actionText}: ${start} to ${end}`); }catch(e){}
+  return true;
+}
+function ensureRegistryState(){
+  if(!Array.isArray(state.vehicles)) state.vehicles = [];
+  if(!Array.isArray(state.savedDrivers)) state.savedDrivers = [];
+  if(!state.registrySettings || typeof state.registrySettings !== "object") state.registrySettings = {autoSaveFromDiary:true};
+  if(state.registrySettings.autoSaveFromDiary === undefined) state.registrySettings.autoSaveFromDiary = true;
+}
+function registryId(prefix){ return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; }
+function toggleAutoSaveRegistryFromDiary(){
+  ensureRegistryState();
+  state.registrySettings.autoSaveFromDiary = !!($("autoSaveRegistryFromDiary") && $("autoSaveRegistryFromDiary").checked);
+  saveSoon();
+  showToast("Saved");
+}
+function toggleLocationPickerEnabled(){
+  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {locationPickerEnabled:true};
+  state.uiSettings.locationPickerEnabled = !!($("locationPickerEnabled") && $("locationPickerEnabled").checked);
+  document.body.classList.toggle("locationPickerOff", !state.uiSettings.locationPickerEnabled);
+  saveSoon();
+  renderChangeDetailsEditor();
+  showToast("Saved");
+}
+function openVehicleEditor(id){
+  ensureRegistryState();
+  const rec = id ? state.vehicles.find(v => String(v.id) === String(id)) : null;
+  editingVehicleId = rec ? rec.id : null;
+  if($("vehicleEditTitle")) $("vehicleEditTitle").textContent = rec ? "Edit vehicle" : "New vehicle";
+  if($("vehicleRego")) $("vehicleRego").value = rec ? (rec.rego || "") : "";
+  if($("vehicleName")) $("vehicleName").value = rec ? (rec.name || "") : "";
+  if($("vehicleCompany")) $("vehicleCompany").value = rec ? (rec.company || "") : "";
+  if($("vehicleState")) $("vehicleState").value = rec ? (rec.state || "") : "";
+  if($("vehicleStartDate")) $("vehicleStartDate").value = rec ? (rec.startDate || "") : state.selectedDate;
+  if($("vehicleEndDate")) $("vehicleEndDate").value = rec ? (rec.endDate || "") : "";
+  if($("vehicleNotes")) $("vehicleNotes").value = rec ? (rec.notes || "") : "";
+  if($("deleteVehicleBtn")) $("deleteVehicleBtn").disabled = !rec;
+  if($("vehicleEditCard")) { $("vehicleEditCard").hidden = false; try{$("vehicleEditCard").scrollIntoView({behavior:"smooth",block:"start"});}catch(e){} }
+}
+function closeVehicleEditor(){ editingVehicleId = null; if($("vehicleEditCard")) $("vehicleEditCard").hidden = true; }
+function saveVehicleRecord(){
+  ensureRegistryState();
+  const rego = ($("vehicleRego") ? $("vehicleRego").value : "").trim().toUpperCase();
+  if(!rego){ alert("Please enter the vehicle rego number."); return; }
+  let rec = editingVehicleId ? state.vehicles.find(v => String(v.id) === String(editingVehicleId)) : null;
+  if(!rec){ rec = {id:registryId("veh"), createdAt:new Date().toISOString()}; state.vehicles.push(rec); }
+  rec.rego = rego;
+  rec.name = ($("vehicleName") ? $("vehicleName").value : "").trim();
+  rec.company = ($("vehicleCompany") ? $("vehicleCompany").value : "").trim();
+  rec.state = ($("vehicleState") ? $("vehicleState").value : "").trim();
+  rec.startDate = ($("vehicleStartDate") ? $("vehicleStartDate").value : "").trim();
+  rec.endDate = ($("vehicleEndDate") ? $("vehicleEndDate").value : "").trim();
+  rec.notes = ($("vehicleNotes") ? $("vehicleNotes").value : "").trim();
+  rec.updatedAt = new Date().toISOString();
+  state.vehicles.sort((a,b)=>String(a.rego||"").localeCompare(String(b.rego||"")));
+  save();
+  renderVehicleDriverRegistry();
+  closeVehicleEditor();
+  showToast("Vehicle saved");
+}
+function deleteVehicleRecord(){
+  ensureRegistryState();
+  if(!editingVehicleId){ closeVehicleEditor(); return; }
+  const rec = state.vehicles.find(v => String(v.id) === String(editingVehicleId));
+  if(!rec) return;
+  if(!confirm(`Delete vehicle ${rec.rego || ""}?\n\nThis removes only the saved vehicle record. It does not delete diary pages.`)) return;
+  state.vehicles = state.vehicles.filter(v => String(v.id) !== String(editingVehicleId));
+  save();
+  renderVehicleDriverRegistry();
+  closeVehicleEditor();
+  showToast("Vehicle deleted");
+}
+function applyVehicleToCurrentPage(id){
+  ensureRegistryState();
+  const rec = id ? state.vehicles.find(v => String(v.id) === String(id)) : (editingVehicleId ? state.vehicles.find(v => String(v.id) === String(editingVehicleId)) : null);
+  const rego = rec ? (rec.rego || "") : (($("vehicleRego") ? $("vehicleRego").value : "").trim().toUpperCase());
+  if(!rego){ alert("Select or enter a vehicle first."); return; }
+  const detail = ensureDayDetail(state.selectedDate);
+  detail.numberPlate = rego;
+  detail.numberPlateManual = true;
+  save();
+  renderDiaryFast();
+  showToast("Vehicle applied");
+}
+function openSavedDriverEditor(id){
+  ensureRegistryState();
+  const rec = id ? state.savedDrivers.find(d => String(d.id) === String(id)) : null;
+  editingSavedDriverId = rec ? rec.id : null;
+  if($("driverEditTitle")) $("driverEditTitle").textContent = rec ? "Edit driver" : "New driver";
+  if($("savedDriverName")) $("savedDriverName").value = rec ? (rec.name || "") : "";
+  if($("savedDriverLicence")) $("savedDriverLicence").value = rec ? (rec.licence || "") : "";
+  if($("savedDriverState")) $("savedDriverState").value = rec ? (rec.state || "") : "";
+  if($("savedDriverScheme")) $("savedDriverScheme").value = rec ? (rec.scheme || "BFM") : "BFM";
+  if($("savedDriverAccred")) $("savedDriverAccred").value = rec ? (rec.accreditation || "") : "";
+  if($("savedDriverRole")) $("savedDriverRole").value = rec ? (rec.role || "twoUp") : "twoUp";
+  if($("savedDriverStartDate")) $("savedDriverStartDate").value = rec ? (rec.startDate || "") : state.selectedDate;
+  if($("savedDriverEndDate")) $("savedDriverEndDate").value = rec ? (rec.endDate || "") : "";
+  if($("savedDriverNotes")) $("savedDriverNotes").value = rec ? (rec.notes || "") : "";
+  if($("deleteSavedDriverBtn")) $("deleteSavedDriverBtn").disabled = !rec;
+  if($("driverEditCard")) { $("driverEditCard").hidden = false; try{$("driverEditCard").scrollIntoView({behavior:"smooth",block:"start"});}catch(e){} }
+}
+function closeSavedDriverEditor(){ editingSavedDriverId = null; if($("driverEditCard")) $("driverEditCard").hidden = true; }
+function saveSavedDriverRecord(){
+  ensureRegistryState();
+  const name = ($("savedDriverName") ? $("savedDriverName").value : "").trim();
+  const licence = ($("savedDriverLicence") ? $("savedDriverLicence").value : "").replace(/\D+/g, "");
+  if(!name && !licence){ alert("Please enter the driver name or licence number."); return; }
+  let rec = editingSavedDriverId ? state.savedDrivers.find(d => String(d.id) === String(editingSavedDriverId)) : null;
+  if(!rec){ rec = {id:registryId("drv"), createdAt:new Date().toISOString()}; state.savedDrivers.push(rec); }
+  rec.name = name;
+  rec.licence = licence;
+  rec.state = ($("savedDriverState") ? $("savedDriverState").value : "").trim();
+  rec.scheme = ($("savedDriverScheme") ? $("savedDriverScheme").value : "BFM").trim() || "BFM";
+  rec.accreditation = ($("savedDriverAccred") ? $("savedDriverAccred").value : "").trim();
+  rec.role = ($("savedDriverRole") ? $("savedDriverRole").value : "twoUp").trim();
+  rec.startDate = ($("savedDriverStartDate") ? $("savedDriverStartDate").value : "").trim();
+  rec.endDate = ($("savedDriverEndDate") ? $("savedDriverEndDate").value : "").trim();
+  rec.notes = ($("savedDriverNotes") ? $("savedDriverNotes").value : "").trim();
+  rec.updatedAt = new Date().toISOString();
+  state.savedDrivers.sort((a,b)=>String(a.name||a.licence||"").localeCompare(String(b.name||b.licence||"")));
+  save();
+  renderVehicleDriverRegistry();
+  closeSavedDriverEditor();
+  showToast("Driver saved");
+}
+function deleteSavedDriverRecord(){
+  ensureRegistryState();
+  if(!editingSavedDriverId){ closeSavedDriverEditor(); return; }
+  const rec = state.savedDrivers.find(d => String(d.id) === String(editingSavedDriverId));
+  if(!rec) return;
+  if(!confirm(`Delete saved driver ${rec.name || rec.licence || ""}?\n\nThis removes only the saved driver record. It does not delete diary pages.`)) return;
+  state.savedDrivers = state.savedDrivers.filter(d => String(d.id) !== String(editingSavedDriverId));
+  save();
+  renderVehicleDriverRegistry();
+  closeSavedDriverEditor();
+  showToast("Driver deleted");
+}
+function applySavedDriverAsTwoUp(id){
+  ensureRegistryState();
+  const rec = id ? state.savedDrivers.find(d => String(d.id) === String(id)) : (editingSavedDriverId ? state.savedDrivers.find(d => String(d.id) === String(editingSavedDriverId)) : null);
+  const name = rec ? (rec.name || "") : (($("savedDriverName") ? $("savedDriverName").value : "").trim());
+  const licence = rec ? (rec.licence || "") : (($("savedDriverLicence") ? $("savedDriverLicence").value : "").replace(/\D+/g,""));
+  const scheme = rec ? (rec.scheme || "BFM") : (($("savedDriverScheme") ? $("savedDriverScheme").value : "BFM") || "BFM");
+  const baseState = rec ? (rec.state || state.profile.baseTimeZone || "NSW") : (($("savedDriverState") ? $("savedDriverState").value : "") || state.profile.baseTimeZone || "NSW");
+  if(!name && !licence){ alert("Select or enter a saved driver first."); return; }
+  const detail = ensureDayDetail(state.selectedDate);
+  detail.twoUpEnabled = true;
+  detail.twoUpDriverName = name;
+  detail.twoUpLicenceNumber = licence;
+  detail.twoUpScheme = scheme;
+  detail.twoUpBaseState = baseState;
+  detail.twoUpManual = true;
+  save();
+  renderDiaryFast();
+  showToast("Two-up driver applied");
+}
+function renderVehicleDriverRegistry(){
+  ensureRegistryState();
+  const auto = $("autoSaveRegistryFromDiary");
+  if(auto) auto.checked = !!state.registrySettings.autoSaveFromDiary;
+  const vehicleList = $("vehicleList");
+  if(vehicleList){
+    vehicleList.innerHTML = state.vehicles.length ? state.vehicles.map(v => `
+      <button type="button" class="registryItem" data-vehicle-id="${escapeHtml(v.id)}">
+        <span><strong>${escapeHtml(v.rego || "Vehicle")}</strong><small>${escapeHtml([v.name, v.company, v.state].filter(Boolean).join(" • ") || "Saved vehicle")}</small></span><span class="registryChevron">›</span>
+      </button>`).join("") : `<p class="hint">No saved vehicles yet.</p>`;
+    vehicleList.querySelectorAll("[data-vehicle-id]").forEach(btn => btn.onclick = () => openVehicleEditor(btn.dataset.vehicleId));
+  }
+  const driverList = $("savedDriverList");
+  if(driverList){
+    driverList.innerHTML = state.savedDrivers.length ? state.savedDrivers.map(d => `
+      <button type="button" class="registryItem" data-driver-id="${escapeHtml(d.id)}">
+        <span><strong>${escapeHtml(d.name || d.licence || "Driver")}</strong><small>${escapeHtml([d.licence, d.scheme, d.state].filter(Boolean).join(" • ") || "Saved driver")}</small></span><span class="registryChevron">›</span>
+      </button>`).join("") : `<p class="hint">No saved drivers yet.</p>`;
+    driverList.querySelectorAll("[data-driver-id]").forEach(btn => btn.onclick = () => openSavedDriverEditor(btn.dataset.driverId));
+  }
+  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {locationPickerEnabled:true};
+  if($("locationPickerEnabled")) $("locationPickerEnabled").checked = state.uiSettings.locationPickerEnabled !== false;
+  document.body.classList.toggle("locationPickerOff", state.uiSettings.locationPickerEnabled === false);
+}
+function autoSaveRegistryFromDiaryPage(key){
+  ensureRegistryState();
+  if(!state.registrySettings.autoSaveFromDiary) return;
+  const d = ensureDayDetail(key || state.selectedDate);
+  const rego = (d.numberPlate || "").trim().toUpperCase();
+  if(rego && !state.vehicles.some(v => String(v.rego || "").toUpperCase() === rego)){
+    state.vehicles.push({id:registryId("veh"), rego, startDate:key || state.selectedDate, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+  const name = (d.twoUpDriverName || "").trim();
+  const lic = (d.twoUpLicenceNumber || "").replace(/\D+/g, "");
+  if((name || lic) && !state.savedDrivers.some(x => (lic && x.licence === lic) || (name && String(x.name || "").toLowerCase() === name.toLowerCase()))){
+    state.savedDrivers.push({id:registryId("drv"), name, licence:lic, scheme:d.twoUpScheme || "BFM", state:d.twoUpBaseState || state.profile.baseTimeZone || "NSW", role:"twoUp", startDate:key || state.selectedDate, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+  }
+}
+function checkDataHealth(){
+  const status = $("dataHealthStatus");
+  try{
+    const beforeSlots = Object.keys(state.slots || {}).length;
+    const beforeDetails = Object.keys(state.dayDetails || {}).length;
+    let beforeSize = 0;
+    try{ beforeSize = JSON.stringify(state).length; }catch(e){}
+    const opt = compactDiaryDataForPerformance(state, "manual speed optimise");
+    state.schemaVersion = APP_SCHEMA_VERSION;
+    save();
+    const afterSlots = Object.keys(state.slots || {}).length;
+    const afterDetails = Object.keys(state.dayDetails || {}).length;
+    let afterSize = 0;
+    try{ afterSize = JSON.stringify(state).length; }catch(e){}
+    const msg = `Optimised for speed. Slot days: ${beforeSlots} → ${afterSlots}. Daily details: ${beforeDetails} → ${afterDetails}. Size: ${Math.round(beforeSize/1024)} KB → ${Math.round(afterSize/1024)} KB. Real work/rest data, settings, diary books, vehicles, drivers and meaningful page details were kept.`;
+    if(status) status.textContent = msg;
+    try{ addAuditLog("Data optimised", msg); }catch(e){}
+    renderAll();
+    showToast("Optimised");
+  }catch(err){
+    console.error("Data optimiser failed", err);
+    if(status) status.textContent = "Optimise failed. Save a backup and try again.";
+    alert("Optimise failed. Save a backup and try again.");
+  }
+}
+
 function setupVehicleDriverRegistryButtons(){
   if($("autoSaveRegistryFromDiary")) $("autoSaveRegistryFromDiary").onchange = toggleAutoSaveRegistryFromDiary;
   if($("addVehicleBtn")) $("addVehicleBtn").onclick = () => openVehicleEditor();
   if($("addSavedDriverBtn")) $("addSavedDriverBtn").onclick = () => openSavedDriverEditor();
   if($("saveVehicleBtn")) $("saveVehicleBtn").onclick = saveVehicleRecord;
-  if($("applyVehicleBtn")) $("applyVehicleBtn").onclick = applyVehicleToCurrentPage;
+  if($("applyVehicleBtn")) $("applyVehicleBtn").onclick = () => applyVehicleToCurrentPage();
   if($("cancelVehicleBtn")) $("cancelVehicleBtn").onclick = closeVehicleEditor;
   if($("deleteVehicleBtn")) $("deleteVehicleBtn").onclick = deleteVehicleRecord;
   if($("saveSavedDriverBtn")) $("saveSavedDriverBtn").onclick = saveSavedDriverRecord;
-  if($("applyTwoUpDriverBtn")) $("applyTwoUpDriverBtn").onclick = applySavedDriverAsTwoUp;
+  if($("applyTwoUpDriverBtn")) $("applyTwoUpDriverBtn").onclick = () => applySavedDriverAsTwoUp();
   if($("cancelSavedDriverBtn")) $("cancelSavedDriverBtn").onclick = closeSavedDriverEditor;
   if($("deleteSavedDriverBtn")) $("deleteSavedDriverBtn").onclick = deleteSavedDriverRecord;
 }
@@ -1082,7 +1321,6 @@ function setupSwipePainting(){
       alert("This page is marked cancelled/skipped. Change Page status back to Active before editing Work/Rest blocks.");
       return false;
     }
-    if(!confirmOlderPageBlockEdit(state.selectedDate, "edit Work/Rest blocks")) return false;
     const cell = target && target.closest ? target.closest(".slot[data-slot]") : null;
     if(!cell) return false;
     touchCandidate = true;
@@ -1149,6 +1387,7 @@ function setupSwipePainting(){
       alert("This page is marked cancelled/skipped. Change Page status back to Active before editing Work/Rest blocks.");
       return;
     }
+    if(!confirmOlderPageBlockEdit(state.selectedDate, "edit Work/Rest blocks")) return;
     const arr = getDaySlots(state.selectedDate);
     arr[slotIdx] = startAction;
     if(startAction === "work") ensureDayDetail(state.selectedDate).usePage = true;
@@ -1183,6 +1422,12 @@ function setupSwipePainting(){
         return;
       }
       if(absX > absY * 1.2){
+        if(!confirmOlderPageBlockEdit(state.selectedDate, "edit Work/Rest blocks")){
+          touchCandidate = false;
+          painting = false;
+          scrollMode = true;
+          return;
+        }
         painting = true;
         touchCandidate = false;
         grid.classList.add("painting");
@@ -3391,6 +3636,7 @@ function renderDiaryBookHistory(){
   if($("closeBookDate")) $("closeBookDate").value = $("closeBookDate").value || state.selectedDate;
   if($("newBookStartDate")) $("newBookStartDate").value = $("newBookStartDate").value || state.selectedDate;
 }
+
 function findDiaryBookById(id){
   ensureDiaryBooks();
   return (state.diaryBooks || []).find(b => String(b.id) === String(id));
@@ -3398,11 +3644,9 @@ function findDiaryBookById(id){
 function renameDiaryBook(id){
   const book = findDiaryBookById(id);
   if(!book){ alert("Diary book not found."); return; }
-  const currentName = book.bookName || "";
-  const newName = prompt("Enter book name / label. Example: Book 1, Brisbane book, New diary book", currentName);
+  const newName = prompt("Enter book name / label. Example: Book 1, Brisbane book, New diary book", book.bookName || "");
   if(newName === null) return;
-  const currentDiaryNo = book.diaryNo || "";
-  const newDiaryNo = prompt("Enter work diary number for this book. Leave blank if not recorded.", currentDiaryNo);
+  const newDiaryNo = prompt("Enter work diary number for this book. Leave blank if not recorded.", book.diaryNo || "");
   if(newDiaryNo === null) return;
   book.bookName = String(newName || "").trim();
   book.diaryNo = cleanWorkDiaryNoInput(newDiaryNo || "");
@@ -3417,11 +3661,8 @@ function renameDiaryBook(id){
 function reopenDiaryBook(id){
   const book = findDiaryBookById(id);
   if(!book){ alert("Diary book not found."); return; }
-  if(book.status !== "closed"){
-    alert("This diary book is already open.");
-    return;
-  }
-  if(!confirm(`Reopen this diary book?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis only changes the book history. It does not delete any diary pages or work/rest blocks.`)) return;
+  if(book.status !== "closed"){ alert("This diary book is already open."); return; }
+  if(!confirm(`Reopen this diary book?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis only changes book history. It does not delete diary pages or work/rest blocks.`)) return;
   book.status = "active";
   book.endDate = "";
   book.lastPageNumber = "";
@@ -3430,25 +3671,23 @@ function reopenDiaryBook(id){
   save();
   recomputeAutoPageNumbers();
   renderBookSettings();
+  renderDiaryBookHistory();
   refreshCurrentPageData({forceDefaults:false});
   showToast("Book reopened");
 }
 function deleteDiaryBook(id){
   ensureDiaryBooks();
-  if((state.diaryBooks || []).length <= 1){
-    alert("At least one diary book setup must remain.");
-    return;
-  }
+  if((state.diaryBooks || []).length <= 1){ alert("At least one diary book setup must remain."); return; }
   const book = findDiaryBookById(id);
   if(!book){ alert("Diary book not found."); return; }
-  const message = `Delete this diary book setup?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis deletes only the book setup/history item. It does NOT delete your work/rest blocks, daily sheet details, vehicles, drivers, or backups. Pages in that date range will attach to the next suitable book setup.`;
-  if(!confirm(message)) return;
+  if(!confirm(`Delete this diary book setup?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis deletes only the book setup/history item. It does NOT delete work/rest blocks, daily sheet details, vehicles, drivers, or backups.`)) return;
   state.diaryBooks = (state.diaryBooks || []).filter(b => String(b.id) !== String(id));
   ensureDiaryBooks();
   addAuditLog("Diary book deleted", `${book.bookName || book.diaryNo || "Book"} starting ${book.startDate} deleted from book history only`);
   save();
   recomputeAutoPageNumbers();
   renderBookSettings();
+  renderDiaryBookHistory();
   refreshCurrentPageData({forceDefaults:false});
   showToast("Book deleted");
 }
@@ -3462,6 +3701,7 @@ function handleBookHistoryAction(ev){
   if(action === "reopen") reopenDiaryBook(id);
   if(action === "delete") deleteDiaryBook(id);
 }
+
 function closeCurrentDiaryBook(){
   ensureDiaryBooks();
   const closeDate = $("closeBookDate") ? $("closeBookDate").value || state.selectedDate : state.selectedDate;
@@ -4212,8 +4452,7 @@ function loadBFMSample(){
   save(); renderAll();
 }
 function clearSelectedDay(){
-  if(!confirmOlderPageBlockEdit(state.selectedDate, "clear all Work/Rest blocks")) return;
-  if(confirm("Clear all blocks for selected day?")){
+  if(confirm("Clear all blocks for selected day?") && confirmOlderPageBlockEdit(state.selectedDate, "clear all Work/Rest blocks")){
     state.slots[state.selectedDate]=Array(SLOTS_PER_DAY).fill("rest");
     const detail = ensureDayDetail(state.selectedDate);
     detail.changeRows = [];
@@ -4359,6 +4598,7 @@ function buildJsonBackup(){
   ensureBackupReminder();
   ensureBookSettings();
   ensureDiaryBooks();
+  ensureRegistryState();
   const backup = {
     app: "Truck Work Diary Checker",
     backupVersion: 1,
@@ -4375,7 +4615,7 @@ function buildJsonBackup(){
     bookSettings: safeClone(state.bookSettings || {}),
     settingsHistory: safeClone(state.settingsHistory || []),
     ruleHistory: safeClone(state.ruleHistory || []),
-    auditLog: safeClone(state.auditLog || []),
+    auditLog: safeClone((state.auditLog || []).slice(-250)),
     dismissedAudit: safeClone(state.dismissedAudit || {}),
     vehicles: safeClone(state.vehicles || []),
     savedDrivers: safeClone(state.savedDrivers || []),
@@ -4386,7 +4626,7 @@ function buildJsonBackup(){
     shortBreakSettings: safeClone(state.shortBreakSettings || {mode:"smart", maxMinutes:60}),
     backupReminder: safeClone(state.backupReminder || {}),
     optimization: safeClone(state.optimization || {}),
-    note: "Personal backup file for restoring this app data. Keep this file private. Export is compacted for speed: full-rest blank days are not stored because blank dates count as continuous Rest."
+    note: "Personal backup file for restoring this app data. Keep this file private. This export is compacted for speed: blank/no-work dates are not saved as 96 rest blocks because blank dates count as continuous Rest."
   };
   const opt = compactDiaryDataForPerformance(backup, "backup/export");
   backup.backupOptimised = {
@@ -4398,6 +4638,7 @@ function buildJsonBackup(){
   };
   return backup;
 }
+
 function backupFilename(){
   return `truck-work-diary-backup-${state.selectedDate}.json`;
 }
@@ -4447,31 +4688,6 @@ function exportJsonBackup(){
   a.download = backupFilename();
   a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
-}
-
-
-function checkDataHealth(){
-  const status = $("dataHealthStatus");
-  try{
-    const beforeSlots = Object.keys(state.slots || {}).length;
-    const beforeDetails = Object.keys(state.dayDetails || {}).length;
-    const beforeSize = JSON.stringify(state).length;
-    const opt = compactDiaryDataForPerformance(state, "manual data health check");
-    state.schemaVersion = APP_SCHEMA_VERSION;
-    save();
-    const afterSlots = Object.keys(state.slots || {}).length;
-    const afterDetails = Object.keys(state.dayDetails || {}).length;
-    const afterSize = JSON.stringify(state).length;
-    const msg = `Data health cleaned for speed. Slot days: ${beforeSlots} → ${afterSlots}. Daily details: ${beforeDetails} → ${afterDetails}. Saved size: ${Math.round(beforeSize/1024)} KB → ${Math.round(afterSize/1024)} KB. Removed ${opt.removedRestSlotDays || 0} full-rest stored day(s) and ${opt.removedBlankDetails || 0} blank auto-detail day(s). Real work/rest data, settings, vehicles, drivers, books and meaningful page details were kept.`;
-    if(status) status.textContent = msg;
-    addAuditLog("Data health optimised", msg);
-    renderAll();
-    showToast("Data optimised");
-  }catch(err){
-    console.error("Data health check failed", err);
-    if(status) status.textContent = "Data health check failed. Save a backup and try again.";
-    alert("Data health check failed. Save a backup and try again.");
-  }
 }
 
 function importJsonBackupFromFile(file){
@@ -4932,7 +5148,33 @@ function setup(){
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
 }
-setup();
+
+function installEmergencyNavigation(){
+  try{
+    document.querySelectorAll(".tabbar button").forEach(btn=>{
+      btn.onclick = () => {
+        const tabId = btn.dataset.tab;
+        document.querySelectorAll(".tabbar button").forEach(b=>b.classList.toggle("active", b === btn));
+        document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active", s.id === tabId));
+        const title = btn.querySelector("span") ? btn.querySelector("span").textContent : "Work Diary";
+        if($("screenTitle")) $("screenTitle").textContent = title;
+      };
+    });
+  }catch(e){}
+}
+try{
+  setup();
+}catch(err){
+  console.error("Startup failed - emergency navigation active", err);
+  installEmergencyNavigation();
+  try{
+    const banner = document.createElement("div");
+    banner.className = "alert warn startupWarn";
+    banner.textContent = "The app opened in safe navigation mode. Save a backup and reload after updating.";
+    const main = document.querySelector("main");
+    if(main) main.prepend(banner);
+  }catch(e){}
+}
 
 
 /* Robust Find modal controller v3 */
@@ -8342,7 +8584,7 @@ function setupCleanEngineTestUi(){
   };
   if(state.lastEngineTestReport) renderEngineTestReport(state.lastEngineTestReport);
 }
-setTimeout(setupCleanEngineTestUi, 0);
+/* Engine test UI removed in final stable build; test functions retained internally but not shown in Settings. */
 
 function cleanFinalAppSelfTest(){
   ensureShortBreakSettings();
