@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 56;
-const APP_BUILD_NAME = "clean-engine-turbo-responsive";
+const APP_SCHEMA_VERSION = 57;
+const APP_BUILD_NAME = "clean-engine-data-safety-turbo-fix";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -609,11 +609,43 @@ const IMPORT_SPEED_OPTIMISER_VERSION = "import-speed-v3-turbo-responsive";
 function isValidDiaryKeyFast(key){
   return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ""));
 }
+function isWorkSlotValueFast(v){
+  if(v === true || v === 1) return true;
+  const s = String(v || "").toLowerCase().trim();
+  return ["work","driving","drive","w","on_duty","on-duty","duty"].includes(s);
+}
 function slotArrayHasWorkFast(arr){
-  return Array.isArray(arr) && arr.some(v => v === "work");
+  return Array.isArray(arr) && arr.some(v => isWorkSlotValueFast(v));
 }
 function slotArrayIsAllRestFast(arr){
-  return Array.isArray(arr) && arr.length && !arr.some(v => v === "work");
+  return Array.isArray(arr) && arr.length && !arr.some(v => isWorkSlotValueFast(v));
+}
+function dataSafetySummary(obj){
+  obj = obj || {};
+  const slots = obj.slots && typeof obj.slots === "object" ? obj.slots : {};
+  const details = obj.dayDetails && typeof obj.dayDetails === "object" ? obj.dayDetails : {};
+  const entries = Array.isArray(obj.entries) ? obj.entries : [];
+  let workDays = 0, workSlots = 0;
+  Object.keys(slots).forEach(k => {
+    const arr = slots[k];
+    if(Array.isArray(arr)){
+      let dayWork = 0;
+      arr.forEach(v => { if(isWorkSlotValueFast(v)){ dayWork++; workSlots++; } });
+      if(dayWork) workDays++;
+    }
+  });
+  const workEntries = entries.filter(e => e && (e.activity === "work" || isWorkSlotValueFast(e.activity))).length;
+  return {
+    workDays, workSlots, workEntries, entries:entries.length,
+    detailDays:Object.keys(details).length,
+    books:Array.isArray(obj.diaryBooks) ? obj.diaryBooks.length : 0,
+    vehicles:Array.isArray(obj.vehicles) ? obj.vehicles.length : 0,
+    drivers:Array.isArray(obj.savedDrivers) ? obj.savedDrivers.length : 0
+  };
+}
+function summaryMeaningScore(sum){
+  sum = sum || {};
+  return (sum.workSlots || 0) + (sum.workEntries || 0)*10 + (sum.detailDays || 0) + (sum.books || 0)*5 + (sum.vehicles || 0) + (sum.drivers || 0);
 }
 function compactChangeRowsForRestDayFast(rows){
   if(!Array.isArray(rows)) return [];
@@ -628,19 +660,24 @@ function dayDetailIsMeaningfulForBlankRestFast(key, d){
   const status = d.pageStatus || "active";
   // Cancelled/skipped pages are real paper-diary evidence and must be kept.
   if(status !== "active") return true;
-  // Keep only deliberate page use or manual page overrides on blank/no-work dates.
-  // Older builds sometimes auto-created pageNo/workDiaryNo for full-rest dates; those
-  // are not needed now because blank dates count as continuous Rest by default.
-  if(d.usePageManual || d.pageNoManual || d.usePage === true) return true;
-  if(d.workDiaryNoManual || d.numberPlateManual) return true;
-  if(d.dailyCheckTime || d.comments || d.fitForDuty) return true;
-  if(d.ruleManual) return true;
-  if(d.twoUpManual || d.twoUpEnabled || d.twoUpDriverName || d.twoUpLicenceNumber) return true;
+  // Data-safety version: keep any older page that has user-visible page/book/driver/vehicle details,
+  // even if those details were created by an older build. This avoids a speed optimiser hiding diary history.
+  const importantFields = [
+    "pageNo","workDiaryNo","numberPlate","driverNameSnapshot","licenceNumberSnapshot",
+    "baseStateSnapshot","comments","dailyCheckTime","pageStatusReason",
+    "twoUpDriverName","twoUpLicenceNumber","twoUpBaseState","twoUpScheme"
+  ];
+  if(importantFields.some(f => String(d[f] || "").trim())) return true;
+  if(d.usePage || d.usePageManual || d.pageNoManual || d.workDiaryNoManual || d.numberPlateManual) return true;
+  if(d.fitForDuty || d.ruleManual || d.twoUpManual || d.twoUpEnabled || d.selectedPageManual) return true;
   const keptRows = compactChangeRowsForRestDayFast(d.changeRows);
   return keptRows.length > 0;
 }
+
 function compactDiaryDataForPerformance(target, reason){
   if(!target || typeof target !== "object") return {removedRestSlotDays:0, removedBlankDetails:0, prunedDismissed:0};
+  const beforeSummary = dataSafetySummary(target);
+  const beforeScore = summaryMeaningScore(beforeSummary);
   if(!target.slots || typeof target.slots !== "object") target.slots = {};
   if(!target.dayDetails || typeof target.dayDetails !== "object") target.dayDetails = {};
   if(!Array.isArray(target.entries)) target.entries = [];
@@ -652,7 +689,7 @@ function compactDiaryDataForPerformance(target, reason){
     const arr = Array.isArray(target.slots[key]) ? target.slots[key] : [];
     if(slotArrayHasWorkFast(arr)){
       // Normalise saved work days only. Blank dates do not need a 96-slot rest array.
-      target.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => arr[i] === "work" ? "work" : "rest");
+      target.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => isWorkSlotValueFast(arr[i]) ? "work" : "rest");
       workDates.add(key);
     }else{
       delete target.slots[key];
@@ -696,6 +733,21 @@ function compactDiaryDataForPerformance(target, reason){
       }
     });
   }
+  const afterSummary = dataSafetySummary(target);
+  const afterScore = summaryMeaningScore(afterSummary);
+  if(beforeScore > 0 && afterScore === 0){
+    // Never allow a speed optimiser to turn meaningful diary data into an empty diary.
+    target.optimization = {
+      ...(target.optimization || {}),
+      importSpeedVersion: IMPORT_SPEED_OPTIMISER_VERSION,
+      compactedAt: new Date().toISOString(),
+      compactReason: reason || "auto",
+      dataSafetyAbort: true,
+      beforeSummary,
+      afterSummary
+    };
+    return {removedRestSlotDays:0, removedBlankDetails:0, prunedDismissed:0, aborted:true};
+  }
   target.optimization = {
     ...(target.optimization || {}),
     importSpeedVersion: IMPORT_SPEED_OPTIMISER_VERSION,
@@ -710,6 +762,66 @@ function compactDiaryDataForPerformance(target, reason){
 function currentStateAlreadyOptimised(){
   return Number(state && state.schemaVersion || 0) >= APP_SCHEMA_VERSION &&
     state && state.optimization && state.optimization.importSpeedVersion === IMPORT_SPEED_OPTIMISER_VERSION;
+}
+const DATA_SAFETY_SNAPSHOT_KEY = "truckDiaryPWA_safetySnapshot";
+function createDataSafetySnapshot(label, rawOrObject){
+  try{
+    const raw = typeof rawOrObject === "string" ? rawOrObject : JSON.stringify(rawOrObject || state || {});
+    if(!raw || raw.length < 20) return false;
+    const parsed = JSON.parse(raw);
+    const score = summaryMeaningScore(dataSafetySummary(parsed));
+    if(score <= 0) return false;
+    const snap = {
+      app:"Truck Work Diary Checker",
+      type:"data-safety-snapshot",
+      label: label || "snapshot",
+      build: APP_BUILD_NAME,
+      schema: APP_SCHEMA_VERSION,
+      createdAt: new Date().toISOString(),
+      summary: dataSafetySummary(parsed),
+      raw
+    };
+    localStorage.setItem(DATA_SAFETY_SNAPSHOT_KEY, JSON.stringify(snap));
+    return true;
+  }catch(e){ return false; }
+}
+function getDataSafetySnapshot(){
+  try{ return JSON.parse(localStorage.getItem(DATA_SAFETY_SNAPSHOT_KEY) || "null"); }catch(e){ return null; }
+}
+function restoreDataSafetySnapshot(){
+  const snap = getDataSafetySnapshot();
+  if(!snap || !snap.raw){
+    alert("No saved safety snapshot found on this phone. If you have a JSON backup file, import that backup instead.");
+    return;
+  }
+  const msg = `Restore saved safety snapshot from ${snap.createdAt || "unknown time"}?\n\nWork days: ${snap.summary && snap.summary.workDays || 0}\nPage/detail days: ${snap.summary && snap.summary.detailDays || 0}\nBooks: ${snap.summary && snap.summary.books || 0}\n\nThis replaces the currently loaded app data on this phone.`;
+  if(!confirm(msg)) return;
+  try{
+    createDataSafetySnapshot("before-restore-safety-snapshot", localStorage.getItem("truckDiaryPWA") || "{}");
+    localStorage.setItem("truckDiaryPWA", snap.raw);
+    alert("Safety snapshot restored. The app will reload now.");
+    location.reload();
+  }catch(e){ alert("Could not restore the safety snapshot. Please import your JSON backup file instead."); }
+}
+function exportEmergencyRawData(){
+  try{
+    const raw = localStorage.getItem("truckDiaryPWA") || JSON.stringify(state || {});
+    const blob = new Blob([raw], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `truck-work-diary-raw-recovery-${new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){ alert("Could not export raw recovery data."); }
+}
+function renderDataSafetyStatus(){
+  const el = document.getElementById("emergencyDataStatus");
+  if(!el) return;
+  const snap = getDataSafetySnapshot();
+  if(!snap){ el.textContent = "No local safety snapshot found yet. The app will create one before future import/migration/clear actions."; return; }
+  const sum = snap.summary || {};
+  el.textContent = `Safety snapshot: ${snap.createdAt || "saved"}. Work days ${sum.workDays || 0}, page/detail days ${sum.detailDays || 0}, books ${sum.books || 0}.`;
 }
 function migrateImportedBackup(backup){
   const b = safeClone(backup);
@@ -739,7 +851,7 @@ function migrateImportedBackup(backup){
 
   Object.keys(migrated.slots).forEach(key => {
     const arr = Array.isArray(migrated.slots[key]) ? migrated.slots[key] : [];
-    migrated.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => arr[i] === "work" ? "work" : "rest");
+    migrated.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => isWorkSlotValueFast(arr[i]) ? "work" : "rest");
   });
 
   Object.keys(migrated.dayDetails).forEach(key => {
@@ -800,7 +912,8 @@ function migrateCurrentState(){
   ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog = [];
   state.schemaVersion = APP_SCHEMA_VERSION;
-  // Save the compacted form once so the next app launch is fast.
+  // Save the compacted/migrated form once so the next app launch is fast, but keep a safety snapshot first.
+  try{ createDataSafetySnapshot("before-migration-save", localStorage.getItem("truckDiaryPWA") || JSON.stringify(state)); }catch(e){}
   try{ localStorage.setItem("truckDiaryPWA", JSON.stringify(state)); }catch(e){}
 }
 
@@ -850,6 +963,7 @@ function flushSaveSoon(){
 function load(){
   const raw = localStorage.getItem("truckDiaryPWA");
   if(raw){
+    try{ createDataSafetySnapshot("before-load-migration", raw); }catch(e){}
     try{ state = {...state, ...JSON.parse(raw)}; }catch(e){}
   }
   ensureProfile();
@@ -3278,7 +3392,7 @@ function dateDiffDays(fromKeyStr, toKeyStr){
 }
 function dayHasAnyWork(key){
   const arr = (state.slots && Array.isArray(state.slots[key])) ? state.slots[key] : [];
-  if(arr.some(v => v === "work")) return true;
+  if(arr.some(v => isWorkSlotValueFast(v))) return true;
   return (state.entries || []).some(e => (e.activity === "work") && (String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key));
 }
 
@@ -4226,6 +4340,7 @@ function clearSelectedDay(){
 }
 function clearAll(){
   if(confirm("Clear all saved diary data from this phone/browser?")){
+    try{ createDataSafetySnapshot("before-clear-all", localStorage.getItem("truckDiaryPWA") || JSON.stringify(state)); }catch(e){}
     localStorage.removeItem("truckDiaryPWA");
     state.slots={}; state.entries=[]; state.activeTimer=null;
     state.profile={driverName:"", licenceNumber:"", baseTimeZone:"NSW"};
@@ -4487,6 +4602,7 @@ function importJsonBackupFromFile(file){
       if(!confirm("Import this backup? This will replace the app data currently saved on this phone.")){
         return;
       }
+      try{ createDataSafetySnapshot("before-import-replace", localStorage.getItem("truckDiaryPWA") || JSON.stringify(state)); }catch(e){}
       const migrated = migrateImportedBackup(backup);
       state.selectedDate = migrated.selectedDate || toKey(new Date());
       state.scheme = migrated.scheme || "BFM";
@@ -4822,6 +4938,7 @@ function setup(){
   document.addEventListener("input", enforceUppercaseOnly);
   document.addEventListener("input", enforceWorkDiaryNoOnly);
   load();
+  renderDataSafetyStatus();
   $("prevDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,-1);saveSoon();renderDiaryFast();}
   $("nextDay").onclick=()=>{state.selectedDate=addDays(state.selectedDate,1);saveSoon();renderDiaryFast();}
   if($("todayBtn")) $("todayBtn").onclick=()=>{state.selectedDate=toKey(new Date());saveSoon();renderDiaryFast();}
@@ -4845,6 +4962,8 @@ function setup(){
   if($("graphExportPdf")) $("graphExportPdf").onclick=exportPdf;
   $("exportJsonBackup").onclick=exportJsonBackup;
   if($("checkDataHealth")) $("checkDataHealth").onclick=checkDataHealth;
+  if($("restoreSafetySnapshotBtn")) $("restoreSafetySnapshotBtn").onclick=restoreDataSafetySnapshot;
+  if($("exportEmergencyRawDataBtn")) $("exportEmergencyRawDataBtn").onclick=exportEmergencyRawData;
   if($("bookHistoryList")) $("bookHistoryList").addEventListener("click", handleBookHistoryAction);
   $("shareJsonBackup").onclick=shareJsonBackup;
   $("importJsonBackup").onclick=()=>$("jsonImportFile").click();
@@ -8951,7 +9070,7 @@ function turboBuildWorkIndex(){
   try{
     Object.keys(state.slots || {}).forEach(k => {
       const arr = state.slots[k];
-      if(Array.isArray(arr) && arr.some(v => v === "work")) workDates.add(k);
+      if(Array.isArray(arr) && arr.some(v => isWorkSlotValueFast(v))) workDates.add(k);
     });
   }catch(e){}
   try{
@@ -8978,7 +9097,7 @@ function turboInvalidateWorkIndex(){ turboWorkIndex = null; turboWorkIndexRevisi
     dayHasAnyWork = function(key){
       try{
         const arr = state.slots && state.slots[key];
-        if(Array.isArray(arr)) return arr.some(v => v === "work");
+        if(Array.isArray(arr)) return arr.some(v => isWorkSlotValueFast(v));
         const idx = turboBuildWorkIndex();
         if(idx && idx.workDates && idx.workDates.has(key)) return true;
         return false;
@@ -9177,33 +9296,17 @@ function turboRenderChangeDetailsLater(key, token){
 
 // Run data compaction after imports/updates and keep the compact form saved once.
 function turboOptimiseCurrentStateNow(reason){
+  // Data-safety schema 57: do not silently compact the live saved diary.
+  // Export/import use compact cloned data, while live data is preserved unless the user taps the optimiser.
   try{
-    const stats = compactDiaryDataForPerformance(state, reason || "turbo");
     turboInvalidateWorkIndex();
-    if(typeof perfBump === "function") perfBump("turbo-optimise");
-    try{ localStorage.setItem("truckDiaryPWA", JSON.stringify(state)); }catch(e){}
-    return stats;
+    if(typeof perfBump === "function") perfBump("turbo-refresh-only");
+    return {preservedLiveData:true, reason:reason || "turbo"};
   }catch(e){ console.warn("Turbo optimisation skipped", e); return null; }
 }
 (function(){
-  if(typeof importJsonBackupFromFile === "function" && !importJsonBackupFromFile._turboPatched){
-    const coreImportJsonBackupTurbo = importJsonBackupFromFile;
-    importJsonBackupFromFile = function(file){
-      const out = coreImportJsonBackupTurbo.apply(this, arguments);
-      setTimeout(() => turboOptimiseCurrentStateNow("after-import-turbo"), 250);
-      return out;
-    };
-    importJsonBackupFromFile._turboPatched = true;
-  }
-  if(typeof exportJsonBackup === "function" && !exportJsonBackup._turboPatched){
-    const coreExportJsonBackupTurbo = exportJsonBackup;
-    exportJsonBackup = function(){
-      // Ensure saved backup remains compact; blank/rest-only dates are still counted as Rest by default.
-      try{ turboOptimiseCurrentStateNow("before-export-turbo"); }catch(e){}
-      return coreExportJsonBackupTurbo.apply(this, arguments);
-    };
-    exportJsonBackup._turboPatched = true;
-  }
+  // Data-safety schema 57: no background optimiser is allowed to rewrite live diary data.
+  // The normal import/export functions already scan compact backup copies safely.
 })();
 
 function turboResponsiveSelfTest(){
@@ -9242,8 +9345,8 @@ try{
   setup();
   setTimeout(() => {
     try{
-      const opt = state && state.optimization || {};
-      if(opt.importSpeedVersion !== IMPORT_SPEED_OPTIMISER_VERSION) turboOptimiseCurrentStateNow("startup-turbo");
+      renderDataSafetyStatus();
+      if(typeof turboTrimPerfCache === "function") turboTrimPerfCache();
     }catch(e){}
   }, 600);
 }catch(err){

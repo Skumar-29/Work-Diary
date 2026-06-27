@@ -542,7 +542,12 @@
           </div>
 
 <button id="checkDataHealth" class="secondary">Optimise saved diary data for speed</button>
-          <p id="dataHealthStatus" class="hint">Use this after importing an older backup. It removes unnecessary full-rest blank days only; real work/rest data and important details are kept.</p>
+          <p id="dataHealthStatus" class="hint">Use this after importing an older backup. In this data-safety version it keeps page/book details and never allows optimisation to turn a meaningful diary into an empty diary.</p>
+          <div class="dataSafetyBox">
+            <button id="restoreSafetySnapshotBtn" class="secondary" type="button">Recover Safety Snapshot</button>
+            <button id="exportEmergencyRawDataBtn" class="secondary" type="button">Export Raw Recovery Data</button>
+            <p id="emergencyDataStatus" class="hint">Safety snapshot status will appear here.</p>
+          </div>
           <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
           <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">
 

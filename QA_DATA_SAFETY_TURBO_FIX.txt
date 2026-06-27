@@ -1,0 +1,9 @@
+Build: clean-engine-data-safety-turbo-fix / schema 57
+Purpose: prevent data from appearing lost after optimisation/import while keeping speed improvements.
+Changes:
+- No background/startup/export turbo process silently compacts live saved diary data.
+- Live data is snapshotted before migration/import/clear actions.
+- Recovery buttons added in Settings: Recover Safety Snapshot and Export Raw Recovery Data.
+- Import/migration recognises older work slot values such as drive/driving/w/on-duty as Work.
+- Optimiser is more conservative and preserves page/book/driver/vehicle details.
+- NHVR counted-period calculation logic was not intentionally changed.
