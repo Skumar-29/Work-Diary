@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v95-verified-backup-fast-import";
+const CACHE = "truck-work-diary-v94-archive-ready-fast-import";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

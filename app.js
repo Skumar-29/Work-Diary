@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 59;
-const APP_BUILD_NAME = "clean-engine-verified-backup-fast-import";
+const APP_SCHEMA_VERSION = 58;
+const APP_BUILD_NAME = "clean-engine-archive-ready-fast-import";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -620,32 +620,6 @@ function dayDetailIsMeaningfulForBlankRestFast(key, d){
   if(d.twoUpManual || d.twoUpEnabled || d.twoUpDriverName || d.twoUpLicenceNumber) return true;
   const keptRows = compactChangeRowsForRestDayFast(d.changeRows);
   return keptRows.length > 0;
-}
-
-
-/* Verified backup speed layer: for blank/no-work dates, a generated 00:00 Rest / 24h row
-   is NOT meaningful by itself. It can be regenerated from the rule that blank days are
-   continuous Rest. This prevents old backups from storing years of no-work pages. */
-function compactBlankRestRowsStrictFast(rows){
-  if(!Array.isArray(rows)) return [];
-  return rows.filter(r => r && (
-    r.activity === "work" ||
-    String(r.odometer || "").trim() ||
-    String(r.location || "").trim() ||
-    String(r.note || "").trim() ||
-    (r.noDetails && !r.autoNoDetails)
-  ));
-}
-function dayDetailIsMeaningfulForBlankRestFast(key, d){
-  if(!d || typeof d !== "object") return false;
-  const status = d.pageStatus || "active";
-  if(status !== "active") return true;
-  if(d.usePageManual || d.pageNoManual || d.usePage === true) return true;
-  if(d.workDiaryNoManual || d.numberPlateManual || d.selectedPageManual) return true;
-  if(d.dailyCheckTime || d.comments || d.fitForDuty) return true;
-  if(d.ruleManual) return true;
-  if(d.twoUpManual || d.twoUpEnabled || d.twoUpDriverName || d.twoUpLicenceNumber) return true;
-  return compactBlankRestRowsStrictFast(d.changeRows).length > 0;
 }
 
 function compactDiaryDataForPerformance(target, reason){
@@ -5196,7 +5170,7 @@ function installEmergencyNavigation(){
    Safety: Work/Rest slots remain the source of truth. Blank/no-work dates still
    count as continuous Rest, so they are not stored as 96 Rest blocks.
    ========================================================= */
-const ARCHIVE_FAST_IMPORT_VERSION = "verified-backup-fast-v2";
+const ARCHIVE_FAST_IMPORT_VERSION = "archive-ready-v1";
 
 function archiveValidDateKey(key){
   return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ""));
@@ -5271,38 +5245,17 @@ function archivePaintWorkRange(targetSlots, startAbs, endAbs){
 function archiveMaterialiseLegacyEntries(target){
   if(!target || !Array.isArray(target.entries) || !target.entries.length) return 0;
   if(!target.slots || typeof target.slots !== "object") target.slots = {};
-
-  // IMPORTANT SAFETY RULE:
-  // In schema 57+ backups, `slots` / `slotsCompact` are the final diary truth.
-  // `entries` are only old tap/swipe action history and can contain superseded
-  // changes (work later changed back to rest). Re-playing entries over final slots
-  // can make the diary slower AND can re-create old incorrect work blocks.
-  // Therefore: if the backup already contains any slot day, do NOT materialise
-  // entries; just discard them after import/export. Only very old entries-only
-  // backups use this fallback conversion.
-  const hasAnyFinalSlotDay = Object.keys(target.slots || {}).some(k => archiveValidDateKey(k));
-  if(hasAnyFinalSlotDay){
-    const removed = target.entries.length;
-    target.entries = [];
-    return 0 - removed;
-  }
-
   let used = 0;
   target.entries.forEach(e => {
     if(!e || e.activity !== "work") return;
-    let startAbs = archiveParseEntryDateTime(e.start);
-    let endAbs = archiveParseEntryDateTime(e.end);
-    if(Number.isFinite(startAbs) && Number.isFinite(endAbs) && endAbs <= startAbs){
-      // Old logs sometimes saved cross-midnight work as the same date ending 00:00.
-      // For entries-only backups, treat that as midnight at the end of the start day.
-      const endText = String(e.end || "");
-      if(/ 00:00$/.test(endText) || /T00:00/.test(endText)) endAbs += 24 * 60 * 60 * 1000;
-    }
+    const startAbs = archiveParseEntryDateTime(e.start);
+    const endAbs = archiveParseEntryDateTime(e.end);
     if(!Number.isFinite(startAbs) || !Number.isFinite(endAbs) || endAbs <= startAbs) return;
     archivePaintWorkRange(target.slots, startAbs, endAbs);
     used++;
   });
-  // Entries are legacy action logs. After fallback conversion, they are not needed.
+  // Entries are only legacy action logs. After converting work ranges to slots,
+  // keeping thousands of them makes navigation/search/save slow and is no longer needed.
   target.entries = [];
   return used;
 }
@@ -5335,11 +5288,7 @@ function archiveDropDerivedBlankData(target){
       delete target.dayDetails[key];
       removedDetails++;
     }else if(d && Array.isArray(d.changeRows) && !hasWork){
-      d.changeRows = compactBlankRestRowsStrictFast(d.changeRows);
-      if(!dayDetailIsMeaningfulForBlankRestFast(key, d)){
-        delete target.dayDetails[key];
-        removedDetails++;
-      }
+      d.changeRows = compactChangeRowsForRestDayFast(d.changeRows);
     }
   });
   archiveTrimAuditLog(target);
@@ -7740,7 +7689,7 @@ function stats14DayTableSelfTest(){
    ========================================================= */
 
 const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
-const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v95-verified-backup-fast-import";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v94-archive-ready-fast-import";
 const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
 const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
 
