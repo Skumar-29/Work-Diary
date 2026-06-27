@@ -1939,3 +1939,7 @@ body.homeScreenPwa .card{
   .duePlannerRow.dueWarn{background:#241b09}
   .duePlannerRow.dueBad{background:#250f0f}
 }
+
+.bookHistoryActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+button.tiny{padding:6px 10px;font-size:12px;border-radius:10px}
+.bookHistoryItem small{display:block}

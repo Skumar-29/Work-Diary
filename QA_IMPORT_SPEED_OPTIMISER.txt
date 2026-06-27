@@ -1,0 +1,11 @@
+Build: clean-engine-import-speed-optimised
+Schema: 54
+Scope: performance/import cleanup only. NHVR counted-period engine logic is not relaxed.
+
+Checks:
+- Imported backups compact all-rest 96-slot days because blank/no-block dates count as Rest by default.
+- Real work days remain stored and unchanged.
+- Meaningful no-work day details such as cancelled/skipped pages or notes are kept.
+- Blank auto-generated dayDetails are removed to reduce localStorage size.
+- Already optimised schema-54 data uses a fast startup path and avoids full JSON clone/migration on every app launch.
+- Engine test suite includes Import speed optimiser self-test.

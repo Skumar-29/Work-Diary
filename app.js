@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 53;
-const APP_BUILD_NAME = "clean-engine-fast-due-break-planner";
+const APP_SCHEMA_VERSION = 55;
+const APP_BUILD_NAME = "clean-engine-safe-backup-book-edit-confirm";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -111,6 +111,34 @@ let state = {
 
 const $ = id => document.getElementById(id);
 let auditFocus = null;
+
+let olderPageEditConfirmSession = {};
+function selectedDateIsOlderPage(key){
+  const today = toKey(new Date());
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(key || "")) && key < today;
+}
+function confirmOlderPageBlockEdit(key, actionText="edit work/rest blocks"){
+  if(!selectedDateIsOlderPage(key)) return true;
+  if(olderPageEditConfirmSession[key]) return true;
+  const msg = `You are editing an older diary page (${key}).\n\nChanging old Work/Rest blocks can affect NHVR 24h, 7-day, 14-day and longer rolling calculations.\n\nContinue and ${actionText}?`;
+  if(!confirm(msg)) return false;
+  olderPageEditConfirmSession[key] = true;
+  addAuditLog("Older page edit confirmed", `User confirmed ${actionText} on ${key}`);
+  return true;
+}
+function confirmOlderRangeEdit(startKey, endKey, actionText="edit work/rest blocks"){
+  const today = toKey(new Date());
+  const start = startKey || endKey;
+  const end = endKey || startKey;
+  if(!start || !end || start >= today) return true;
+  const rangeKey = `${start}|${end}|${actionText}`;
+  if(olderPageEditConfirmSession[rangeKey]) return true;
+  const msg = `You are changing older diary block data.\n\nFrom: ${start}\nTo: ${end}\n\nThis can affect NHVR 24h, 7-day, 14-day and longer rolling calculations. Continue?`;
+  if(!confirm(msg)) return false;
+  olderPageEditConfirmSession[rangeKey] = true;
+  addAuditLog("Older date range edit confirmed", `User confirmed ${actionText}: ${start} to ${end}`);
+  return true;
+}
 
 let toastTimer = null;
 function showToast(message="Saved"){
@@ -569,6 +597,120 @@ function normalizeDayDetailForMigration(d){
   }));
   return out;
 }
+
+/* =========================================================
+   IMPORT / RESTORE SPEED OPTIMISER v1
+   Scope: data-size and screen-speed only. Does not change NHVR fatigue rules.
+   Why: older backups may contain many full-rest slot arrays and auto dayDetails.
+   Since blank/no-block days count as continuous Rest, those all-rest arrays are
+   not needed for calculation and make iPhone localStorage, import and render slow.
+   ========================================================= */
+const IMPORT_SPEED_OPTIMISER_VERSION = "import-speed-v2-safe-backup";
+function isValidDiaryKeyFast(key){
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ""));
+}
+function slotArrayHasWorkFast(arr){
+  return Array.isArray(arr) && arr.some(v => v === "work");
+}
+function slotArrayIsAllRestFast(arr){
+  return Array.isArray(arr) && arr.length && !arr.some(v => v === "work");
+}
+function compactChangeRowsForRestDayFast(rows){
+  if(!Array.isArray(rows)) return [];
+  // Keep a row only when it carries real user-entered evidence. Auto continuation/rest rows
+  // can be safely regenerated from slots when needed.
+  return rows.filter(r => r && !r.autoNoDetails && (
+    r.activity === "work" || r.location || r.odometer || r.note || r.noDetails || r.restType
+  ));
+}
+function dayDetailIsMeaningfulForBlankRestFast(key, d){
+  if(!d || typeof d !== "object") return false;
+  const status = d.pageStatus || "active";
+  // Cancelled/skipped pages are real paper-diary evidence and must be kept.
+  if(status !== "active") return true;
+  // Keep only deliberate page use or manual page overrides on blank/no-work dates.
+  // Older builds sometimes auto-created pageNo/workDiaryNo for full-rest dates; those
+  // are not needed now because blank dates count as continuous Rest by default.
+  if(d.usePageManual || d.pageNoManual || d.usePage === true) return true;
+  if(d.workDiaryNoManual || d.numberPlateManual) return true;
+  if(d.dailyCheckTime || d.comments || d.fitForDuty) return true;
+  if(d.ruleManual) return true;
+  if(d.twoUpManual || d.twoUpEnabled || d.twoUpDriverName || d.twoUpLicenceNumber) return true;
+  const keptRows = compactChangeRowsForRestDayFast(d.changeRows);
+  return keptRows.length > 0;
+}
+function compactDiaryDataForPerformance(target, reason){
+  if(!target || typeof target !== "object") return {removedRestSlotDays:0, removedBlankDetails:0, prunedDismissed:0};
+  if(!target.slots || typeof target.slots !== "object") target.slots = {};
+  if(!target.dayDetails || typeof target.dayDetails !== "object") target.dayDetails = {};
+  if(!Array.isArray(target.entries)) target.entries = [];
+
+  const workDates = new Set();
+  let removedRestSlotDays = 0;
+  Object.keys(target.slots || {}).forEach(key => {
+    if(!isValidDiaryKeyFast(key)){ delete target.slots[key]; return; }
+    const arr = Array.isArray(target.slots[key]) ? target.slots[key] : [];
+    if(slotArrayHasWorkFast(arr)){
+      // Normalise saved work days only. Blank dates do not need a 96-slot rest array.
+      target.slots[key] = Array.from({length:SLOTS_PER_DAY}, (_,i) => arr[i] === "work" ? "work" : "rest");
+      workDates.add(key);
+    }else{
+      delete target.slots[key];
+      removedRestSlotDays++;
+    }
+  });
+
+  target.entries.forEach(e => {
+    if(e && e.activity === "work"){
+      const sk = String(e.start || "").slice(0,10);
+      const ek = String(e.end || "").slice(0,10);
+      if(isValidDiaryKeyFast(sk)) workDates.add(sk);
+      if(isValidDiaryKeyFast(ek)) workDates.add(ek);
+    }
+  });
+
+  let removedBlankDetails = 0;
+  Object.keys(target.dayDetails || {}).forEach(key => {
+    if(!isValidDiaryKeyFast(key)){ delete target.dayDetails[key]; return; }
+    const d = target.dayDetails[key] || {};
+    if(workDates.has(key)){
+      if(Array.isArray(d.changeRows)) d.changeRows = d.changeRows.slice(0, 220);
+      return;
+    }
+    if(dayDetailIsMeaningfulForBlankRestFast(key, d)){
+      if(Array.isArray(d.changeRows)) d.changeRows = compactChangeRowsForRestDayFast(d.changeRows);
+      return;
+    }
+    delete target.dayDetails[key];
+    removedBlankDetails++;
+  });
+
+  let prunedDismissed = 0;
+  if(target.dismissedAudit && typeof target.dismissedAudit === "object"){
+    Object.keys(target.dismissedAudit).forEach(k => {
+      const parts = String(k).split("|");
+      const kind = parts[0], date = parts[1];
+      if(kind === "no_work_day" && isValidDiaryKeyFast(date) && !workDates.has(date) && !(target.dayDetails && target.dayDetails[date])){
+        delete target.dismissedAudit[k];
+        prunedDismissed++;
+      }
+    });
+  }
+  target.optimization = {
+    ...(target.optimization || {}),
+    importSpeedVersion: IMPORT_SPEED_OPTIMISER_VERSION,
+    compactedAt: new Date().toISOString(),
+    compactReason: reason || "auto",
+    removedRestSlotDays,
+    removedBlankDetails,
+    prunedDismissed
+  };
+  return {removedRestSlotDays, removedBlankDetails, prunedDismissed};
+}
+function currentStateAlreadyOptimised(){
+  return Number(state && state.schemaVersion || 0) >= APP_SCHEMA_VERSION &&
+    state && state.optimization && state.optimization.importSpeedVersion === IMPORT_SPEED_OPTIMISER_VERSION;
+}
 function migrateImportedBackup(backup){
   const b = safeClone(backup);
   const migrated = {
@@ -627,9 +769,25 @@ function migrateImportedBackup(backup){
   migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
   migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
   migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
+  compactDiaryDataForPerformance(migrated, "import/migration");
+  migrated.schemaVersion = APP_SCHEMA_VERSION;
   return migrated;
 }
 function migrateCurrentState(){
+  // Fast path for already-optimised current data. Avoid JSON-cloning and normalising
+  // the whole diary on every app launch; that was slow after restoring larger backups.
+  if(currentStateAlreadyOptimised()){
+    ensureProfile();
+    ensureBackupReminder();
+    ensureDayDetailsContainer();
+    ensureBookSettings();
+    ensureDiaryBooks();
+    ensureCalculationHistory();
+    ensureShortBreakSettings();
+    ensureRuleHistory();
+    if(!Array.isArray(state.auditLog)) state.auditLog = [];
+    return;
+  }
   const migrated = migrateImportedBackup(state || {});
   state = {...state, ...migrated};
   ensureProfile();
@@ -638,366 +796,13 @@ function migrateCurrentState(){
   ensureBookSettings();
   ensureDiaryBooks();
   ensureCalculationHistory();
-  if(typeof ensureSettingsHistory === "function") ensureSettingsHistory();
-  if(typeof ensureRuleHistory === "function") ensureRuleHistory();
+  ensureShortBreakSettings();
+  ensureRuleHistory();
   if(!Array.isArray(state.auditLog)) state.auditLog = [];
   state.schemaVersion = APP_SCHEMA_VERSION;
+  // Save the compacted form once so the next app launch is fast.
+  try{ localStorage.setItem("truckDiaryPWA", JSON.stringify(state)); }catch(e){}
 }
-function checkDataHealth(){
-  migrateCurrentState();
-  save();
-  const status = $("dataHealthStatus");
-  const dates = Object.keys(state.slots || {}).length;
-  const detailDates = Object.keys(state.dayDetails || {}).length;
-  const msg = `Data OK. Schema v${APP_SCHEMA_VERSION}. Saved block days: ${dates}. Detail pages: ${detailDates}. Older backups will be migrated on import.`;
-  if(status) status.textContent = msg;
-  alert(msg);
-}
-
-
-
-
-function ensureUiSettings(){
-  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {};
-  if(state.uiSettings.locationPickerEnabled === undefined) state.uiSettings.locationPickerEnabled = true;
-}
-function renderUiSettings(){
-  ensureUiSettings();
-  if($("locationPickerEnabled")) $("locationPickerEnabled").checked = !!state.uiSettings.locationPickerEnabled;
-  document.body.classList.toggle("location-picker-off", !state.uiSettings.locationPickerEnabled);
-}
-function toggleLocationPickerEnabled(){
-  ensureUiSettings();
-  state.uiSettings.locationPickerEnabled = !!$("locationPickerEnabled").checked;
-  save();
-  renderUiSettings();
-  if(typeof showToast === "function") showToast("Saved");
-}
-
-function ensureRegistries(){
-  if(!Array.isArray(state.vehicles)) state.vehicles = [];
-  if(!Array.isArray(state.savedDrivers)) state.savedDrivers = [];
-}
-function makeId(prefix){
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-}
-let editingVehicleId = null;
-let editingDriverId = null;
-
-function activeVehicleRecords(){
-  ensureRegistries();
-  return state.vehicles.filter(v => !v.deleted).sort((a,b)=>String(a.rego||"").localeCompare(String(b.rego||"")));
-}
-function activeSavedDriverRecords(){
-  ensureRegistries();
-  return state.savedDrivers.filter(d => !d.deleted).sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
-}
-function renderVehicleDriverRegistry(){
-  ensureRegistries();
-  ensureRegistrySettings();
-  if($("autoSaveRegistryFromDiary")) $("autoSaveRegistryFromDiary").checked = !!state.registrySettings.autoSaveFromDiary;
-  const vehicleList = $("vehicleList");
-  if(vehicleList){
-    const vehicles = activeVehicleRecords();
-    vehicleList.innerHTML = vehicles.length ? vehicles.map(v => `
-      <button class="registryItem" data-edit-vehicle="${escapeHtml(v.id)}">
-        <span>
-          <strong>${escapeHtml(v.rego || "No rego")}</strong>
-          <small>${escapeHtml([v.name, v.company, v.state].filter(Boolean).join(" • ") || "Vehicle details")}</small>${v.firstSeenDate || v.lastSeenDate ? `<small class="autoSavedMeta">Seen: ${escapeHtml(v.firstSeenDate || "?")} to ${escapeHtml(v.lastSeenDate || v.firstSeenDate || "?")}</small>` : ""}
-        </span>
-        <span class="registryChevron">›</span>
-      </button>`).join("") : `<p class="hint">No vehicles saved yet. Tap + Vehicle.</p>`;
-    vehicleList.querySelectorAll("[data-edit-vehicle]").forEach(btn=>{
-      btn.onclick = () => openVehicleEditor(btn.dataset.editVehicle);
-    });
-  }
-  const driverList = $("savedDriverList");
-  if(driverList){
-    const drivers = activeSavedDriverRecords();
-    driverList.innerHTML = drivers.length ? drivers.map(d => `
-      <button class="registryItem" data-edit-driver="${escapeHtml(d.id)}">
-        <span>
-          <strong>${escapeHtml(d.name || "No name")}</strong>
-          <small>${escapeHtml([d.role === "twoUp" ? "Two-up driving partner" : d.role === "main" ? "Main driver information" : "Driver", d.scheme, d.licence ? "Licence "+d.licence : "", d.licenceState].filter(Boolean).join(" • "))}</small>${d.firstSeenDate || d.lastSeenDate ? `<small class="autoSavedMeta">Seen: ${escapeHtml(d.firstSeenDate || "?")} to ${escapeHtml(d.lastSeenDate || d.firstSeenDate || "?")}</small>` : ""}
-        </span>
-        <span class="registryChevron">›</span>
-      </button>`).join("") : `<p class="hint">No drivers saved yet. Tap + Driver.</p>`;
-    driverList.querySelectorAll("[data-edit-driver]").forEach(btn=>{
-      btn.onclick = () => openSavedDriverEditor(btn.dataset.editDriver);
-    });
-  }
-}
-function openVehicleEditor(id=null){
-  ensureRegistries();
-  editingVehicleId = id;
-  const v = id ? state.vehicles.find(x=>x.id===id) : null;
-  $("vehicleEditTitle").textContent = id ? "Edit vehicle" : "Add vehicle";
-  $("vehicleRego").value = (v && v.rego || "").toUpperCase();
-  $("vehicleName").value = v && v.name || "";
-  $("vehicleCompany").value = v && v.company || "";
-  $("vehicleState").value = v && v.state || "";
-  $("vehicleStartDate").value = v && v.startDate || state.selectedDate || "";
-  $("vehicleEndDate").value = v && v.endDate || "";
-  $("vehicleNotes").value = v && v.notes || "";
-  $("deleteVehicleBtn").style.display = id ? "" : "none";
-  $("vehicleEditCard").hidden = false;
-  if(typeof pwaSafeScrollToElement === "function") pwaSafeScrollToElement($("vehicleEditCard"), "smooth", "start"); else $("vehicleEditCard").scrollIntoView({behavior:"smooth", block:"start"});
-}
-function closeVehicleEditor(){
-  editingVehicleId = null;
-  if($("vehicleEditCard")) $("vehicleEditCard").hidden = true;
-}
-function saveVehicleRecord(){
-  ensureRegistries();
-  const rec = {
-    id: editingVehicleId || makeId("veh"),
-    rego: $("vehicleRego").value.trim().toUpperCase(),
-    name: $("vehicleName").value.trim(),
-    company: $("vehicleCompany").value.trim(),
-    state: $("vehicleState").value,
-    startDate: $("vehicleStartDate").value,
-    endDate: $("vehicleEndDate").value,
-    notes: $("vehicleNotes").value.trim(),
-    updatedAt: new Date().toISOString()
-  };
-  if(!rec.rego){
-    alert("Please enter vehicle rego.");
-    return;
-  }
-  const idx = state.vehicles.findIndex(x=>x.id===rec.id);
-  if(idx >= 0) state.vehicles[idx] = {...state.vehicles[idx], ...rec};
-  else state.vehicles.push(rec);
-  addAuditLog("Vehicle saved", rec.rego);
-  save();
-  renderVehicleDriverRegistry();
-  closeVehicleEditor();
-  if(typeof showToast === "function") showToast("Saved");
-}
-function applyVehicleToCurrentPage(){
-  ensureRegistries();
-  const rego = $("vehicleRego").value.trim().toUpperCase();
-  if(!rego){
-    alert("Please enter vehicle rego first.");
-    return;
-  }
-  const detail = ensureDayDetail(state.selectedDate);
-  detail.numberPlate = rego;
-  detail.numberPlateManual = true;
-  addAuditLog("Vehicle applied to page", `${state.selectedDate}: ${rego}`);
-  save();
-  renderAll();
-  closeVehicleEditor();
-  if(typeof showToast === "function") showToast("Vehicle applied");
-}
-function deleteVehicleRecord(){
-  if(!editingVehicleId) return;
-  const v = state.vehicles.find(x=>x.id===editingVehicleId);
-  if(!v) return;
-  if(confirm(`Delete vehicle ${v.rego || ""}?`)){
-    v.deleted = true;
-    v.updatedAt = new Date().toISOString();
-    addAuditLog("Vehicle deleted", v.rego || editingVehicleId);
-    save();
-    renderVehicleDriverRegistry();
-    closeVehicleEditor();
-    if(typeof showToast === "function") showToast("Deleted");
-  }
-}
-
-function openSavedDriverEditor(id=null){
-  ensureRegistries();
-  editingDriverId = id;
-  const d = id ? state.savedDrivers.find(x=>x.id===id) : null;
-  $("driverEditTitle").textContent = id ? "Edit driver" : "Add driver";
-  $("savedDriverName").value = d && d.name || "";
-  $("savedDriverLicence").value = d && d.licence || "";
-  $("savedDriverState").value = d && d.licenceState || "";
-  $("savedDriverScheme").value = d && d.scheme || "Standard";
-  $("savedDriverAccred").value = d && d.accreditationNo || "";
-  $("savedDriverRole").value = d && d.role || "twoUp";
-  $("savedDriverStartDate").value = d && d.startDate || state.selectedDate || "";
-  $("savedDriverEndDate").value = d && d.endDate || "";
-  $("savedDriverNotes").value = d && d.notes || "";
-  $("deleteSavedDriverBtn").style.display = id ? "" : "none";
-  $("driverEditCard").hidden = false;
-  if(typeof pwaSafeScrollToElement === "function") pwaSafeScrollToElement($("driverEditCard"), "smooth", "start"); else $("driverEditCard").scrollIntoView({behavior:"smooth", block:"start"});
-}
-function closeSavedDriverEditor(){
-  editingDriverId = null;
-  if($("driverEditCard")) $("driverEditCard").hidden = true;
-}
-function saveSavedDriverRecord(){
-  ensureRegistries();
-  const rec = {
-    id: editingDriverId || makeId("drv"),
-    name: $("savedDriverName").value.trim(),
-    licence: $("savedDriverLicence").value.replace(/\D+/g, ""),
-    licenceState: $("savedDriverState").value,
-    scheme: $("savedDriverScheme").value || "Standard",
-    accreditationNo: $("savedDriverAccred").value.trim(),
-    role: $("savedDriverRole").value || "twoUp",
-    startDate: $("savedDriverStartDate").value,
-    endDate: $("savedDriverEndDate").value,
-    notes: $("savedDriverNotes").value.trim(),
-    updatedAt: new Date().toISOString()
-  };
-  if(!rec.name){
-    alert("Please enter driver name.");
-    return;
-  }
-  const idx = state.savedDrivers.findIndex(x=>x.id===rec.id);
-  if(idx >= 0) state.savedDrivers[idx] = {...state.savedDrivers[idx], ...rec};
-  else state.savedDrivers.push(rec);
-  addAuditLog("Driver saved", rec.name);
-  save();
-  renderVehicleDriverRegistry();
-  closeSavedDriverEditor();
-  if(typeof showToast === "function") showToast("Saved");
-}
-function applySavedDriverAsTwoUp(){
-  ensureRegistries();
-  const name = $("savedDriverName").value.trim();
-  if(!name){
-    alert("Please enter driver name first.");
-    return;
-  }
-  const detail = ensureDayDetail(state.selectedDate);
-  detail.twoUpEnabled = true;
-  detail.driverMode = "twoUp";
-  detail.twoUpDriverName = name;
-  detail.twoUpLicenceNumber = $("savedDriverLicence").value.replace(/\D+/g, "");
-  detail.twoUpBaseState = $("savedDriverState").value || detail.twoUpBaseState || detail.baseStateSnapshot || "";
-  detail.twoUpScheme = $("savedDriverScheme").value || "Standard";
-  detail.twoUpManual = true;
-  addAuditLog("Two-up driver applied to page", `${state.selectedDate}: ${name}`);
-  save();
-  renderAll();
-  closeSavedDriverEditor();
-  if(typeof showToast === "function") showToast("Two-up driver applied");
-}
-function deleteSavedDriverRecord(){
-  if(!editingDriverId) return;
-  const d = state.savedDrivers.find(x=>x.id===editingDriverId);
-  if(!d) return;
-  if(confirm(`Delete driver ${d.name || ""}?`)){
-    d.deleted = true;
-    d.updatedAt = new Date().toISOString();
-    addAuditLog("Driver deleted", d.name || editingDriverId);
-    save();
-    renderVehicleDriverRegistry();
-    closeSavedDriverEditor();
-    if(typeof showToast === "function") showToast("Deleted");
-  }
-}
-
-function ensureRegistrySettings(){
-  if(!state.registrySettings || typeof state.registrySettings !== "object"){
-    state.registrySettings = {autoSaveFromDiary:true};
-  }
-  if(state.registrySettings.autoSaveFromDiary === undefined){
-    state.registrySettings.autoSaveFromDiary = true;
-  }
-}
-function normaliseDriverKey(name, licence){
-  const lic = String(licence || "").replace(/\D+/g, "");
-  if(lic) return `lic:${lic}`;
-  return `name:${String(name || "").trim().toLowerCase().replace(/\s+/g," ")}`;
-}
-function upsertVehicleFromDiary(detail, key){
-  ensureRegistries();
-  const rego = String(detail.numberPlate || "").trim().toUpperCase();
-  if(!rego) return false;
-  let v = state.vehicles.find(x => !x.deleted && String(x.rego || "").toUpperCase() === rego);
-  if(!v){
-    v = {
-      id: makeId("veh"),
-      rego,
-      name: "",
-      company: "",
-      state: "",
-      startDate: key,
-      endDate: "",
-      firstSeenDate: key,
-      lastSeenDate: key,
-      notes: "Auto-saved from diary page.",
-      autoSaved: true,
-      updatedAt: new Date().toISOString()
-    };
-    state.vehicles.push(v);
-    addAuditLog("Vehicle auto-saved from diary", `${key}: ${rego}`);
-    return true;
-  }
-  let changed = false;
-  if(!v.firstSeenDate || key < v.firstSeenDate){ v.firstSeenDate = key; changed = true; }
-  if(!v.lastSeenDate || key > v.lastSeenDate){ v.lastSeenDate = key; changed = true; }
-  if(!v.startDate){ v.startDate = key; changed = true; }
-  if(!v.notes){ v.notes = "Auto-saved from diary page."; changed = true; }
-  if(changed) v.updatedAt = new Date().toISOString();
-  return changed;
-}
-function upsertTwoUpDriverFromDiary(detail, key){
-  ensureRegistries();
-  if(!detail.twoUpEnabled) return false;
-  const name = String(detail.twoUpDriverName || "").trim();
-  const licence = String(detail.twoUpLicenceNumber || "").replace(/\D+/g, "");
-  if(!name && !licence) return false;
-  const keyVal = normaliseDriverKey(name, licence);
-  let d = state.savedDrivers.find(x => {
-    if(x.deleted) return false;
-    return normaliseDriverKey(x.name, x.licence) === keyVal ||
-      (licence && String(x.licence || "").replace(/\D+/g, "") === licence);
-  });
-  if(!d){
-    d = {
-      id: makeId("drv"),
-      name,
-      licence,
-      licenceState: detail.twoUpBaseState || "",
-      scheme: detail.twoUpScheme || "Standard",
-      accreditationNo: "",
-      role: "twoUp",
-      startDate: key,
-      endDate: "",
-      firstSeenDate: key,
-      lastSeenDate: key,
-      notes: "Auto-saved from diary page.",
-      autoSaved: true,
-      updatedAt: new Date().toISOString()
-    };
-    state.savedDrivers.push(d);
-    addAuditLog("Two-up driver auto-saved from diary", `${key}: ${name || licence}`);
-    return true;
-  }
-  let changed = false;
-  // Only fill missing details so manual registry edits stay protected.
-  if(!d.name && name){ d.name = name; changed = true; }
-  if(!d.licence && licence){ d.licence = licence; changed = true; }
-  if(!d.licenceState && detail.twoUpBaseState){ d.licenceState = detail.twoUpBaseState; changed = true; }
-  if(!d.scheme && detail.twoUpScheme){ d.scheme = detail.twoUpScheme; changed = true; }
-  if(!d.role){ d.role = "twoUp"; changed = true; }
-  if(!d.firstSeenDate || key < d.firstSeenDate){ d.firstSeenDate = key; changed = true; }
-  if(!d.lastSeenDate || key > d.lastSeenDate){ d.lastSeenDate = key; changed = true; }
-  if(!d.startDate){ d.startDate = key; changed = true; }
-  if(!d.notes){ d.notes = "Auto-saved from diary page."; changed = true; }
-  if(changed) d.updatedAt = new Date().toISOString();
-  return changed;
-}
-function autoSaveRegistryFromDiaryPage(key=state.selectedDate){
-  ensureRegistrySettings();
-  if(!state.registrySettings.autoSaveFromDiary) return false;
-  const detail = ensureDayDetail(key);
-  let changed = false;
-  changed = upsertVehicleFromDiary(detail, key) || changed;
-  changed = upsertTwoUpDriverFromDiary(detail, key) || changed;
-  return changed;
-}
-function toggleAutoSaveRegistryFromDiary(){
-  ensureRegistrySettings();
-  state.registrySettings.autoSaveFromDiary = !!$("autoSaveRegistryFromDiary").checked;
-  save();
-  if(typeof showToast === "function") showToast("Saved");
-}
-
 
 function setupVehicleDriverRegistryButtons(){
   if($("autoSaveRegistryFromDiary")) $("autoSaveRegistryFromDiary").onchange = toggleAutoSaveRegistryFromDiary;
@@ -1277,6 +1082,7 @@ function setupSwipePainting(){
       alert("This page is marked cancelled/skipped. Change Page status back to Active before editing Work/Rest blocks.");
       return false;
     }
+    if(!confirmOlderPageBlockEdit(state.selectedDate, "edit Work/Rest blocks")) return false;
     const cell = target && target.closest ? target.closest(".slot[data-slot]") : null;
     if(!cell) return false;
     touchCandidate = true;
@@ -1451,6 +1257,7 @@ function addEntryFromForm(){
   const end = new Date(`${ed}T${et}:00`);
   if(isNaN(start) || isNaN(end) || end <= start){ alert("End date/time must be after start date/time. For midnight use next date and 00:00."); return; }
   if(start.getMinutes()%15 || end.getMinutes()%15){ alert("Please use 15-minute blocks: 00, 15, 30, 45."); return; }
+  if(!confirmOlderRangeEdit(sd, ed, "add/change Work/Rest blocks from the entry form")) return;
   for(let t=start.getTime(); t<end.getTime(); t+=SLOT*60000){
     const {key, slot} = absToKeySlot(t);
     setSlot(key, slot, activity);
@@ -1538,11 +1345,18 @@ function renderNextBreak(){
 
 function allKnownDiaryDates(){
   const set = new Set();
-  Object.keys(state.slots || {}).forEach(k => set.add(k));
-  Object.keys(state.dayDetails || {}).forEach(k => set.add(k));
-  state.entries.forEach(e => {
-    if(e.start) set.add(String(e.start).slice(0,10));
-    if(e.end) set.add(String(e.end).slice(0,10));
+  Object.keys(state.slots || {}).forEach(k => {
+    if(slotArrayHasWorkFast(state.slots[k]) || isPageCancelledOrSkipped(k)) set.add(k);
+  });
+  Object.keys(state.dayDetails || {}).forEach(k => {
+    const d = state.dayDetails[k];
+    if(slotArrayHasWorkFast(state.slots && state.slots[k]) || dayDetailIsMeaningfulForBlankRestFast(k, d)) set.add(k);
+  });
+  (state.entries || []).forEach(e => {
+    if(e && e.activity === "work"){
+      if(e.start) set.add(String(e.start).slice(0,10));
+      if(e.end) set.add(String(e.end).slice(0,10));
+    }
   });
   set.add(state.selectedDate);
   return [...set].filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
@@ -2605,10 +2419,10 @@ function compactChangeActivityLabel(a){
 
 function hasExplicitDiaryDataForDate(key){
   if(!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
-  if(state.slots && Array.isArray(state.slots[key])) return true;
-  if(state.dayDetails && state.dayDetails[key]) return true;
+  if(state.slots && slotArrayHasWorkFast(state.slots[key])) return true;
+  if(state.dayDetails && dayDetailIsMeaningfulForBlankRestFast(key, state.dayDetails[key])) return true;
   if(Array.isArray(state.entries)){
-    return state.entries.some(e => String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key);
+    return state.entries.some(e => e && e.activity === "work" && (String(e.start || "").slice(0,10) === key || String(e.end || "").slice(0,10) === key));
   }
   return false;
 }
@@ -3474,6 +3288,7 @@ function bookId(){
 function normalizeDiaryBook(b){
   return {
     id: b && b.id || bookId(),
+    bookName: String(b && (b.bookName || b.name || b.label) || ""),
     diaryNo: cleanWorkDiaryNoInput(b && (b.diaryNo || b.defaultWorkDiaryNo) || ""),
     firstPageNumber: cleanPageNumberInput(b && (b.firstPageNumber || b.firstPageNo) || ""),
     startDate: b && (b.startDate || b.firstPageDate) || state.selectedDate || toKey(new Date()),
@@ -3548,23 +3363,104 @@ function renderDiaryBookHistory(){
 
   const books = [...state.diaryBooks].sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)));
   const rows = books.map((b, i) => {
-    const bookTitle = b.status === "closed" ? `Book ${i+1}` : `Book ${i+1} - Active`;
+    const displayName = b.bookName || `Book ${i+1}`;
+    const bookTitle = b.status === "closed" ? `${displayName} - Closed` : `${displayName} - Open`;
+    const diaryNoLine = b.diaryNo ? `<small><b>Diary no:</b> ${escapeHtml(b.diaryNo)}</small>` : "";
     const closedLine = b.endDate ? `<small><b>Closed:</b> ${escapeHtml(formatDMY(b.endDate))}</small>` : "";
     const lastPageLine = b.lastPageNumber ? `<small><b>Last page:</b> ${escapeHtml(b.lastPageNumber)}</small>` : "";
     const notes = b.notes ? `<small><b>Notes:</b> ${escapeHtml(b.notes)}</small>` : "";
+    const reopenBtn = b.status === "closed" ? `<button class="secondary tiny" type="button" data-book-action="reopen" data-book-id="${escapeHtml(b.id)}">Reopen</button>` : "";
+    const deleteBtn = books.length > 1 ? `<button class="danger tiny" type="button" data-book-action="delete" data-book-id="${escapeHtml(b.id)}">Delete</button>` : `<button class="secondary tiny" type="button" disabled>Delete</button>`;
     return `<div class="bookHistoryItem">
       <strong>${escapeHtml(bookTitle)}</strong>
+      ${diaryNoLine}
       <small><b>Starts:</b> ${escapeHtml(formatDMY(b.startDate))}</small>
       <small><b>First page:</b> ${escapeHtml(b.firstPageNumber || "not set")}</small>
       ${closedLine}
       ${lastPageLine}
       ${notes}
+      <div class="bookHistoryActions">
+        <button class="secondary tiny" type="button" data-book-action="rename" data-book-id="${escapeHtml(b.id)}">Rename</button>
+        ${reopenBtn}
+        ${deleteBtn}
+      </div>
     </div>`;
   }).join("");
 
   list.innerHTML = rows || `<p class="hint">No diary books recorded yet.</p>`;
   if($("closeBookDate")) $("closeBookDate").value = $("closeBookDate").value || state.selectedDate;
   if($("newBookStartDate")) $("newBookStartDate").value = $("newBookStartDate").value || state.selectedDate;
+}
+function findDiaryBookById(id){
+  ensureDiaryBooks();
+  return (state.diaryBooks || []).find(b => String(b.id) === String(id));
+}
+function renameDiaryBook(id){
+  const book = findDiaryBookById(id);
+  if(!book){ alert("Diary book not found."); return; }
+  const currentName = book.bookName || "";
+  const newName = prompt("Enter book name / label. Example: Book 1, Brisbane book, New diary book", currentName);
+  if(newName === null) return;
+  const currentDiaryNo = book.diaryNo || "";
+  const newDiaryNo = prompt("Enter work diary number for this book. Leave blank if not recorded.", currentDiaryNo);
+  if(newDiaryNo === null) return;
+  book.bookName = String(newName || "").trim();
+  book.diaryNo = cleanWorkDiaryNoInput(newDiaryNo || "");
+  book.updatedAt = new Date().toISOString();
+  addAuditLog("Diary book renamed", `${book.bookName || book.diaryNo || book.startDate} updated`);
+  save();
+  renderBookSettings();
+  renderDiaryBookHistory();
+  refreshCurrentPageData({forceDefaults:false});
+  showToast("Book updated");
+}
+function reopenDiaryBook(id){
+  const book = findDiaryBookById(id);
+  if(!book){ alert("Diary book not found."); return; }
+  if(book.status !== "closed"){
+    alert("This diary book is already open.");
+    return;
+  }
+  if(!confirm(`Reopen this diary book?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis only changes the book history. It does not delete any diary pages or work/rest blocks.`)) return;
+  book.status = "active";
+  book.endDate = "";
+  book.lastPageNumber = "";
+  book.updatedAt = new Date().toISOString();
+  addAuditLog("Diary book reopened", `${book.bookName || book.diaryNo || "Book"} reopened from ${book.startDate}`);
+  save();
+  recomputeAutoPageNumbers();
+  renderBookSettings();
+  refreshCurrentPageData({forceDefaults:false});
+  showToast("Book reopened");
+}
+function deleteDiaryBook(id){
+  ensureDiaryBooks();
+  if((state.diaryBooks || []).length <= 1){
+    alert("At least one diary book setup must remain.");
+    return;
+  }
+  const book = findDiaryBookById(id);
+  if(!book){ alert("Diary book not found."); return; }
+  const message = `Delete this diary book setup?\n\nBook: ${book.bookName || book.diaryNo || book.startDate}\nStart: ${book.startDate}\n\nThis deletes only the book setup/history item. It does NOT delete your work/rest blocks, daily sheet details, vehicles, drivers, or backups. Pages in that date range will attach to the next suitable book setup.`;
+  if(!confirm(message)) return;
+  state.diaryBooks = (state.diaryBooks || []).filter(b => String(b.id) !== String(id));
+  ensureDiaryBooks();
+  addAuditLog("Diary book deleted", `${book.bookName || book.diaryNo || "Book"} starting ${book.startDate} deleted from book history only`);
+  save();
+  recomputeAutoPageNumbers();
+  renderBookSettings();
+  refreshCurrentPageData({forceDefaults:false});
+  showToast("Book deleted");
+}
+function handleBookHistoryAction(ev){
+  const btn = ev.target && ev.target.closest ? ev.target.closest("[data-book-action][data-book-id]") : null;
+  if(!btn) return;
+  ev.preventDefault();
+  const action = btn.dataset.bookAction;
+  const id = btn.dataset.bookId;
+  if(action === "rename") renameDiaryBook(id);
+  if(action === "reopen") reopenDiaryBook(id);
+  if(action === "delete") deleteDiaryBook(id);
 }
 function closeCurrentDiaryBook(){
   ensureDiaryBooks();
@@ -3589,6 +3485,7 @@ function startNewDiaryBook(){
   const startDate = $("newBookStartDate") ? $("newBookStartDate").value || state.selectedDate : state.selectedDate;
   const diaryNo = cleanWorkDiaryNoInput($("newBookDiaryNo") ? $("newBookDiaryNo").value : "");
   const firstPage = cleanPageNumberInput($("newBookFirstPageNo") ? $("newBookFirstPageNo").value : "");
+  const bookName = $("newBookName") ? $("newBookName").value.trim() : "";
   const notes = $("newBookNotes") ? $("newBookNotes").value.trim() : "";
   if(!startDate || !firstPage){ alert("Please enter the new book start date and first page number."); return; }
   const prevDay = addDays(startDate, -1);
@@ -3602,6 +3499,7 @@ function startNewDiaryBook(){
   const existingIdx = state.diaryBooks.findIndex(b => b.startDate === startDate);
   const rec = normalizeDiaryBook({
     id: existingIdx >= 0 ? state.diaryBooks[existingIdx].id : bookId(),
+    bookName,
     diaryNo,
     firstPageNumber: firstPage,
     startDate,
@@ -4314,6 +4212,7 @@ function loadBFMSample(){
   save(); renderAll();
 }
 function clearSelectedDay(){
+  if(!confirmOlderPageBlockEdit(state.selectedDate, "clear all Work/Rest blocks")) return;
   if(confirm("Clear all blocks for selected day?")){
     state.slots[state.selectedDate]=Array(SLOTS_PER_DAY).fill("rest");
     const detail = ensureDayDetail(state.selectedDate);
@@ -4458,7 +4357,9 @@ function maybeShowBackupReminder(){
 function buildJsonBackup(){
   ensureProfile();
   ensureBackupReminder();
-  return {
+  ensureBookSettings();
+  ensureDiaryBooks();
+  const backup = {
     app: "Truck Work Diary Checker",
     backupVersion: 1,
     schemaVersion: APP_SCHEMA_VERSION,
@@ -4467,25 +4368,35 @@ function buildJsonBackup(){
     selectedDate: state.selectedDate,
     scheme: state.scheme,
     restAsStationary: state.restAsStationary,
-    slots: state.slots || {},
-    entries: state.entries || [],
-    profile: state.profile || {},
-    dayDetails: state.dayDetails || {},
-    bookSettings: state.bookSettings || {},
-    settingsHistory: state.settingsHistory || [],
-    ruleHistory: state.ruleHistory || [],
-    auditLog: state.auditLog || [],
-    dismissedAudit: state.dismissedAudit || {},
-    vehicles: state.vehicles || [],
-    savedDrivers: state.savedDrivers || [],
-    registrySettings: state.registrySettings || {autoSaveFromDiary:true},
-    uiSettings: state.uiSettings || {locationPickerEnabled:true},
-    diaryBooks: state.diaryBooks || [],
-    calculationHistory: state.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"},
-    shortBreakSettings: state.shortBreakSettings || {mode:"smart", maxMinutes:60},
-    backupReminder: state.backupReminder || {},
-    note: "Personal backup file for restoring this app data. Keep this file private."
+    slots: safeClone(state.slots || {}),
+    entries: safeClone(state.entries || []),
+    profile: safeClone(state.profile || {}),
+    dayDetails: safeClone(state.dayDetails || {}),
+    bookSettings: safeClone(state.bookSettings || {}),
+    settingsHistory: safeClone(state.settingsHistory || []),
+    ruleHistory: safeClone(state.ruleHistory || []),
+    auditLog: safeClone(state.auditLog || []),
+    dismissedAudit: safeClone(state.dismissedAudit || {}),
+    vehicles: safeClone(state.vehicles || []),
+    savedDrivers: safeClone(state.savedDrivers || []),
+    registrySettings: safeClone(state.registrySettings || {autoSaveFromDiary:true}),
+    uiSettings: safeClone(state.uiSettings || {locationPickerEnabled:true}),
+    diaryBooks: safeClone(state.diaryBooks || []),
+    calculationHistory: safeClone(state.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"}),
+    shortBreakSettings: safeClone(state.shortBreakSettings || {mode:"smart", maxMinutes:60}),
+    backupReminder: safeClone(state.backupReminder || {}),
+    optimization: safeClone(state.optimization || {}),
+    note: "Personal backup file for restoring this app data. Keep this file private. Export is compacted for speed: full-rest blank days are not stored because blank dates count as continuous Rest."
   };
+  const opt = compactDiaryDataForPerformance(backup, "backup/export");
+  backup.backupOptimised = {
+    version: IMPORT_SPEED_OPTIMISER_VERSION,
+    exportedAt: backup.exportedAt,
+    removedRestSlotDays: opt.removedRestSlotDays || 0,
+    removedBlankDetails: opt.removedBlankDetails || 0,
+    prunedDismissed: opt.prunedDismissed || 0
+  };
+  return backup;
 }
 function backupFilename(){
   return `truck-work-diary-backup-${state.selectedDate}.json`;
@@ -4538,6 +4449,31 @@ function exportJsonBackup(){
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
+
+function checkDataHealth(){
+  const status = $("dataHealthStatus");
+  try{
+    const beforeSlots = Object.keys(state.slots || {}).length;
+    const beforeDetails = Object.keys(state.dayDetails || {}).length;
+    const beforeSize = JSON.stringify(state).length;
+    const opt = compactDiaryDataForPerformance(state, "manual data health check");
+    state.schemaVersion = APP_SCHEMA_VERSION;
+    save();
+    const afterSlots = Object.keys(state.slots || {}).length;
+    const afterDetails = Object.keys(state.dayDetails || {}).length;
+    const afterSize = JSON.stringify(state).length;
+    const msg = `Data health cleaned for speed. Slot days: ${beforeSlots} → ${afterSlots}. Daily details: ${beforeDetails} → ${afterDetails}. Saved size: ${Math.round(beforeSize/1024)} KB → ${Math.round(afterSize/1024)} KB. Removed ${opt.removedRestSlotDays || 0} full-rest stored day(s) and ${opt.removedBlankDetails || 0} blank auto-detail day(s). Real work/rest data, settings, vehicles, drivers, books and meaningful page details were kept.`;
+    if(status) status.textContent = msg;
+    addAuditLog("Data health optimised", msg);
+    renderAll();
+    showToast("Data optimised");
+  }catch(err){
+    console.error("Data health check failed", err);
+    if(status) status.textContent = "Data health check failed. Save a backup and try again.";
+    alert("Data health check failed. Save a backup and try again.");
+  }
+}
+
 function importJsonBackupFromFile(file){
   if(!file) return;
   const reader = new FileReader();
@@ -4573,15 +4509,20 @@ function importJsonBackupFromFile(file){
       state.calculationHistory = migrated.calculationHistory || {};
       state.shortBreakSettings = migrated.shortBreakSettings || {mode:"smart", maxMinutes:60};
       state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
+      state.optimization = migrated.optimization || {};
       state.schemaVersion = APP_SCHEMA_VERSION;
       ensureProfile();
       ensureBackupReminder();
       ensureDayDetailsContainer();
       ensureBookSettings();
       ensureDiaryBooks();
+      ensureCalculationHistory();
+      ensureShortBreakSettings();
+      const opt = state.optimization || {};
+      addAuditLog("Backup imported and optimised", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}. Removed ${opt.removedRestSlotDays || 0} full-rest stored day(s) and ${opt.removedBlankDetails || 0} blank auto-detail day(s) to keep the app fast. Blank dates still count as continuous Rest.`);
       save();
       renderAll();
-      addAuditLog("Backup imported and migrated", `Backup schema ${backup.schemaVersion || backup.backupVersion || "old"} imported into schema ${APP_SCHEMA_VERSION}.`); save(); alert("Backup imported successfully.");
+      alert("Backup imported successfully. Full-rest blank days were compacted for speed; work/rest calculations and real saved work data were kept.");
     }catch(e){
       alert("Could not import backup. Please select a valid JSON backup file.");
     }finally{
@@ -4904,6 +4845,7 @@ function setup(){
   if($("graphExportPdf")) $("graphExportPdf").onclick=exportPdf;
   $("exportJsonBackup").onclick=exportJsonBackup;
   if($("checkDataHealth")) $("checkDataHealth").onclick=checkDataHealth;
+  if($("bookHistoryList")) $("bookHistoryList").addEventListener("click", handleBookHistoryAction);
   $("shareJsonBackup").onclick=shareJsonBackup;
   $("importJsonBackup").onclick=()=>$("jsonImportFile").click();
   $("jsonImportFile").onchange=e=>importJsonBackupFromFile(e.target.files[0]);
@@ -8923,3 +8865,51 @@ function fastDueBreakPlannerSelfTest(){
   }
 })();
 
+
+
+/* Import speed optimiser self-test */
+function importSpeedOptimiserSelfTest(){
+  const sample = {
+    slots:{
+      "2026-06-20":Array(SLOTS_PER_DAY).fill("rest"),
+      "2026-06-21":Array(SLOTS_PER_DAY).fill("rest"),
+      "2026-06-22":Array(SLOTS_PER_DAY).fill("rest")
+    },
+    dayDetails:{
+      "2026-06-20":defaultDayDetail(),
+      "2026-06-21":{...defaultDayDetail(), comments:"kept note"},
+      "2026-06-22":defaultDayDetail()
+    },
+    entries:[], dismissedAudit:{"no_work_day|2026-06-20|rest":{}}
+  };
+  sample.slots["2026-06-22"][32] = "work";
+  const stats = compactDiaryDataForPerformance(sample, "self-test");
+  return [
+    {name:"Full-rest slot arrays removed", pass:!sample.slots["2026-06-20"] && !sample.slots["2026-06-21"], actual:stats},
+    {name:"Work day slot array kept", pass:Array.isArray(sample.slots["2026-06-22"]) && sample.slots["2026-06-22"][32] === "work", actual:sample.slots["2026-06-22"] && sample.slots["2026-06-22"].length},
+    {name:"Meaningful no-work detail kept", pass:!!sample.dayDetails["2026-06-21"], actual:Object.keys(sample.dayDetails)},
+    {name:"Blank auto detail removed", pass:!sample.dayDetails["2026-06-20"], actual:Object.keys(sample.dayDetails)}
+  ];
+}
+(function(){
+  if(typeof runEngineTestSuite === "function" && !runEngineTestSuite._importSpeedPatched){
+    const coreRunEngineTestSuiteImportSpeed = runEngineTestSuite;
+    runEngineTestSuite = function(){
+      const report = coreRunEngineTestSuiteImportSpeed();
+      try{
+        engineTestNormaliseResult("Import speed optimiser", importSpeedOptimiserSelfTest()).forEach(t => report.tests.push(t));
+        report.total = report.tests.length;
+        report.passed = report.tests.filter(t => t.pass).length;
+        report.failed = report.total - report.passed;
+        report.ended = Date.now();
+      }catch(err){
+        report.tests.push({group:"Import speed optimiser", name:"Self-test crashed", pass:false, actual:String(err && err.stack || err)});
+        report.total = report.tests.length;
+        report.passed = report.tests.filter(t => t.pass).length;
+        report.failed = report.total - report.passed;
+      }
+      return report;
+    };
+    runEngineTestSuite._importSpeedPatched = true;
+  }
+})();

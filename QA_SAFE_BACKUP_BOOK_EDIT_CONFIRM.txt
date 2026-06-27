@@ -1,0 +1,34 @@
+QA SAFE BACKUP / BOOK EDIT / OLD PAGE CONFIRMATION
+Build: clean-engine-safe-backup-book-edit-confirm / schema 55
+
+Scope:
+- Preserves the NHVR counted-period engine and fatigue calculation logic from the previous clean-engine builds.
+- Adds safe backup export/import optimisation without deleting real work/rest data.
+- Adds diary book rename, reopen, and delete controls.
+- Adds confirmation before editing older Work/Rest blocks.
+
+Checks:
+1. Backup export uses a cloned backup object and compacts full-rest blank days before JSON creation.
+   - Real work-day slot arrays are kept.
+   - Blank/no-block days remain counted as Rest by app logic and are not stored as 96 rest blocks.
+   - Vehicles, saved drivers, diary books, settings history, rule history, meaningful day details and cancelled/skipped pages are kept.
+
+2. Import of older backups runs Import Speed Optimiser v2 and saves compacted schema-55 data once after import.
+   - Full-rest blank slot days are removed.
+   - Blank auto-created day details are removed unless meaningful/manual/cancelled/skipped evidence exists.
+
+3. Settings > Optimise saved diary data for speed runs the same safe compaction on current phone data.
+
+4. Diary Book History now supports:
+   - Rename book label / work diary number.
+   - Reopen a mistakenly closed book.
+   - Delete a mistakenly created book setup when more than one exists.
+   - Delete affects book setup only, not work/rest blocks or page details.
+
+5. Older page edit protection:
+   - Tapping/swiping Work/Rest blocks on a date before today asks confirmation once per page/session.
+   - Manual entry form over older dates asks confirmation.
+   - Clearing an older day asks confirmation.
+
+NHVR engine:
+- No deliberate changes were made to counted-period rules, BFM long/night, 84h checkpoint, 24h overlapping period logic, or 7d/14d window logic in this build.

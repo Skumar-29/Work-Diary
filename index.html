@@ -425,6 +425,7 @@
               <summary>Start new diary book</summary>
               <div class="formGrid">
                 <label>New book start date <input id="newBookStartDate" type="date"></label>
+                <label>Book name / label <input id="newBookName" inputmode="text" autocapitalize="words" autocorrect="off" autocomplete="off" placeholder="e.g. Book 2 or Brisbane book"></label>
                 <label>New work diary no <input id="newBookDiaryNo" inputmode="text" data-work-diary-no="true" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="e.g. VDW 4444"></label>
                 <label>New first page no <input id="newBookFirstPageNo" inputmode="text" data-page-number-only="true" autocorrect="off" autocomplete="off" placeholder="e.g. 4444 01"></label>
                 <label class="fullWidth">Notes <input id="newBookNotes" placeholder="Optional note"></label>
@@ -540,8 +541,8 @@
             </div>
           </div>
 
-<button id="checkDataHealth" class="secondary">Check data health</button>
-          <p id="dataHealthStatus" class="hint">Data health not checked yet.</p>
+<button id="checkDataHealth" class="secondary">Optimise saved diary data for speed</button>
+          <p id="dataHealthStatus" class="hint">Use this after importing an older backup. It removes unnecessary full-rest blank days only; real work/rest data and important details are kept.</p>
           <button id="importJsonBackup" class="secondary">Import Backup JSON</button>
           <input id="jsonImportFile" type="file" accept="application/json,.json" style="display:none">
 
