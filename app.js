@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 52;
-const APP_BUILD_NAME = "clean-engine-diary-no-letters-fix";
+const APP_SCHEMA_VERSION = 53;
+const APP_BUILD_NAME = "clean-engine-fast-due-break-planner";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -5556,7 +5556,7 @@ function nhvrActiveWindows(asOfAbs){
   if(profile.afm) return [];
   const scanStart = Math.max(asOfAbs - 30*DAY_MS, nhvrV2HistoryStartAbs());
   const windows = [];
-  const shortAnchors = nhvrV2AnchorsForShort(key, profile, scanStart, asOfAbs + 30*DAY_MS);
+  const shortAnchors = nhvrV2AnchorsForShort(key, profile, scanStart, asOfAbs + nhvrV2StepMs());
   profile.short.forEach(rule => {
     shortAnchors.forEach(a => {
       const end = a.abs + rule.minutes*60000;
@@ -5568,7 +5568,7 @@ function nhvrActiveWindows(asOfAbs){
     });
   });
   profile.periods.forEach(rule => {
-    const anchors = nhvrV2AnchorsForPeriod(profile, scanStart, asOfAbs + 30*DAY_MS, rule);
+    const anchors = nhvrV2AnchorsForPeriod(profile, scanStart, asOfAbs + nhvrV2StepMs(), rule);
     anchors.forEach(a => {
       const end = a.abs + rule.minutes*60000;
       if(a.abs <= asOfAbs && asOfAbs < end){
@@ -7224,7 +7224,7 @@ function stats14DayTableSelfTest(){
    ========================================================= */
 
 const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
-const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v88-diary-no-letters-fix";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v89-fast-due-break-planner";
 const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
 const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
 
@@ -8050,7 +8050,9 @@ function perfKey(){
   if(typeof saveSoon === "function" && !saveSoon._perfPatched){
     const coreSaveSoon = saveSoon;
     saveSoon = function(){
-      perfBump("saveSoon");
+      // Do not clear fatigue caches for every scheduled save.
+      // Page navigation and minor UI saves use saveSoon very often; clearing here made iPhone screen changes slow.
+      // Real block changes still bump through setSlot(), and full save/import/settings changes still bump through save().
       return coreSaveSoon.apply(this, arguments);
     };
     saveSoon._perfPatched = true;
@@ -8607,3 +8609,317 @@ function statsAsOfSpeedFixSelfTest(){
   }
   return results;
 }
+
+
+/* =========================================================
+   FAST DUE-BREAK PLANNER + LAZY RENDER UPDATE
+   Build: clean-engine-fast-due-break-planner / schema 53
+   Scope: performance/UI planning only. NHVR counted-period engine is not relaxed.
+   ========================================================= */
+const FAST_DUE_BREAK_PLANNER_VERSION = "fast-due-break-planner-v1";
+
+let fastWindowCache = new Map();
+let fastWorkCache = new Map();
+let fastRestPeriodsCache = new Map();
+function fastPerfKey(){
+  try{ return typeof perfKey === "function" ? perfKey() : String(Date.now()); }
+  catch(e){ return String(Date.now()); }
+}
+function fastMinuteKey(abs){ return Math.round(Number(abs || 0) / 60000); }
+
+(function(){
+  if(typeof nhvrActiveWindows === "function" && !nhvrActiveWindows._fastDuePatched){
+    const coreNhvrActiveWindows = nhvrActiveWindows;
+    nhvrActiveWindows = function(asOfAbs){
+      const k = `${fastPerfKey()}|active|${fastMinuteKey(asOfAbs)}|${activeRuleKeyForDate(absToKeySlot(asOfAbs).key)}`;
+      if(fastWindowCache.has(k)) return fastWindowCache.get(k);
+      const v = coreNhvrActiveWindows(asOfAbs) || [];
+      fastWindowCache.set(k, v);
+      return v;
+    };
+    nhvrActiveWindows._fastDuePatched = true;
+  }
+  if(typeof nhvrV2CountWork === "function" && !nhvrV2CountWork._fastDuePatched){
+    const coreNhvrV2CountWork = nhvrV2CountWork;
+    nhvrV2CountWork = function(startAbs, endAbs){
+      const k = `${fastPerfKey()}|work|${fastMinuteKey(startAbs)}|${fastMinuteKey(endAbs)}`;
+      if(fastWorkCache.has(k)) return fastWorkCache.get(k);
+      const v = coreNhvrV2CountWork(startAbs, endAbs);
+      fastWorkCache.set(k, v);
+      return v;
+    };
+    nhvrV2CountWork._fastDuePatched = true;
+  }
+  if(typeof nhvrV2RestPeriods === "function" && !nhvrV2RestPeriods._fastDuePatched){
+    const coreNhvrV2RestPeriods = nhvrV2RestPeriods;
+    nhvrV2RestPeriods = function(startAbs, endAbs){
+      const k = `${fastPerfKey()}|restPeriods|${fastMinuteKey(startAbs)}|${fastMinuteKey(endAbs)}`;
+      if(fastRestPeriodsCache.has(k)) return fastRestPeriodsCache.get(k);
+      const v = coreNhvrV2RestPeriods(startAbs, endAbs) || [];
+      fastRestPeriodsCache.set(k, v);
+      return v;
+    };
+    nhvrV2RestPeriods._fastDuePatched = true;
+  }
+  if(typeof perfBump === "function" && !perfBump._fastDuePatched){
+    const corePerfBump = perfBump;
+    perfBump = function(reason=""){
+      fastWindowCache = new Map();
+      fastWorkCache = new Map();
+      fastRestPeriodsCache = new Map();
+      return corePerfBump(reason);
+    };
+    perfBump._fastDuePatched = true;
+  }
+})();
+
+function fastPlannerHtmlClass(status){
+  if(status === "bad") return "dueBad";
+  if(status === "warn") return "dueWarn";
+  return "dueOk";
+}
+function fastPlannerRow(title, value, small, status="ok"){
+  return `<div class="statRow duePlannerRow ${fastPlannerHtmlClass(status)}"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(value || "—")}<small>${escapeHtml(small || "")}</small></span></div>`;
+}
+function fastPlannerDueText(abs){
+  if(abs === null || abs === undefined) return "Not due from saved history";
+  return formatDateTimeForStats(abs);
+}
+function fastPlannerFirstByDue(rows){
+  return rows.sort((a,b)=>(a.dueAbs ?? Infinity) - (b.dueAbs ?? Infinity));
+}
+function fastPlannerWindowRows(asOfAbs, status, profile){
+  const rows = [];
+  const windows = (status && status.windows) || nhvrActiveWindows(asOfAbs) || [];
+  const shortRules = (profile && profile.short) || [];
+
+  shortRules.forEach(rule => {
+    const active = windows.filter(w => w.type === "short" && w.label === rule.label);
+    if(!active.length) return;
+    const candidates = active.map(w => {
+      const restTaken = Number(w.restTaken || 0);
+      const restNeeded = Math.max(0, Number(rule.minRest || 0) - restTaken);
+      const remWork = Math.max(0, Number(w.maxWork || 0) - Number(w.work || 0));
+      const dueAbs = restNeeded > 0 ? asOfAbs + remWork*60000 : null;
+      return {w, restTaken, restNeeded, remWork, dueAbs};
+    });
+    const urgent = fastPlannerFirstByDue(candidates.filter(c => c.restNeeded > 0))[0] || candidates[0];
+    if(!urgent) return;
+    if(urgent.restNeeded <= 0){
+      rows.push(fastPlannerRow(`${rule.label} short-rest rule`, "Satisfied", `${formatMinsShort(urgent.restTaken)} qualifying rest already counted in this active window.`, "ok"));
+    }else if(urgent.remWork <= 0){
+      rows.push(fastPlannerRow(`${rule.label} short-rest rule`, "Rest required now", `Take/record ${formatMinsShort(urgent.restNeeded)} rest. If work continues now, this rule is breached.`, "bad"));
+    }else{
+      rows.push(fastPlannerRow(`${rule.label} short-rest rule`, `Due by ${fastPlannerDueText(urgent.dueAbs)}`, `If continuing work, take/record ${formatMinsShort(urgent.restNeeded)} rest before more than ${formatMinsShort(urgent.remWork)} additional work.`, urgent.remWork <= 30 ? "warn" : "ok"));
+    }
+  });
+
+  const active24 = windows.filter(w => w.label === "24h").sort((a,b)=>a.endAbs-b.endAbs)[0];
+  if(active24){
+    const rem = Math.max(0, Number(active24.maxWork || 0) - Number(active24.work || 0));
+    const dueAbs = rem > 0 ? asOfAbs + rem*60000 : asOfAbs;
+    const restCheck = (profile.periods || []).find(r => r.label === "24h" && r.restCheck) || null;
+    let restSmall = `Counted from ${formatDateTimeForStats(active24.startAbs)} to ${formatDateTimeForStats(active24.endAbs)}.`;
+    let statusClass = rem <= 0 ? "bad" : rem <= 60 ? "warn" : "ok";
+    if(restCheck && restCheck.restCheck){
+      const got = nhvrV2MaxContinuous(active24.startAbs, Math.min(asOfAbs, active24.endAbs), nhvrV2Predicate(restCheck.restCheck.kind));
+      const need = Math.max(0, restCheck.restCheck.mins - got);
+      if(need > 0){
+        const latestStart = active24.endAbs - restCheck.restCheck.mins*60000;
+        restSmall += ` ${restCheck.restCheck.label} still required; latest safe start is ${formatDateTimeForStats(latestStart)}.`;
+        if(asOfAbs >= latestStart) statusClass = "warn";
+      }else{
+        restSmall += ` ${restCheck.restCheck.label} already found in this active 24h period.`;
+      }
+    }
+    rows.push(fastPlannerRow("24h work/rest period", rem > 0 ? `Work limit due by ${fastPlannerDueText(dueAbs)}` : "24h work limit reached", `${formatMinsShort(active24.work)} / ${formatMinsShort(active24.maxWork)} work. ${restSmall}`, statusClass));
+  }
+
+  const longNight = windows.filter(w => w.type === "longNight").sort((a,b)=>a.endAbs-b.endAbs)[0];
+  if(longNight){
+    const rem = Math.max(0, Number(longNight.maxWork || 0) - Number(longNight.work || 0));
+    rows.push(fastPlannerRow("BFM 36h long/night", rem > 0 ? `${formatMinsShort(rem)} remaining` : "Long/night limit reached", `${formatMinsShort(longNight.work)} / 36h counted in active 7-day long/night window. Night work is 12am–6am; long work is work above 12h in an active 24h counted period.`, rem <= 0 ? "bad" : rem <= 120 ? "warn" : "ok"));
+  }else if(profile && profile.key === "BFM" && typeof nhvrCpBfmLongNightMinsBetween === "function"){
+    const used = nhvrCpBfmLongNightMinsBetween(asOfAbs - 7*DAY_MS, asOfAbs);
+    const rem = Math.max(0, 2160 - used);
+    rows.push(fastPlannerRow("BFM 36h long/night", rem > 0 ? `${formatMinsShort(rem)} remaining` : "Long/night limit reached", `${formatMinsShort(used)} long/night work counted in the last 7 days as of now.`, rem <= 0 ? "bad" : rem <= 120 ? "warn" : "ok"));
+  }
+
+  ["7d","14d"].forEach(label => {
+    const w = windows.filter(x => x.label === label && x.maxWork !== null && x.maxWork !== undefined).sort((a,b)=>a.endAbs-b.endAbs)[0];
+    if(!w) return;
+    const rem = Math.max(0, Number(w.maxWork || 0) - Number(w.work || 0));
+    const dueAbs = rem > 0 ? asOfAbs + rem*60000 : asOfAbs;
+    rows.push(fastPlannerRow(`${label} rolling/counted work`, rem > 0 ? `${formatMinsShort(rem)} remaining` : `${label} limit reached`, `${formatMinsShort(w.work)} / ${formatMinsShort(w.maxWork)} counted from ${formatDateTimeForStats(w.startAbs)} to ${formatDateTimeForStats(w.endAbs)}. If you continue work without enough qualifying rest/history dropping out, limit reaches about ${formatDateTimeForStats(dueAbs)}.`, rem <= 0 ? "bad" : rem <= 240 ? "warn" : "ok"));
+  });
+
+  if(profile && profile.key === "BFM"){
+    const since84 = typeof stats14CheckpointWorkSince24hRest === "function" ? stats14CheckpointWorkSince24hRest(asOfAbs) : stats14CheckpointWorkSince24hRestFast(absToKeySlot(asOfAbs).key, 0, {work:new Map()});
+    const rem84 = Math.max(0, 5040 - since84);
+    rows.push(fastPlannerRow("BFM 84h checkpoint", rem84 > 0 ? `${formatMinsShort(rem84)} work before 24h rest required` : "24h stationary rest required now", `${formatMinsShort(since84)} work counted since the last 24h continuous stationary rest. This does not reset the full 14-day 144h total.`, rem84 <= 0 ? "bad" : rem84 <= 240 ? "warn" : "ok"));
+  }
+
+  if(profile && profile.afm){
+    rows.push(fastPlannerRow("AFM / 28-day conditions", "Record-only", "AFM and any 28-day certificate conditions must be entered from the AFM certificate before the app can calculate them safely.", "warn"));
+  }
+
+  return rows;
+}
+function renderFastDueBreakPlanner(){
+  const host = $("statsBreaksDue");
+  if(!host) return;
+  const asOf = parseStatsAsOf();
+  const asOfAbs = asOf.getTime();
+  const key = absToKeySlot(asOfAbs).key;
+  const profile = nhvrProfileForDate(key);
+  const status = nhvrCanWorkStatus(asOfAbs);
+  const rows = fastPlannerWindowRows(asOfAbs, status, profile);
+  if(!rows.length){
+    host.innerHTML = `<div class="statRow duePlannerRow dueOk"><strong>No due break found</strong><span>Rest / no active work window<small>No active counted work window was found from saved history as of ${escapeHtml(formatDateTimeForStats(asOfAbs))}.</small></span></div>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="duePlannerIntro">Calculated as of <strong>${escapeHtml(formatDateTimeForStats(asOfAbs))}</strong>. If you take a break early and record it in the diary, this panel recalculates the next due break automatically.</div>
+    ${rows.join("")}
+    <div class="duePlannerNote">Windows are counted forward using saved 15-minute blocks. Old 24h/7d/14d counted periods stay active until they finish; the app should mark the first actual breach block only.</div>`;
+}
+
+(function(){
+  const coreRenderStatisticsFastDue = renderStatistics;
+  let timer = null;
+  let token = 0;
+  renderStatistics = function(){
+    const active = typeof statsScreenCurrentlyActive === "function" ? statsScreenCurrentlyActive() : true;
+    if(!active){
+      coreRenderStatisticsFastDue();
+      try{ renderFastDueBreakPlanner(); }catch(e){ console.warn(e); }
+      return;
+    }
+    const myToken = ++token;
+    const host = $("statsBreaksDue");
+    if(host){
+      host.innerHTML = `<div class="statRow duePlannerRow dueOk"><strong>Calculating due breaks…</strong><span>Please wait<small>Using NHVR counted-period engine and saved diary blocks.</small></span></div>`;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if(myToken !== token) return;
+      const started = performance && performance.now ? performance.now() : Date.now();
+      coreRenderStatisticsFastDue();
+      renderFastDueBreakPlanner();
+      const ms = Math.round((performance && performance.now ? performance.now() : Date.now()) - started);
+      if(ms > 700) console.info("Fast due-break stats render", ms, "ms");
+    }, 25);
+  };
+})();
+
+function fastRenderActiveScreen(tabId){
+  const activeId = tabId || (document.querySelector(".screen.active") || {}).id || "diaryScreen";
+  try{ renderDate(); }catch(e){}
+  try{ renderTimer(); }catch(e){}
+  try{ applyLandscapeCompactClass && applyLandscapeCompactClass(); }catch(e){}
+  if(activeId === "diaryScreen" || activeId === "workDiaryScreen"){
+    renderDiaryFast();
+  }else if(activeId === "graphScreen"){
+    refreshCurrentPageData({forceDefaults:false});
+    renderGraphPage();
+  }else if(activeId === "statsScreen"){
+    renderStatistics();
+  }else if(activeId === "drivingScreen"){
+    renderRuleCards();
+    renderNextBreak();
+    renderTodayAdvice();
+    renderAuditList();
+    renderComplianceConfidence();
+    renderAuditFixPanel && renderAuditFixPanel();
+  }else if(activeId === "vehiclesScreen"){
+    renderVehicleDriverRegistry();
+  }else if(activeId === "settingsScreen"){
+    renderDriverSettings();
+    renderDiaryBookHistory && renderDiaryBookHistory();
+    renderBackupReminderSettings();
+    renderAuditLog();
+    renderAppUpdateSettings && renderAppUpdateSettings();
+  }
+}
+(function(){
+  const coreRenderAllFastDue = renderAll;
+  renderAll = function(){
+    // Lazy render: do not rebuild diary grid / breach highlights while a different screen is open.
+    // This keeps Settings, Stats and Driving screen changes smooth without changing calculation results.
+    try{ fastRenderActiveScreen(); }
+    catch(err){ console.warn("Fast lazy render fallback", err); coreRenderAllFastDue(); }
+  };
+})();
+
+function setupFastNavigationPatch(){
+  const changeDate = (key) => {
+    state.selectedDate = key;
+    fastRenderActiveScreen("diaryScreen");
+  };
+  if($("prevDay")) $("prevDay").onclick = () => changeDate(addDays(state.selectedDate, -1));
+  if($("nextDay")) $("nextDay").onclick = () => changeDate(addDays(state.selectedDate, 1));
+  if($("todayBtn")) $("todayBtn").onclick = () => changeDate(toKey(new Date()));
+  if($("datePicker")) $("datePicker").onchange = e => changeDate(e.target.value);
+  if($("statsNowBtn")) $("statsNowBtn").onclick = setStatsAsOfNow;
+  if($("statsAsOf")) $("statsAsOf").onchange = renderStatistics;
+  document.querySelectorAll(".tabbar button").forEach(btn => {
+    btn.onclick = () => {
+      safeSwitchTab(btn.dataset.tab);
+      fastRenderActiveScreen(btn.dataset.tab);
+    };
+  });
+}
+setTimeout(setupFastNavigationPatch, 0);
+
+function fastDueBreakPlannerSelfTest(){
+  const backup = safeClone(state);
+  const oldValue = $("statsAsOf") ? $("statsAsOf").value : "";
+  const results = [];
+  const add = (name, pass, actual) => results.push({name, pass:!!pass, actual});
+  try{
+    const key = "2026-06-22";
+    state.selectedDate = key;
+    state.scheme = "BFM";
+    state.ruleHistory = [{effectiveDate:key, scheme:"BFM", mode:"solo", coDriverScheme:""}];
+    state.slots = {}; state.dayDetails = {}; state.entries = [];
+    state.calculationHistory = {startDate:key, mode:"noWorkBeforeStart"};
+    state.slots[key] = Array(SLOTS_PER_DAY).fill("rest");
+    for(let i=32;i<56;i++) state.slots[key][i] = "work"; // 08:00-14:00 = 6h
+    if($("statsAsOf")) $("statsAsOf").value = "2026-06-22T14:00";
+    const asOfAbs = new Date("2026-06-22T14:00").getTime();
+    const status = nhvrCanWorkStatus(asOfAbs);
+    const rows = fastPlannerWindowRows(asOfAbs, status, nhvrProfileForDate(key));
+    add("Due-break planner creates clear rows", rows.length > 0, {rows:rows.length});
+    add("BFM 6¼h short-rest row appears", rows.some(r => String(r).includes("6¼h")), rows.join(" ").slice(0,500));
+    add("BFM 84h checkpoint row appears", rows.some(r => String(r).includes("84h checkpoint")), rows.join(" ").slice(0,500));
+  }catch(err){
+    add("Self-test crashed", false, String(err && err.stack || err));
+  }finally{
+    state = {...state, ...backup};
+    if($("statsAsOf")) $("statsAsOf").value = oldValue;
+  }
+  return results;
+}
+(function(){
+  if(typeof runEngineTestSuite === "function" && !runEngineTestSuite._fastDuePatched){
+    const coreRunEngineTestSuite = runEngineTestSuite;
+    runEngineTestSuite = function(){
+      const report = coreRunEngineTestSuite();
+      try{
+        engineTestNormaliseResult("Fast due-break planner", fastDueBreakPlannerSelfTest()).forEach(t => report.tests.push(t));
+        report.total = report.tests.length;
+        report.passed = report.tests.filter(t => t.pass).length;
+        report.failed = report.total - report.passed;
+        report.ended = Date.now();
+      }catch(err){
+        report.tests.push({group:"Fast due-break planner", name:"Self-test crashed", pass:false, actual:String(err && err.stack || err)});
+        report.total = report.tests.length;
+        report.passed = report.tests.filter(t => t.pass).length;
+        report.failed = report.total - report.passed;
+      }
+      return report;
+    };
+    runEngineTestSuite._fastDuePatched = true;
+  }
+})();
+

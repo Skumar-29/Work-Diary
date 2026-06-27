@@ -1,0 +1,13 @@
+Build: clean-engine-fast-due-break-planner
+Schema: 53
+
+Scope:
+- Performance/UI planner update only.
+- NHVR counted-period engine and overlap logic are not relaxed.
+
+Checks added:
+1. Stats screen uses lazy/deferred render for smoother opening.
+2. Page/date navigation does not clear fatigue caches just because the selected page changed.
+3. Breaks due planner shows due time/status rows for short-rest rules, 24h periods, BFM long/night, 7d/14d windows and BFM 84h checkpoint.
+4. Engine test suite includes Fast due-break planner self-test.
+5. Service worker cache name updated to v89-fast-due-break-planner.

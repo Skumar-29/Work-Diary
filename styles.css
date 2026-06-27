@@ -1920,3 +1920,22 @@ body.homeScreenPwa .card{
     color:#c8c8c8;
   }
 }
+
+
+/* Fast due-break planner update */
+.duePlannerIntro,.duePlannerNote{font-size:13px;color:#555;background:#f7f9fb;border:1px solid #e6edf3;border-radius:12px;padding:9px 10px;margin:2px 0 6px}
+.duePlannerRow{border:1px solid #eee;border-radius:12px;padding:10px 11px;background:#fff;border-bottom:1px solid #eee}
+.duePlannerRow span{font-weight:800;color:#333;max-width:58%;line-height:1.25}
+.duePlannerRow small{font-weight:500;text-align:right;line-height:1.25}
+.duePlannerRow.dueOk{border-left:5px solid #37a169;background:#f0fff4}
+.duePlannerRow.dueWarn{border-left:5px solid #d69e2e;background:#fffaf0}
+.duePlannerRow.dueBad{border-left:5px solid #e53e3e;background:#fff5f5}
+@media (prefers-color-scheme: dark){
+  .duePlannerIntro,.duePlannerNote{background:#101820;border-color:#263746;color:#cbd5e1}
+  .duePlannerRow{background:#111;border-color:#333}
+  .duePlannerRow span{color:#f2f2f2}
+  .duePlannerRow small{color:#c8c8c8}
+  .duePlannerRow.dueOk{background:#0f1b13}
+  .duePlannerRow.dueWarn{background:#241b09}
+  .duePlannerRow.dueBad{background:#250f0f}
+}

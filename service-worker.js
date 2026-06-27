@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v88-diary-no-letters-fix";
+const CACHE = "truck-work-diary-v89-fast-due-break-planner";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

@@ -1,4 +1,4 @@
-BUILD: clean-engine-diary-no-letters-fix
+BUILD: clean-engine-fast-due-break-planner
 
 Update focus:
 - Automatic safe post-update cache cleanup.
@@ -739,3 +739,11 @@ DIARY NUMBER LETTERS FIX
 - Added uppercase text handling to work diary number fields.
 - Page number fields still remain numbers/spaces only.
 - NHVR counted-period engine unchanged.
+
+
+Fast due-break planner update (clean-engine-fast-due-break-planner):
+- Schema 53. Performance-focused update; NHVR counted-period fatigue engine is not relaxed.
+- Stats screen now opens with lazy/deferred rendering and a clearer Breaks due planner.
+- Breaks due shows short-rest due times, 24h period work/rest status, BFM long/night remaining, 7d/14d windows and BFM 84h checkpoint.
+- Page/date navigation no longer clears fatigue caches just for moving between days.
+- Service worker cache v89 clears older app-file caches while preserving real diary data/settings in browser storage.
