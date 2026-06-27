@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v93-instant-grid-refresh";
+const CACHE = "truck-work-diary-v92-turbo-responsive";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

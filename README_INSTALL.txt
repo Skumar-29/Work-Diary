@@ -1,7 +1,12 @@
-Build: clean-engine-instant-grid-refresh / schema 57
-Service worker: truck-work-diary-v93-instant-grid-refresh
+Build: clean-engine-turbo-responsive
 
-This update keeps the NHVR counted-period calculation engine unchanged and adds instant Work/Rest grid repaint with deferred breach highlighting, deferred change-detail refresh, and delayed idle saving for smoother iPhone use.
+Turbo responsive update: first setup is deferred until all NHVR/performance patches are loaded; diary screen paints quickly and heavy breach/highlight/detail work is deferred; imported/restored backup data remains compacted; older NHVR calculation engine functions are preserved.
+
+Truck Work Diary PWA update
+Build: clean-engine-turbo-responsive
+Schema: 55
+
+Main changes: safe backup/export/import optimisation, diary book rename/reopen/delete, and confirmation before editing older Work/Rest blocks. NHVR counted-period calculation logic is preserved from the previous clean-engine builds.
 
 BUILD: clean-engine-fast-due-break-planner
 

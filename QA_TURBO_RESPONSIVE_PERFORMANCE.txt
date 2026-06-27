@@ -1,0 +1,20 @@
+Truck Work Diary PWA - Turbo Responsive Performance QA
+Build: clean-engine-turbo-responsive
+Schema: 56
+Service worker: truck-work-diary-v92-turbo-responsive
+
+Scope:
+- Speed/responsiveness only.
+- NHVR counted-period engine/fatigue limit logic was not intentionally changed.
+
+Included:
+1. Deferred initial setup until all NHVR/performance patches are loaded.
+2. Fast diary first-paint; breach highlights and change-detail table render after the screen responds.
+3. Fast work-date index to avoid repeatedly scanning old imported entries.
+4. Driving audit list calculates after the screen opens instead of blocking opening.
+5. Stats calculation is cancellable/deferred so repeated taps do not stack heavy work.
+6. Performance cache trimming to avoid memory growth on iPhone.
+7. Imported/exported backups remain compacted; blank/no-block dates still count as continuous Rest by default.
+
+Self-test added to Engine test system:
+- Turbo responsive performance.
