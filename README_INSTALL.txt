@@ -1,4 +1,4 @@
-Build: clean-engine-archive-ready-fast-import / schema 58
+Build: clean-engine-verified-backup-fast-import / schema 58
 Service worker: truck-work-diary-v93-instant-grid-refresh
 
 This update keeps the NHVR counted-period calculation engine unchanged and adds instant Work/Rest grid repaint with deferred breach highlighting, deferred change-detail refresh, and delayed idle saving for smoother iPhone use.
@@ -754,5 +754,5 @@ Fast due-break planner update (clean-engine-fast-due-break-planner):
 - Service worker cache v89 clears older app-file caches while preserving real diary data/settings in browser storage.
 
 
-Build: clean-engine-archive-ready-fast-import / schema 58
+Build: clean-engine-verified-backup-fast-import / schema 58
 Adds compact backup/storage format for fast import/export and long-term performance. NHVR fatigue calculation engine unchanged.
