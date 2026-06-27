@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 57;
-const APP_BUILD_NAME = "clean-engine-instant-grid-refresh";
+const APP_SCHEMA_VERSION = 58;
+const APP_BUILD_NAME = "clean-engine-archive-ready-fast-import";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -5162,6 +5162,287 @@ function installEmergencyNavigation(){
     });
   }catch(e){}
 }
+
+
+/* =========================================================
+   ARCHIVE-READY FAST IMPORT / STORAGE v1 (schema 58)
+   Purpose: keep the app fast after restoring old or very large backups.
+   Safety: Work/Rest slots remain the source of truth. Blank/no-work dates still
+   count as continuous Rest, so they are not stored as 96 Rest blocks.
+   ========================================================= */
+const ARCHIVE_FAST_IMPORT_VERSION = "archive-ready-v1";
+
+function archiveValidDateKey(key){
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(key || ""));
+}
+function archiveEmptySlots(){
+  return Array(SLOTS_PER_DAY).fill("rest");
+}
+function archiveSlotChar(v){
+  return v === "work" || v === "W" || v === 1 || v === true ? "W" : "R";
+}
+function archiveSlotsToCompact(arr){
+  if(!arr) return "";
+  if(typeof arr === "string"){
+    const raw = arr.toUpperCase().replace(/[^WR]/g, "R");
+    const padded = (raw + "R".repeat(SLOTS_PER_DAY)).slice(0, SLOTS_PER_DAY);
+    return padded.includes("W") ? padded : "";
+  }
+  if(!Array.isArray(arr)) return "";
+  let out = "";
+  let hasWork = false;
+  for(let i=0;i<SLOTS_PER_DAY;i++){
+    const ch = archiveSlotChar(arr[i]);
+    if(ch === "W") hasWork = true;
+    out += ch;
+  }
+  return hasWork ? out : "";
+}
+function archiveCompactToSlots(str){
+  const s = String(str || "").toUpperCase().replace(/[^WR]/g, "R");
+  const padded = (s + "R".repeat(SLOTS_PER_DAY)).slice(0, SLOTS_PER_DAY);
+  const arr = archiveEmptySlots();
+  for(let i=0;i<SLOTS_PER_DAY;i++) arr[i] = padded[i] === "W" ? "work" : "rest";
+  return arr;
+}
+function archiveSlotsMapToCompact(slots){
+  const out = {};
+  Object.keys(slots || {}).forEach(key => {
+    if(!archiveValidDateKey(key)) return;
+    const compact = archiveSlotsToCompact(slots[key]);
+    if(compact) out[key] = compact;
+  });
+  return out;
+}
+function archiveCompactToSlotsMap(compact){
+  const out = {};
+  Object.keys(compact || {}).forEach(key => {
+    if(!archiveValidDateKey(key)) return;
+    const s = archiveSlotsToCompact(compact[key]);
+    if(s) out[key] = archiveCompactToSlots(s);
+  });
+  return out;
+}
+function archiveParseEntryDateTime(text){
+  const m = String(text || "").match(/^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})/);
+  if(!m) return null;
+  const d = fromKey(m[1]);
+  d.setHours(Number(m[2]), Number(m[3]), 0, 0);
+  return d.getTime();
+}
+function archivePaintWorkRange(targetSlots, startAbs, endAbs){
+  if(!Number.isFinite(startAbs) || !Number.isFinite(endAbs) || endAbs <= startAbs) return;
+  const step = SLOT * 60000;
+  const start = Math.floor(startAbs / step) * step;
+  const end = Math.ceil(endAbs / step) * step;
+  for(let t=start; t<end; t+=step){
+    const ks = absToKeySlot(t);
+    if(!archiveValidDateKey(ks.key) || ks.slot < 0 || ks.slot >= SLOTS_PER_DAY) continue;
+    if(!targetSlots[ks.key]) targetSlots[ks.key] = archiveEmptySlots();
+    targetSlots[ks.key][ks.slot] = "work";
+  }
+}
+function archiveMaterialiseLegacyEntries(target){
+  if(!target || !Array.isArray(target.entries) || !target.entries.length) return 0;
+  if(!target.slots || typeof target.slots !== "object") target.slots = {};
+  let used = 0;
+  target.entries.forEach(e => {
+    if(!e || e.activity !== "work") return;
+    const startAbs = archiveParseEntryDateTime(e.start);
+    const endAbs = archiveParseEntryDateTime(e.end);
+    if(!Number.isFinite(startAbs) || !Number.isFinite(endAbs) || endAbs <= startAbs) return;
+    archivePaintWorkRange(target.slots, startAbs, endAbs);
+    used++;
+  });
+  // Entries are only legacy action logs. After converting work ranges to slots,
+  // keeping thousands of them makes navigation/search/save slow and is no longer needed.
+  target.entries = [];
+  return used;
+}
+function archiveTrimAuditLog(target){
+  if(target && Array.isArray(target.auditLog) && target.auditLog.length > 250){
+    target.auditLog = target.auditLog.slice(0,250);
+  }
+}
+function archiveDropDerivedBlankData(target){
+  if(!target || typeof target !== "object") return {removedSlotDays:0, removedDetails:0};
+  if(!target.slots || typeof target.slots !== "object") target.slots = {};
+  if(!target.dayDetails || typeof target.dayDetails !== "object") target.dayDetails = {};
+  let removedSlotDays = 0;
+  Object.keys(target.slots).forEach(key => {
+    if(!archiveValidDateKey(key)){ delete target.slots[key]; return; }
+    const compact = archiveSlotsToCompact(target.slots[key]);
+    if(compact){
+      target.slots[key] = archiveCompactToSlots(compact);
+    }else{
+      delete target.slots[key];
+      removedSlotDays++;
+    }
+  });
+  let removedDetails = 0;
+  Object.keys(target.dayDetails).forEach(key => {
+    if(!archiveValidDateKey(key)){ delete target.dayDetails[key]; return; }
+    const hasWork = !!(target.slots && target.slots[key] && archiveSlotsToCompact(target.slots[key]));
+    const d = target.dayDetails[key];
+    if(!hasWork && !dayDetailIsMeaningfulForBlankRestFast(key, d)){
+      delete target.dayDetails[key];
+      removedDetails++;
+    }else if(d && Array.isArray(d.changeRows) && !hasWork){
+      d.changeRows = compactChangeRowsForRestDayFast(d.changeRows);
+    }
+  });
+  archiveTrimAuditLog(target);
+  return {removedSlotDays, removedDetails};
+}
+function archiveHydrateBackupObject(obj){
+  if(!obj || typeof obj !== "object") return obj;
+  if(obj.slotsCompact && typeof obj.slotsCompact === "object"){
+    const fromCompact = archiveCompactToSlotsMap(obj.slotsCompact);
+    obj.slots = {...fromCompact, ...(obj.slots && typeof obj.slots === "object" ? obj.slots : {})};
+    delete obj.slotsCompact;
+  }
+  if(obj.slots && typeof obj.slots === "object"){
+    Object.keys(obj.slots).forEach(key => {
+      const compact = archiveSlotsToCompact(obj.slots[key]);
+      if(compact) obj.slots[key] = archiveCompactToSlots(compact);
+      else delete obj.slots[key];
+    });
+  }else{
+    obj.slots = {};
+  }
+  archiveMaterialiseLegacyEntries(obj);
+  archiveDropDerivedBlankData(obj);
+  return obj;
+}
+function archiveCompactStateForStorage(src){
+  // Do not deep-clone full slot arrays. Build a compact object field-by-field.
+  const out = {
+    app: "Truck Work Diary Checker",
+    schemaVersion: APP_SCHEMA_VERSION,
+    buildName: APP_BUILD_NAME,
+    selectedDate: src.selectedDate || toKey(new Date()),
+    scheme: src.scheme || "BFM",
+    restAsStationary: src.restAsStationary !== undefined ? !!src.restAsStationary : true,
+    slotsCompact: archiveSlotsMapToCompact(src.slots || {}),
+    entries: [],
+    activeTimer: src.activeTimer || null,
+    profile: safeClone(src.profile || {}),
+    backupReminder: safeClone(src.backupReminder || {}),
+    dayDetails: safeClone(src.dayDetails || {}),
+    bookSettings: safeClone(src.bookSettings || {}),
+    settingsHistory: safeClone(src.settingsHistory || []),
+    ruleHistory: safeClone(src.ruleHistory || []),
+    auditLog: safeClone((src.auditLog || []).slice(0,250)),
+    dismissedAudit: safeClone(src.dismissedAudit || {}),
+    vehicles: safeClone(src.vehicles || []),
+    savedDrivers: safeClone(src.savedDrivers || []),
+    registrySettings: safeClone(src.registrySettings || {autoSaveFromDiary:true}),
+    uiSettings: safeClone(src.uiSettings || {locationPickerEnabled:true}),
+    diaryBooks: safeClone(src.diaryBooks || []),
+    calculationHistory: safeClone(src.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"}),
+    shortBreakSettings: safeClone(src.shortBreakSettings || {mode:"smart", maxMinutes:60}),
+    optimization: {
+      ...(src.optimization || {}),
+      archiveFastImportVersion: ARCHIVE_FAST_IMPORT_VERSION,
+      compactStorage: true,
+      compactedAt: new Date().toISOString()
+    }
+  };
+  // Remove blank/no-work day details from the saved copy as well.
+  archiveHydrateBackupObject(out);
+  out.slotsCompact = archiveSlotsMapToCompact(out.slots || {});
+  delete out.slots;
+  out.entries = [];
+  return out;
+}
+function archiveOptimiseStateInMemory(reason){
+  archiveHydrateBackupObject(state);
+  state.entries = [];
+  const opt = archiveDropDerivedBlankData(state);
+  state.schemaVersion = APP_SCHEMA_VERSION;
+  state.optimization = {
+    ...(state.optimization || {}),
+    archiveFastImportVersion: ARCHIVE_FAST_IMPORT_VERSION,
+    importSpeedVersion: IMPORT_SPEED_OPTIMISER_VERSION,
+    compactStorage: true,
+    optimisedAt: new Date().toISOString(),
+    reason: reason || "auto",
+    removedSlotDays: opt.removedSlotDays,
+    removedDetails: opt.removedDetails
+  };
+  if(typeof perfBump === "function") perfBump("archive-optimise");
+  return opt;
+}
+
+(function installArchiveReadyFastImportPatch(){
+  const baseLoad = load;
+  load = function(){
+    const raw = localStorage.getItem("truckDiaryPWA");
+    if(raw){
+      try{
+        const parsed = archiveHydrateBackupObject(JSON.parse(raw));
+        state = {...state, ...parsed};
+      }catch(e){
+        try{ baseLoad(); }catch(_e){}
+      }
+    }
+    ensureProfile();
+    ensureBackupReminder();
+    ensureDayDetailsContainer();
+    ensureBookSettings();
+    ensureSettingsHistory();
+    ensureRuleHistory();
+    if(!Array.isArray(state.auditLog)) state.auditLog=[];
+    migrateCurrentState();
+    archiveOptimiseStateInMemory("load");
+  };
+
+  save = function(){
+    ensureProfile();
+    ensureBackupReminder();
+    ensureDayDetailsContainer();
+    ensureBookSettings();
+    ensureSettingsHistory();
+    ensureRuleHistory();
+    if(!Array.isArray(state.auditLog)) state.auditLog=[];
+    ensureDismissedAudit();
+    state.schemaVersion = APP_SCHEMA_VERSION;
+    archiveOptimiseStateInMemory("save");
+    const compact = archiveCompactStateForStorage(state);
+    localStorage.setItem("truckDiaryPWA", JSON.stringify(compact));
+  };
+
+  const baseMigrateImportedBackup = migrateImportedBackup;
+  migrateImportedBackup = function(backup){
+    const hydrated = archiveHydrateBackupObject(safeClone(backup));
+    const migrated = baseMigrateImportedBackup(hydrated);
+    archiveHydrateBackupObject(migrated);
+    archiveOptimiseStateObject(migrated, "import");
+    migrated.schemaVersion = APP_SCHEMA_VERSION;
+    return migrated;
+  };
+
+  window.archiveFastImportPatchInstalled = true;
+})();
+
+function archiveOptimiseStateObject(obj, reason){
+  archiveHydrateBackupObject(obj);
+  obj.entries = [];
+  const opt = archiveDropDerivedBlankData(obj);
+  obj.schemaVersion = APP_SCHEMA_VERSION;
+  obj.optimization = {
+    ...(obj.optimization || {}),
+    archiveFastImportVersion: ARCHIVE_FAST_IMPORT_VERSION,
+    importSpeedVersion: IMPORT_SPEED_OPTIMISER_VERSION,
+    compactStorage: true,
+    optimisedAt: new Date().toISOString(),
+    reason: reason || "auto",
+    removedSlotDays: opt.removedSlotDays,
+    removedDetails: opt.removedDetails
+  };
+  return opt;
+}
+
 try{
   setup();
 }catch(err){
@@ -7408,7 +7689,7 @@ function stats14DayTableSelfTest(){
    ========================================================= */
 
 const SAFE_CACHE_MAINTENANCE_VERSION = "safe-cache-maintenance-v1";
-const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v89-fast-due-break-planner";
+const CURRENT_SERVICE_WORKER_CACHE_NAME = "truck-work-diary-v94-archive-ready-fast-import";
 const APP_MAINTENANCE_META_KEY = "truckDiaryPWA_appMaintenance";
 const APP_UPDATE_PENDING_CLEANUP_KEY = "truckDiaryPWA_pendingCacheCleanup";
 
@@ -9422,3 +9703,121 @@ function instantGridRefreshSelfTest(){
     {name:"Delayed save installed", pass: typeof saveSoon === "function" && String(saveSoon).includes("requestIdleCallback"), actual:"ready"}
   ];
 }
+
+
+/* =========================================================
+   ARCHIVE-READY EXPORT/IMPORT/UI PATCH (schema 58 final layer)
+   ========================================================= */
+(function installArchiveReadyExportImportUiPatch(){
+  // Keep future backup files compact: only work days are saved as 96-character W/R strings.
+  buildJsonBackup = function(){
+    const compact = archiveCompactStateForStorage(state);
+    compact.app = "Truck Work Diary Checker";
+    compact.backupVersion = 2;
+    compact.schemaVersion = APP_SCHEMA_VERSION;
+    compact.buildName = APP_BUILD_NAME;
+    compact.exportedAt = new Date().toISOString();
+    compact.backupFormat = "compact-slots-v2";
+    compact.note = "Compact backup for Truck Work Diary. Work days are saved as W/R slot strings. Blank/no-work dates are not saved because the app treats them as continuous Rest by default.";
+    compact.backupOptimised = {
+      version: ARCHIVE_FAST_IMPORT_VERSION,
+      slotDaysSaved: Object.keys(compact.slotsCompact || {}).length,
+      entriesRemoved: true,
+      exportedAt: compact.exportedAt
+    };
+    return compact;
+  };
+
+  importJsonBackupFromFile = function(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = JSON.parse(reader.result);
+        if(!parsed || parsed.app !== "Truck Work Diary Checker"){
+          alert("This does not look like a valid Truck Work Diary backup file.");
+          return;
+        }
+        if(!confirm("Import this backup? This will replace the app data currently saved on this phone. The app will scan and optimise the backup first so old backups do not slow the app.")) return;
+        const migrated = migrateImportedBackup(parsed);
+        archiveOptimiseStateObject(migrated, "import-final");
+        state.selectedDate = migrated.selectedDate || toKey(new Date());
+        state.scheme = migrated.scheme || "BFM";
+        state.restAsStationary = migrated.restAsStationary !== undefined ? !!migrated.restAsStationary : true;
+        state.slots = migrated.slots || {};
+        state.entries = [];
+        state.activeTimer = null;
+        state.profile = migrated.profile || {driverName:"", licenceNumber:"", baseTimeZone:"NSW"};
+        state.dayDetails = migrated.dayDetails || {};
+        state.bookSettings = migrated.bookSettings || state.bookSettings || {};
+        state.settingsHistory = migrated.settingsHistory || [];
+        state.ruleHistory = migrated.ruleHistory || [];
+        state.auditLog = migrated.auditLog || [];
+        state.dismissedAudit = migrated.dismissedAudit || {};
+        state.vehicles = migrated.vehicles || [];
+        state.savedDrivers = migrated.savedDrivers || [];
+        state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
+        state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
+        state.diaryBooks = migrated.diaryBooks || [];
+        state.calculationHistory = migrated.calculationHistory || {};
+        state.shortBreakSettings = migrated.shortBreakSettings || {mode:"smart", maxMinutes:60};
+        state.backupReminder = migrated.backupReminder || state.backupReminder || {frequency:"off", lastBackupAt:"", lastPromptDate:""};
+        state.optimization = migrated.optimization || {};
+        state.schemaVersion = APP_SCHEMA_VERSION;
+        ensureProfile(); ensureBackupReminder(); ensureDayDetailsContainer(); ensureBookSettings(); ensureDiaryBooks(); ensureCalculationHistory(); ensureShortBreakSettings(); ensureRuleHistory();
+        archiveOptimiseStateInMemory("import-final-state");
+        addAuditLog("Backup imported and optimised", `Imported into schema ${APP_SCHEMA_VERSION}. Saved ${Object.keys(state.slots || {}).length} work day(s). Legacy entry logs were converted to slots and removed for speed. Blank dates still count as continuous Rest.`);
+        save();
+        if(typeof resetPerfCache === "function") resetPerfCache();
+        if(typeof turboBreachSetsBySignature !== "undefined" && turboBreachSetsBySignature.clear) turboBreachSetsBySignature.clear();
+        if(typeof turboLastDaySignatures !== "undefined" && turboLastDaySignatures.clear) turboLastDaySignatures.clear();
+        fastRenderActiveScreen(turboSafeActiveScreenId());
+        alert("Backup imported and optimised successfully. Old action logs and blank rest-only dates were compacted, but real work/rest blocks and important diary details were kept.");
+      }catch(e){
+        console.error("Import failed", e);
+        alert("Could not import backup. Please select a valid JSON backup file.");
+      }finally{
+        const input = $("jsonImportFile");
+        if(input) input.value = "";
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Faster page/date movement after import: do not save selectedDate immediately; save it idle later.
+  function archiveChangeDateFast(key){
+    state.selectedDate = key;
+    if(typeof saveSoon === "function") saveSoon();
+    if(typeof fastRenderActiveScreen === "function") fastRenderActiveScreen("diaryScreen");
+    else renderDiaryFast();
+  }
+  if($("prevDay")) $("prevDay").onclick = () => archiveChangeDateFast(addDays(state.selectedDate, -1));
+  if($("nextDay")) $("nextDay").onclick = () => archiveChangeDateFast(addDays(state.selectedDate, 1));
+  if($("todayBtn")) $("todayBtn").onclick = () => archiveChangeDateFast(toKey(new Date()));
+  if($("datePicker")) $("datePicker").onchange = e => archiveChangeDateFast(e.target.value);
+  if($("jsonImportFile")) $("jsonImportFile").onchange = e => importJsonBackupFromFile(e.target.files[0]);
+
+  const oldOptimise = (typeof optimiseSavedDiaryDataForSpeed === "function") ? optimiseSavedDiaryDataForSpeed : null;
+  optimiseSavedDiaryDataForSpeed = function(){
+    try{
+      archiveOptimiseStateInMemory("manual-button");
+      save();
+      if(typeof resetPerfCache === "function") resetPerfCache();
+      if(typeof renderDiaryFast === "function") renderDiaryFast();
+      const status = $("dataHealthResult") || $("appUpdateStatus");
+      if(status) status.textContent = "Saved diary data optimised for speed. Blank/no-work dates remain counted as Rest.";
+      if(typeof showToast === "function") showToast("Optimised");
+      alert("Diary data optimised for speed. Real work/rest blocks and important details were kept.");
+    }catch(err){
+      console.error(err);
+      if(oldOptimise) return oldOptimise();
+      alert("Optimise failed. Save a backup and try again.");
+    }
+  };
+
+  window.archiveReadyFastImport = {
+    version: ARCHIVE_FAST_IMPORT_VERSION,
+    compactDays: () => Object.keys(archiveSlotsMapToCompact(state.slots || {})).length,
+    storagePreview: () => archiveCompactStateForStorage(state)
+  };
+})();
