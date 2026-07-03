@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 60;
-const APP_BUILD_NAME = "clean-engine-no-freeze-fast-backup";
+const APP_SCHEMA_VERSION = 61;
+const APP_BUILD_NAME = "clean-engine-24h-window-theme-control";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -103,7 +103,7 @@ let state = {
   vehicles: [],
   savedDrivers: [],
   registrySettings: {autoSaveFromDiary:true},
-  uiSettings: {locationPickerEnabled:true},
+  uiSettings: {locationPickerEnabled:true, themeMode:"system"},
   diaryBooks: [],
   calculationHistory: {startDate:"", mode:"noWorkBeforeStart"},
   shortBreakSettings: {mode:"smart", maxMinutes:60}
@@ -237,6 +237,19 @@ function enforcePageNumberOnly(e){
 }
 
 
+
+function ensureUiSettings(){
+  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {locationPickerEnabled:true, themeMode:"system"};
+  if(state.uiSettings.locationPickerEnabled === undefined) state.uiSettings.locationPickerEnabled = true;
+  if(!["system","light","dark"].includes(state.uiSettings.themeMode)) state.uiSettings.themeMode = "system";
+}
+function renderUiSettings(){
+  ensureUiSettings();
+  if($("locationPickerEnabled")) $("locationPickerEnabled").checked = state.uiSettings.locationPickerEnabled !== false;
+  if($("appThemeMode")) $("appThemeMode").value = state.uiSettings.themeMode || "system";
+  document.body.classList.toggle("locationPickerOff", state.uiSettings.locationPickerEnabled === false);
+  if(typeof applyAppThemeMode === "function") applyAppThemeMode();
+}
 
 function ensureDismissedAudit(){
   if(!state.dismissedAudit || typeof state.dismissedAudit !== "object") state.dismissedAudit = {};
@@ -712,7 +725,7 @@ function migrateImportedBackup(backup){
     vehicles: Array.isArray(b.vehicles) ? b.vehicles : [],
     savedDrivers: Array.isArray(b.savedDrivers) ? b.savedDrivers : [],
     registrySettings: b.registrySettings && typeof b.registrySettings === "object" ? b.registrySettings : {autoSaveFromDiary:true},
-    uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true},
+    uiSettings: b.uiSettings && typeof b.uiSettings === "object" ? b.uiSettings : {locationPickerEnabled:true, themeMode:"system"},
     diaryBooks: Array.isArray(b.diaryBooks) ? b.diaryBooks : [],
     calculationHistory: b.calculationHistory && typeof b.calculationHistory === "object" ? b.calculationHistory : {},
     shortBreakSettings: b.shortBreakSettings && typeof b.shortBreakSettings === "object" ? b.shortBreakSettings : {mode:"smart", maxMinutes:60},
@@ -749,6 +762,9 @@ function migrateImportedBackup(backup){
   migrated.shortBreakSettings = migrated.shortBreakSettings && typeof migrated.shortBreakSettings === "object" ? migrated.shortBreakSettings : {mode:"smart", maxMinutes:60};
   migrated.shortBreakSettings.mode = ["manual","smart","strict"].includes(migrated.shortBreakSettings.mode) ? migrated.shortBreakSettings.mode : "smart";
   migrated.shortBreakSettings.maxMinutes = [15,30,45,60].includes(Number(migrated.shortBreakSettings.maxMinutes)) ? Number(migrated.shortBreakSettings.maxMinutes) : 60;
+  migrated.uiSettings = migrated.uiSettings && typeof migrated.uiSettings === "object" ? migrated.uiSettings : {locationPickerEnabled:true, themeMode:"system"};
+  if(migrated.uiSettings.locationPickerEnabled === undefined) migrated.uiSettings.locationPickerEnabled = true;
+  if(!["system","light","dark"].includes(migrated.uiSettings.themeMode)) migrated.uiSettings.themeMode = "system";
   migrated.backupReminder.frequency = migrated.backupReminder.frequency || "off";
   migrated.backupReminder.lastBackupAt = migrated.backupReminder.lastBackupAt || "";
   migrated.backupReminder.lastPromptDate = migrated.backupReminder.lastPromptDate || "";
@@ -840,11 +856,30 @@ function toggleAutoSaveRegistryFromDiary(){
   showToast("Saved");
 }
 function toggleLocationPickerEnabled(){
-  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {locationPickerEnabled:true};
+  ensureUiSettings();
   state.uiSettings.locationPickerEnabled = !!($("locationPickerEnabled") && $("locationPickerEnabled").checked);
   document.body.classList.toggle("locationPickerOff", !state.uiSettings.locationPickerEnabled);
   saveSoon();
   renderChangeDetailsEditor();
+  showToast("Saved");
+}
+function applyAppThemeMode(){
+  ensureUiSettings();
+  const mode = ["system","light","dark"].includes(state.uiSettings.themeMode) ? state.uiSettings.themeMode : "system";
+  document.body.classList.toggle("themeLight", mode === "light");
+  document.body.classList.toggle("themeDark", mode === "dark");
+  document.body.classList.toggle("themeSystem", mode === "system");
+  try{
+    document.documentElement.style.colorScheme = mode === "dark" ? "dark" : (mode === "light" ? "light" : "light dark");
+  }catch(e){}
+}
+function saveAppThemeMode(){
+  ensureUiSettings();
+  const el = $("appThemeMode");
+  state.uiSettings.themeMode = el ? el.value : "system";
+  if(!["system","light","dark"].includes(state.uiSettings.themeMode)) state.uiSettings.themeMode = "system";
+  applyAppThemeMode();
+  saveSoon();
   showToast("Saved");
 }
 function openVehicleEditor(id){
@@ -999,9 +1034,7 @@ function renderVehicleDriverRegistry(){
       </button>`).join("") : `<p class="hint">No saved drivers yet.</p>`;
     driverList.querySelectorAll("[data-driver-id]").forEach(btn => btn.onclick = () => openSavedDriverEditor(btn.dataset.driverId));
   }
-  if(!state.uiSettings || typeof state.uiSettings !== "object") state.uiSettings = {locationPickerEnabled:true};
-  if($("locationPickerEnabled")) $("locationPickerEnabled").checked = state.uiSettings.locationPickerEnabled !== false;
-  document.body.classList.toggle("locationPickerOff", state.uiSettings.locationPickerEnabled === false);
+  renderUiSettings();
 }
 function autoSaveRegistryFromDiaryPage(key){
   ensureRegistryState();
@@ -4331,6 +4364,120 @@ function renderTotals(){
   const t=totalsForDay();
   $("totalWork").textContent=minsToHoursText(t.work);
   $("totalRest").textContent=minsToHoursText(t.rest);
+  scheduleWindowTotalsRender();
+}
+
+let windowTotalsTimer = null;
+let windowTotalsCacheKey = "";
+let windowTotalsCacheHtml = "";
+function windowHoursText(mins){
+  mins = Math.max(0, Math.round(mins || 0));
+  const h = Math.floor(mins/60);
+  const m = mins % 60;
+  return `${h}.${pad(m)}`;
+}
+function formatWindowDateTimeShort(abs){
+  const d = new Date(abs);
+  const date = d.toLocaleDateString("en-AU",{day:"numeric", month:"short"});
+  const time = d.toLocaleTimeString("en-AU",{hour:"numeric", minute:"2-digit"}).replace(/\s+/g,"").toLowerCase();
+  return `${date} ${time}`;
+}
+function selectedDaySignatureForWindow(key){
+  try{
+    const slots = state.slots && state.slots[key] ? state.slots[key] : [];
+    const detail = state.dayDetails && state.dayDetails[key] ? JSON.stringify({pageStatus:state.dayDetails[key].pageStatus, ruleScheme:state.dayDetails[key].ruleScheme, driverMode:state.dayDetails[key].driverMode, twoUpEnabled:state.dayDetails[key].twoUpEnabled}) : "";
+    return `${key}|${state.scheme}|${slots.join("")}|${detail}|${typeof perfKey === "function" ? perfKey() : ""}`;
+  }catch(e){ return `${key}|${Date.now()}`; }
+}
+function collectCandidateAsOfForWindow(key){
+  const dayStart = fromKey(key).getTime();
+  const stepMs = SLOT*60000;
+  const out = new Set();
+  const slots = state.slots && state.slots[key] ? state.slots[key] : [];
+  for(let i=0;i<SLOTS_PER_DAY;i++){
+    if(slots[i] === "work"){
+      // End of each contiguous work segment is a useful point for finding the active 24h window.
+      if(i === SLOTS_PER_DAY-1 || slots[i+1] !== "work") out.add(dayStart + (i+1)*stepMs - 1);
+      if(i === 0 || slots[i-1] !== "work") out.add(dayStart + i*stepMs + 1);
+    }
+  }
+  out.add(dayStart + DAY_MS - stepMs);  // diary-page planning view
+  out.add(dayStart + 12*60*60000);      // mid-day fallback
+  return Array.from(out).filter(Number.isFinite).sort((a,b)=>a-b);
+}
+function workBetweenForWindow(startAbs, endAbs){
+  try{
+    if(typeof nhvrV2CountWork === "function") return nhvrV2CountWork(startAbs, endAbs);
+    if(typeof nhvrWorkBetween === "function") return nhvrWorkBetween(startAbs, endAbs);
+  }catch(e){}
+  let mins = 0;
+  const stepMs = SLOT*60000;
+  for(let t=startAbs; t<endAbs; t+=stepMs){
+    const ks = absToKeySlot(t + 1);
+    if(isWork(ks.key, ks.slot)) mins += SLOT;
+  }
+  return mins;
+}
+function findBest24hWindowForSelectedDay(key){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const candidates = [];
+  collectCandidateAsOfForWindow(key).forEach(asOfAbs => {
+    let wins = [];
+    try{ wins = typeof nhvrActiveWindows === "function" ? nhvrActiveWindows(asOfAbs) : []; }catch(e){ wins = []; }
+    wins.forEach(w => {
+      if(String(w.label || "").replace(/\s+/g,"").toLowerCase().startsWith("24h") && Number.isFinite(w.startAbs) && Number.isFinite(w.endAbs)){
+        const id = `${w.startAbs}-${w.endAbs}-${w.maxWork || ""}`;
+        if(!candidates.some(x => x.id === id)){
+          const startsOnSelectedDay = w.startAbs >= dayStart && w.startAbs < dayEnd ? 1 : 0;
+          const overlap = Math.max(0, Math.min(dayEnd,w.endAbs) - Math.max(dayStart,w.startAbs));
+          const dayWork = workBetweenForWindow(Math.max(dayStart,w.startAbs), Math.min(dayEnd,w.endAbs));
+          candidates.push({id, ...w, startsOnSelectedDay, overlap, dayWork});
+        }
+      }
+    });
+  });
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>{
+    if(b.startsOnSelectedDay !== a.startsOnSelectedDay) return b.startsOnSelectedDay - a.startsOnSelectedDay;
+    if(b.dayWork !== a.dayWork) return b.dayWork - a.dayWork;
+    if(b.overlap !== a.overlap) return b.overlap - a.overlap;
+    return b.startAbs - a.startAbs;
+  });
+  return candidates[0];
+}
+function buildWindowTotalsHtml(key){
+  const w = findBest24hWindowForSelectedDay(key);
+  if(!w) return `<div class="windowTotalsLine">24h Wdw: Not found yet</div><div class="windowTotalsSub">Add earlier rest/work blocks if this looks wrong.</div>`;
+  const maxWork = Number.isFinite(w.maxWork) ? w.maxWork : (schemeForDate(key) === "Standard" ? 720 : 840);
+  const work = workBetweenForWindow(w.startAbs, w.endAbs);
+  const bal = maxWork - work;
+  const bad = bal < 0;
+  const balText = bad ? `Over: ${windowHoursText(Math.abs(bal))} hrs` : `Bal: ${windowHoursText(bal)} hrs`;
+  return `<div class="windowTotalsLine">24h Wdw: ${escapeHtml(formatWindowDateTimeShort(w.startAbs))} - ${escapeHtml(formatWindowDateTimeShort(w.endAbs))}</div><div class="windowTotalsSub ${bad ? "bad" : ""}">Wrk: ${windowHoursText(work)} hrs&nbsp;&nbsp;&nbsp; ${balText}</div>`;
+}
+function scheduleWindowTotalsRender(){
+  const el = $("windowTotals");
+  if(!el) return;
+  const key = state.selectedDate || toKey(new Date());
+  const sig = selectedDaySignatureForWindow(key);
+  if(sig === windowTotalsCacheKey && windowTotalsCacheHtml){
+    el.innerHTML = windowTotalsCacheHtml;
+    return;
+  }
+  el.innerHTML = `<div class="windowTotalsLine">24h Wdw: calculating…</div><div class="windowTotalsSub">Wrk: — &nbsp;&nbsp;&nbsp; Bal: —</div>`;
+  clearTimeout(windowTotalsTimer);
+  windowTotalsTimer = setTimeout(() => {
+    try{
+      const html = buildWindowTotalsHtml(key);
+      windowTotalsCacheKey = sig;
+      windowTotalsCacheHtml = html;
+      if($("windowTotals")) $("windowTotals").innerHTML = html;
+    }catch(err){
+      console.error("24h window summary failed", err);
+      if($("windowTotals")) $("windowTotals").innerHTML = `<div class="windowTotalsLine">24h Wdw: Check Stats</div><div class="windowTotalsSub">Could not refresh this helper row.</div>`;
+    }
+  }, 80);
 }
 function renderAlertsFast(){
   const a = $("alerts");
@@ -4620,7 +4767,7 @@ function buildJsonBackup(){
     vehicles: safeClone(state.vehicles || []),
     savedDrivers: safeClone(state.savedDrivers || []),
     registrySettings: safeClone(state.registrySettings || {autoSaveFromDiary:true}),
-    uiSettings: safeClone(state.uiSettings || {locationPickerEnabled:true}),
+    uiSettings: safeClone(state.uiSettings || {locationPickerEnabled:true, themeMode:"system"}),
     diaryBooks: safeClone(state.diaryBooks || []),
     calculationHistory: safeClone(state.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"}),
     shortBreakSettings: safeClone(state.shortBreakSettings || {mode:"smart", maxMinutes:60}),
@@ -4720,7 +4867,7 @@ function importJsonBackupFromFile(file){
       state.vehicles = migrated.vehicles || [];
       state.savedDrivers = migrated.savedDrivers || [];
       state.registrySettings = migrated.registrySettings || {autoSaveFromDiary:true};
-      state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true};
+      state.uiSettings = migrated.uiSettings || {locationPickerEnabled:true, themeMode:"system"};
       state.diaryBooks = migrated.diaryBooks || [];
       state.calculationHistory = migrated.calculationHistory || {};
       state.shortBreakSettings = migrated.shortBreakSettings || {mode:"smart", maxMinutes:60};
@@ -5030,6 +5177,7 @@ function setup(){
   if($("refreshGraphPageBtn")) $("refreshGraphPageBtn").onclick = refreshGraphPageOnly;
   if($("refreshGraphDefaultsBtn")) $("refreshGraphDefaultsBtn").onclick = reapplyCurrentDefaultsToPage;
   if($("locationPickerEnabled")) $("locationPickerEnabled").onchange = toggleLocationPickerEnabled;
+  if($("appThemeMode")) $("appThemeMode").onchange = saveAppThemeMode;
   document.addEventListener("visibilitychange", () => { if(document.hidden) flushSaveSoon(); });
   window.addEventListener("pagehide", flushSaveSoon);
   setupVehicleDriverRegistryButtons();
@@ -5356,7 +5504,7 @@ function nfBuildStorageObject(src){
     vehicles:safeClone(src.vehicles || []),
     savedDrivers:safeClone(src.savedDrivers || []),
     registrySettings:safeClone(src.registrySettings || {autoSaveFromDiary:true}),
-    uiSettings:safeClone(src.uiSettings || {locationPickerEnabled:true}),
+    uiSettings:safeClone(src.uiSettings || {locationPickerEnabled:true, themeMode:"system"}),
     diaryBooks:safeClone(src.diaryBooks || []),
     calculationHistory:safeClone(src.calculationHistory || {startDate:"", mode:"noWorkBeforeStart"}),
     shortBreakSettings:safeClone(src.shortBreakSettings || {mode:"smart", maxMinutes:60}),
@@ -9711,3 +9859,15 @@ try{
   if($("jsonImportFile")) $("jsonImportFile").onchange = e => importJsonBackupFromFile(e.target.files[0]);
   if($("exportJsonBackup")) $("exportJsonBackup").onclick = exportJsonBackup;
 }catch(e){}
+
+
+/* 24h window summary + app theme control safety bindings */
+try{
+  ensureUiSettings();
+  applyAppThemeMode();
+  if($("appThemeMode")){
+    $("appThemeMode").value = state.uiSettings.themeMode || "system";
+    $("appThemeMode").onchange = saveAppThemeMode;
+  }
+  if($("windowTotals")) scheduleWindowTotalsRender();
+}catch(e){ console.error("Window/theme startup helper failed", e); }

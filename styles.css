@@ -1945,3 +1945,107 @@ body.homeScreenPwa .card{
 .bookHistoryActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 button.tiny{font-size:12px!important;padding:7px 10px!important;min-height:34px!important;border-radius:10px!important}
 .startupWarn{margin:10px 12px!important}
+
+
+/* 24h counted-window helper row + app appearance setting */
+.windowTotals{
+  background:var(--teal);
+  color:#fff;
+  border-top:1px solid rgba(255,255,255,.45);
+  border-bottom:1px solid rgba(255,255,255,.45);
+  text-align:center;
+  padding:7px 6px 8px;
+  line-height:1.2;
+  font-weight:800;
+  contain:layout paint;
+}
+.windowTotalsLine{
+  font-size:16px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.windowTotalsSub{
+  margin-top:4px;
+  font-size:17px;
+  white-space:nowrap;
+}
+.windowTotalsSub.bad{
+  color:#ffe2e2;
+  text-shadow:0 1px 0 rgba(0,0,0,.25);
+}
+body.themeLight,
+body.themeLight .app,
+body.themeLight .screen,
+body.themeLight .card{
+  background:#fff!important;
+  color:#111!important;
+}
+body.themeLight input,
+body.themeLight select,
+body.themeLight textarea{
+  background:#fff!important;
+  color:#111!important;
+  -webkit-text-fill-color:#111!important;
+}
+body.themeLight .hint{color:#555!important}
+body.themeLight .diaryGrid,
+body.themeLight .rowLabel,
+body.themeLight .hourLabel,
+body.themeLight .slot.empty{background:#fff!important;color:#111!important}
+body.themeLight .changeTable,
+body.themeLight .changeTable th,
+body.themeLight .changeTable td{background:#fff!important;color:#111!important}
+body.themeLight .registryItem,
+body.themeLight .bookHistoryItem,
+body.themeLight .bookActionBox,
+body.themeLight .smartMajorRestBox,
+body.themeLight .calculationHistoryBox,
+body.themeLight .appUpdateBox,
+body.themeLight .appUpdatePanel{
+  background:#fff!important;
+  color:#111!important;
+  border-color:#ddd!important;
+}
+body.themeLight .stats14DayTable,
+body.themeLight .stats14Table,
+body.themeLight .stats14Table th,
+body.themeLight .stats14Table td{
+  background:#fff!important;
+  color:#111!important;
+}
+body.themeDark,
+body.themeDark .app,
+body.themeDark .screen{
+  background:#0d0d0d!important;
+  color:#f2f2f2!important;
+}
+body.themeDark .card,
+body.themeDark .registryItem,
+body.themeDark .bookHistoryItem,
+body.themeDark .bookActionBox,
+body.themeDark .smartMajorRestBox,
+body.themeDark .calculationHistoryBox,
+body.themeDark .appUpdateBox,
+body.themeDark .appUpdatePanel{
+  background:#151515!important;
+  color:#f2f2f2!important;
+  border-color:#333!important;
+}
+body.themeDark input,
+body.themeDark select,
+body.themeDark textarea{
+  background:#111!important;
+  color:#f2f2f2!important;
+  -webkit-text-fill-color:#f2f2f2!important;
+  border-color:#555!important;
+}
+body.themeDark .hint{color:#c8c8c8!important}
+body.themeDark .diaryGrid,
+body.themeDark .rowLabel,
+body.themeDark .hourLabel,
+body.themeDark .slot.empty{background:#fff!important;color:#111!important}
+@media (max-width:360px){
+  .windowTotalsLine{font-size:14px}
+  .windowTotalsSub{font-size:15px}
+}

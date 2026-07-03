@@ -114,6 +114,10 @@
         <div>Total Work: <strong id="totalWork">0 Hours</strong></div>
         <div>Total Rest: <strong id="totalRest">24 Hours</strong></div>
       </div>
+      <div id="windowTotals" class="windowTotals" aria-live="polite">
+        <div class="windowTotalsLine">24h Wdw: calculating…</div>
+        <div class="windowTotalsSub">Wrk: — &nbsp;&nbsp;&nbsp; Bal: —</div>
+      </div>
 
       <section class="card">
         <h2>Daily sheet details</h2>
@@ -439,6 +443,14 @@
 
       <section class="card">
         <h2>Settings</h2>
+        <label>App appearance
+          <select id="appThemeMode">
+            <option value="system">Default / follow phone</option>
+            <option value="light">Light mode always</option>
+            <option value="dark">Dark mode always</option>
+          </select>
+        </label>
+        <p class="hint">Use Light mode always if your iPhone turns dark mode on at night but you want this app to stay bright.</p>
         <label>Scheme
           <select id="schemeSelect">
             <option value="Standard">Standard Hours Solo</option>

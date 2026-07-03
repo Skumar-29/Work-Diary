@@ -1,8 +1,23 @@
-Truck Work Diary PWA - clean-engine-no-freeze-fast-backup
+Truck Work Diary PWA - clean-engine-24h-window-theme-control
 
-Schema: 60
-Service worker cache: truck-work-diary-v96-no-freeze-fast-backup
+Upload these files to the GitHub Pages app folder/root:
+- index.html
+- styles.css
+- app.js
+- manifest.json
+- service-worker.js
+- icon-192.png
+- icon-512.png
 
-This build is based on the smoother instant-grid version and fixes backup import freeze/slowness. It keeps final Work/Rest slots as the source of truth, removes old tap/swipe action history on import when final slots exist, stores future backups in compact slotsCompact format, and does not change the NHVR fatigue calculation engine.
+Build: clean-engine-24h-window-theme-control
+Schema: 61
+Cache: truck-work-diary-v97-window-theme-control
 
-Upload these files to the GitHub Pages root: index.html, app.js, styles.css, manifest.json, service-worker.js, icon-192.png, icon-512.png.
+Main changes:
+- Adds a compact 24h counted-window helper row under Total Work / Total Rest.
+- Shows 24h window start/end, worked time in that counted window, and remaining/balance work time.
+- Adds Settings > App appearance with Default / Light / Dark options.
+- Keeps NHVR counted-period calculation engine unchanged.
+- Keeps no-freeze fast backup/import base.
+
+After upload, open the app and use Settings > App updates > Clean App Cache Safely if the old version remains cached.
