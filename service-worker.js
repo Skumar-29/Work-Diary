@@ -1,4 +1,4 @@
-const CACHE = "truck-work-diary-v97-window-theme-control";
+const CACHE = "truck-work-diary-v98-window-end-theme-refresh";
 const ASSETS = ["index.html","styles.css","app.js","manifest.json","icon-192.png","icon-512.png"];
 
 async function putIfSafe(cache, key, response){

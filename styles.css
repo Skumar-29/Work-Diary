@@ -2049,3 +2049,44 @@ body.themeDark .slot.empty{background:#fff!important;color:#111!important}
   .windowTotalsLine{font-size:14px}
   .windowTotalsSub{font-size:15px}
 }
+
+
+/* v62: readable due-break boxes + light stats rows even when phone auto dark mode is on */
+#statsBreaksDue .statRow,
+#statsBreaksDue .duePlannerRow{
+  background:#eefcff!important;
+  color:#123!important;
+  border:1px solid #c7edf5!important;
+  border-radius:12px!important;
+  padding:10px 11px!important;
+  border-bottom:1px solid #c7edf5!important;
+}
+#statsBreaksDue .statRow strong,
+#statsBreaksDue .duePlannerRow strong{color:#102a43!important;}
+#statsBreaksDue .statRow span,
+#statsBreaksDue .duePlannerRow span{color:#183b56!important;}
+#statsBreaksDue .statRow small,
+#statsBreaksDue .duePlannerRow small{color:#52606d!important;}
+#statsBreaksDue .duePlannerRow.dueOk{background:#eefcf6!important;border-color:#b7ecd1!important;border-left:5px solid #37a169!important;}
+#statsBreaksDue .duePlannerRow.dueWarn{background:#fff9db!important;border-color:#f1de9a!important;border-left:5px solid #d69e2e!important;}
+#statsBreaksDue .duePlannerRow.dueBad{background:#fff1f1!important;border-color:#f2c0c0!important;border-left:5px solid #e53e3e!important;}
+body.themeDark #statsBreaksDue .statRow,
+body.themeDark #statsBreaksDue .duePlannerRow,
+body.themeSystem #statsBreaksDue .statRow,
+body.themeSystem #statsBreaksDue .duePlannerRow{
+  background:#eefcff!important;
+  color:#123!important;
+}
+@media (prefers-color-scheme: dark){
+  #statsBreaksDue .statRow,
+  #statsBreaksDue .duePlannerRow{background:#eefcff!important;color:#123!important;border-color:#c7edf5!important;}
+  #statsBreaksDue .statRow strong,
+  #statsBreaksDue .duePlannerRow strong{color:#102a43!important;}
+  #statsBreaksDue .statRow span,
+  #statsBreaksDue .duePlannerRow span{color:#183b56!important;}
+  #statsBreaksDue .statRow small,
+  #statsBreaksDue .duePlannerRow small{color:#52606d!important;}
+  #statsBreaksDue .duePlannerRow.dueOk{background:#eefcf6!important;border-color:#b7ecd1!important;}
+  #statsBreaksDue .duePlannerRow.dueWarn{background:#fff9db!important;border-color:#f1de9a!important;}
+  #statsBreaksDue .duePlannerRow.dueBad{background:#fff1f1!important;border-color:#f2c0c0!important;}
+}

@@ -1,5 +1,5 @@
-const APP_SCHEMA_VERSION = 61;
-const APP_BUILD_NAME = "clean-engine-24h-window-theme-control";
+const APP_SCHEMA_VERSION = 62;
+const APP_BUILD_NAME = "clean-engine-window-end-theme-refresh";
 const DAY_MS = 86400000;
 const SLOT = 15;
 const SLOTS_PER_DAY = 96;
@@ -9871,3 +9871,151 @@ try{
   }
   if($("windowTotals")) scheduleWindowTotalsRender();
 }catch(e){ console.error("Window/theme startup helper failed", e); }
+
+
+/* =========================================================
+   WINDOW-END + LIGHT DUE BOX + FAST GRAPH REFRESH PATCH v62
+   Scope:
+   - 24h helper row now prefers the counted 24h window that ENDS on the selected page date.
+     Example: on 1 Jul it shows 30 Jun 8:30pm - 1 Jul 8:30pm, not 1 Jul - 2 Jul.
+   - Date/prev/next navigation refreshes the currently open screen, especially Graph, without forcing heavy diary refresh.
+   - Stats break-due rows keep a light readable background even when the phone/app is in dark mode.
+   - NHVR fatigue calculation engine functions are not changed.
+   ========================================================= */
+const WINDOW_END_THEME_REFRESH_VERSION = "window-end-theme-refresh-v1";
+
+function finalWindowDateRangeSig(key){
+  try{
+    const keys = [addDays(key,-1), key, addDays(key,1)];
+    return keys.map(k => {
+      const arr = state.slots && Array.isArray(state.slots[k]) ? state.slots[k] : [];
+      let sig = "";
+      for(let i=0;i<SLOTS_PER_DAY;i++) sig += arr[i] === "work" ? "W" : "R";
+      const d = state.dayDetails && state.dayDetails[k] ? state.dayDetails[k] : {};
+      return `${k}:${sig}:${d.ruleScheme||""}:${d.driverMode||""}:${d.twoUpEnabled?1:0}`;
+    }).join("|");
+  }catch(e){ return `${key}|${Date.now()}`; }
+}
+
+selectedDaySignatureForWindow = function(key){
+  try{
+    return `${key}|${state.scheme}|${finalWindowDateRangeSig(key)}|${typeof perfKey === "function" ? perfKey() : ""}`;
+  }catch(e){ return `${key}|${Date.now()}`; }
+};
+
+function finalCandidateAsOfsForWindow(key){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const set = new Set();
+  try{ collectCandidateAsOfForWindow(key).forEach(v => set.add(v)); }catch(e){}
+  // Cheap fixed probes make sure a window that started yesterday and ends today is seen.
+  [1, 6*60, 12*60, 18*60, 23*60+45].forEach(m => set.add(dayStart + m*60000));
+  return Array.from(set).filter(v => Number.isFinite(v) && v >= dayStart && v < dayEnd).sort((a,b)=>a-b);
+}
+
+findBest24hWindowForSelectedDay = function(key){
+  const dayStart = fromKey(key).getTime();
+  const dayEnd = dayStart + DAY_MS;
+  const candidates = [];
+  finalCandidateAsOfsForWindow(key).forEach(asOfAbs => {
+    let wins = [];
+    try{ wins = typeof nhvrActiveWindows === "function" ? nhvrActiveWindows(asOfAbs) : []; }catch(e){ wins = []; }
+    (wins || []).forEach(w => {
+      const label = String(w.label || "").replace(/\s+/g, "").toLowerCase();
+      if(!label.startsWith("24h") || !Number.isFinite(w.startAbs) || !Number.isFinite(w.endAbs)) return;
+      const id = `${w.startAbs}-${w.endAbs}-${w.maxWork || ""}`;
+      if(candidates.some(x => x.id === id)) return;
+      const overlap = Math.max(0, Math.min(dayEnd,w.endAbs) - Math.max(dayStart,w.startAbs));
+      if(overlap <= 0) return;
+      const dayWork = workBetweenForWindow(Math.max(dayStart,w.startAbs), Math.min(dayEnd,w.endAbs));
+      const endsOnSelectedDay = (w.endAbs > dayStart && w.endAbs <= dayEnd) ? 1 : 0;
+      const startsOnSelectedDay = (w.startAbs >= dayStart && w.startAbs < dayEnd) ? 1 : 0;
+      const crossesIntoSelectedDay = (w.startAbs < dayStart && w.endAbs > dayStart) ? 1 : 0;
+      // Main requested behaviour: when a 24h window finishes on this diary page date, show that window first.
+      const relevance = endsOnSelectedDay ? 50 : (dayWork > 0 ? 30 : (startsOnSelectedDay ? 20 : (crossesIntoSelectedDay ? 10 : 0)));
+      candidates.push({id, ...w, overlap, dayWork, endsOnSelectedDay, startsOnSelectedDay, crossesIntoSelectedDay, relevance});
+    });
+  });
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>{
+    if(b.relevance !== a.relevance) return b.relevance - a.relevance;
+    if(b.dayWork !== a.dayWork) return b.dayWork - a.dayWork;
+    if(b.overlap !== a.overlap) return b.overlap - a.overlap;
+    return b.endAbs - a.endAbs;
+  });
+  return candidates[0];
+};
+
+// Faster helper-row refresh. It still waits briefly so block painting happens first.
+scheduleWindowTotalsRender = function(){
+  const el = $("windowTotals");
+  if(!el) return;
+  const key = state.selectedDate || toKey(new Date());
+  const sig = selectedDaySignatureForWindow(key);
+  if(sig === windowTotalsCacheKey && windowTotalsCacheHtml){
+    el.innerHTML = windowTotalsCacheHtml;
+    return;
+  }
+  el.innerHTML = `<div class="windowTotalsLine">24h Wdw: calculating…</div><div class="windowTotalsSub">Wrk: — &nbsp;&nbsp;&nbsp; Bal: —</div>`;
+  clearTimeout(windowTotalsTimer);
+  windowTotalsTimer = setTimeout(() => {
+    try{
+      const html = buildWindowTotalsHtml(key);
+      windowTotalsCacheKey = sig;
+      windowTotalsCacheHtml = html;
+      if($("windowTotals")) $("windowTotals").innerHTML = html;
+    }catch(err){
+      console.error("24h window summary failed", err);
+      if($("windowTotals")) $("windowTotals").innerHTML = `<div class="windowTotalsLine">24h Wdw: Check Stats</div><div class="windowTotalsSub">Could not refresh this helper row.</div>`;
+    }
+  }, 35);
+};
+
+function finalLightweightDateRefresh(key){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(key||""))) return;
+  state.selectedDate = key;
+  try{ applyAutoDefaultsToDay(key); }catch(e){}
+  try{ saveSoon(); }catch(e){}
+  const activeId = (typeof turboSafeActiveScreenId === "function" ? turboSafeActiveScreenId() : ((document.querySelector(".screen.active")||{}).id || "diaryScreen"));
+  try{ renderDate(); }catch(e){}
+  try{ renderTimer(); }catch(e){}
+  if(activeId === "graphScreen"){
+    try{ renderGraphPage(); }catch(err){ console.warn("Graph auto refresh failed", err); }
+  }else if(activeId === "statsScreen"){
+    try{ renderStatistics(); }catch(err){ console.warn("Stats refresh failed", err); }
+  }else if(activeId === "drivingScreen"){
+    try{ renderRuleCards(); renderNextBreak(); renderTodayAdvice(); renderAuditList(); renderComplianceConfidence(); if(typeof renderAuditFixPanel === "function") renderAuditFixPanel(); }catch(err){ console.warn("Driving refresh failed", err); }
+  }else if(activeId === "vehiclesScreen"){
+    try{ renderVehicleDriverRegistry(); }catch(err){}
+  }else if(activeId === "settingsScreen"){
+    try{ renderDriverSettings(); if(typeof renderDiaryBookHistory === "function") renderDiaryBookHistory(); renderBackupReminderSettings(); renderAuditLog(); if(typeof renderAppUpdateSettings === "function") renderAppUpdateSettings(); }catch(err){}
+  }else{
+    try{ renderDiaryFast(); }catch(err){ console.warn("Diary fast refresh failed", err); }
+  }
+}
+
+function finalRebindFastDateNavigation(){
+  try{
+    if($("prevDay")) $("prevDay").onclick = () => finalLightweightDateRefresh(addDays(state.selectedDate, -1));
+    if($("nextDay")) $("nextDay").onclick = () => finalLightweightDateRefresh(addDays(state.selectedDate, 1));
+    if($("todayBtn")) $("todayBtn").onclick = () => finalLightweightDateRefresh(toKey(new Date()));
+    if($("datePicker")) $("datePicker").onchange = e => finalLightweightDateRefresh(e.target.value);
+    document.querySelectorAll(".tabbar button").forEach(btn => {
+      btn.onclick = () => {
+        try{ safeSwitchTab(btn.dataset.tab); }catch(e){}
+        const tab = btn.dataset.tab;
+        if(tab === "graphScreen"){
+          try{ renderDate(); renderTimer(); renderGraphPage(); }catch(err){ console.warn("Graph tab render failed", err); }
+        }else{
+          try{ fastRenderActiveScreen(tab); }catch(err){ console.warn("Tab render failed", err); }
+        }
+      };
+    });
+  }catch(err){ console.warn("Final fast date navigation binding failed", err); }
+}
+setTimeout(finalRebindFastDateNavigation, 30);
+setTimeout(finalRebindFastDateNavigation, 500);
+
+try{
+  if($("windowTotals")) scheduleWindowTotalsRender();
+}catch(e){}
