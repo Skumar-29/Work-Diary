@@ -1,0 +1,597 @@
+{
+  "status": "Upload interrupted by execution environment disconnection; this is not a complete or runnable release.",
+  "baseCommit": "1b040348eded789ab9fdb33e0d5c1c5329485acd",
+  "localSourceDirectory": "work-diary-app",
+  "expectedFiles": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "sha": "2ed526fb2a22887af58af6d7fb39f394f7a8afb2",
+      "size": 71
+    },
+    {
+      "path": ".github/workflows/check.yml",
+      "mode": "100644",
+      "sha": "1995ae042557c4ea8853973ef1db5e25bf9916f9",
+      "size": 532
+    },
+    {
+      "path": ".github/workflows/deploy.yml",
+      "mode": "100644",
+      "sha": "b5c6346d5bff985bafa219a544b365e3dc5b2546",
+      "size": 889
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "sha": "c53818be63d4923f67872ccba3b42dea99a62762",
+      "size": 79
+    },
+    {
+      "path": "CNAME",
+      "mode": "100644",
+      "sha": "cdf623ac08b5cc45556fd245dcea49abb5c28b20",
+      "size": 30
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "sha": "3ebef657bb087856c3e5379eea3c1773872bbf88",
+      "size": 6678
+    },
+    {
+      "path": "VERIFICATION.md",
+      "mode": "100644",
+      "sha": "5f431849a2301f0ac60bf0b06e75fe0a74eabf1c",
+      "size": 2681
+    },
+    {
+      "path": "index.html",
+      "mode": "100644",
+      "sha": "c9a5a1758191b01b71fda0f7d53fbe5d10d267d2",
+      "size": 569
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "sha": "3bb6e904b53328a54ba46a96bcbe313565c1e80b",
+      "size": 51076
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "sha": "697c187cdb5ce8f2a72c6065d86b52ab98715ab2",
+      "size": 726
+    },
+    {
+      "path": "playwright.config.ts",
+      "mode": "100644",
+      "sha": "13372ade2b1e7d12e7c4d9a5bb0d27c91aa56322",
+      "size": 956
+    },
+    {
+      "path": "public/CNAME",
+      "mode": "100644",
+      "sha": "cdf623ac08b5cc45556fd245dcea49abb5c28b20",
+      "size": 30
+    },
+    {
+      "path": "public/icon-192.png",
+      "mode": "100644",
+      "sha": "799d03a28cda3b8e39ebeca972d4173ae199ca72",
+      "size": 1258
+    },
+    {
+      "path": "public/icon-512.png",
+      "mode": "100644",
+      "sha": "30170b6d1afbba15696f93c531e3c05ac94f657d",
+      "size": 2954
+    },
+    {
+      "path": "public/manifest.webmanifest",
+      "mode": "100644",
+      "sha": "d7f15d6e31a68b7ca804cd842926553a07a803fe",
+      "size": 453
+    },
+    {
+      "path": "scripts/build-sw.mjs",
+      "mode": "100644",
+      "sha": "83fd33b7753602cd83f7a07aa05cf129b22996c1",
+      "size": 1919
+    },
+    {
+      "path": "scripts/test-server.mjs",
+      "mode": "100644",
+      "sha": "a74e5657b7f6e7f1eb38b038b1fa491f3f703ebf",
+      "size": 1204
+    },
+    {
+      "path": "src/App.tsx",
+      "mode": "100644",
+      "sha": "8d0ca8fd9bf41871079ce96534ca94b4ca681f1d",
+      "size": 12228
+    },
+    {
+      "path": "src/components/Document.tsx",
+      "mode": "100644",
+      "sha": "e26fbfe184a2a934a65611622ea35c4d1b42cacb",
+      "size": 1337
+    },
+    {
+      "path": "src/components/Location.tsx",
+      "mode": "100644",
+      "sha": "3d3e68dd8042d82d8b5c53f4ced3c77db95fdaca",
+      "size": 4466
+    },
+    {
+      "path": "src/components/Signature.tsx",
+      "mode": "100644",
+      "sha": "4b6cf3bceda703bd85e499ca6e61dd365a2c0c6a",
+      "size": 2850
+    },
+    {
+      "path": "src/components/UI.tsx",
+      "mode": "100644",
+      "sha": "e2f0196f828ab38f2f5cc14d9a400f59357e7e78",
+      "size": 5558
+    },
+    {
+      "path": "src/context.tsx",
+      "mode": "100644",
+      "sha": "3c94757fdee09bab04ee4e42c0e39cc76a42e725",
+      "size": 3538
+    },
+    {
+      "path": "src/documents/common.js",
+      "mode": "100644",
+      "sha": "0a8f5ffcc80cd3455b029c734fd22551b51c0d43",
+      "size": 1309
+    },
+    {
+      "path": "src/documents/diary-pages.js",
+      "mode": "100644",
+      "sha": "0e751466d86738b2c595fca2bc048f6cede527aa",
+      "size": 16221
+    },
+    {
+      "path": "src/documents/excel.ts",
+      "mode": "100644",
+      "sha": "65db0c203a120539299f694d1d2e8ff17b73035c",
+      "size": 7531
+    },
+    {
+      "path": "src/documents/form-backgrounds.json",
+      "mode": "100644",
+      "sha": "768eed84c90461a1681e3113c61e40d5d65873f8",
+      "size": 646837
+    },
+    {
+      "path": "src/documents/form-pages.js",
+      "mode": "100644",
+      "sha": "3c376dc00c6fdc201a15356a2d79a6bc8a811294",
+      "size": 11044
+    },
+    {
+      "path": "src/documents/invoice-pages.js",
+      "mode": "100644",
+      "sha": "5826dac497a721f9f6f39dbc902215417705d322",
+      "size": 11402
+    },
+    {
+      "path": "src/documents/pdf.ts",
+      "mode": "100644",
+      "sha": "b2cc309a0b9c9fbb4ed9acb9b99cf432e23258bd",
+      "size": 1848
+    },
+    {
+      "path": "src/documents/templates.js",
+      "mode": "100644",
+      "sha": "48cc5172a79b71d75e35538b34600f90fcfb6bdd",
+      "size": 145
+    },
+    {
+      "path": "src/domain/backup.ts",
+      "mode": "100644",
+      "sha": "73d4c6692428f05099d1dd72b09060ff6969c7eb",
+      "size": 20117
+    },
+    {
+      "path": "src/domain/diary.ts",
+      "mode": "100644",
+      "sha": "1cd365247253ddef69daa5feed25730915f129ff",
+      "size": 8261
+    },
+    {
+      "path": "src/domain/encryption.ts",
+      "mode": "100644",
+      "sha": "c55cb225e3e9a6ccfcd3c18e4d7b4501b1163057",
+      "size": 1952
+    },
+    {
+      "path": "src/domain/forms.ts",
+      "mode": "100644",
+      "sha": "a5475ed9eb3d07c4c18c702ffdb79fd2664ca9ea",
+      "size": 6635
+    },
+    {
+      "path": "src/domain/invoices.ts",
+      "mode": "100644",
+      "sha": "f5da09fcac604c094c248ac0d4f4c6a9068c9c4c",
+      "size": 9172
+    },
+    {
+      "path": "src/domain/model.ts",
+      "mode": "100644",
+      "sha": "95c13a4521bffb6d382067987ffffcfb6fe919a0",
+      "size": 8402
+    },
+    {
+      "path": "src/domain/rules.ts",
+      "mode": "100644",
+      "sha": "d9f429373c8947d521c380d898d6fdbb3ad4322b",
+      "size": 17602
+    },
+    {
+      "path": "src/domain/rules.worker.ts",
+      "mode": "100644",
+      "sha": "250607d67e431bd7c235485d77d09c431052b947",
+      "size": 410
+    },
+    {
+      "path": "src/domain/time.ts",
+      "mode": "100644",
+      "sha": "3bf03b7b9041a82e10c1eef2d7616ccc51a6d05c",
+      "size": 3289
+    },
+    {
+      "path": "src/main.tsx",
+      "mode": "100644",
+      "sha": "c51130ab9f969ec0134254ecec4e5e9b1a433845",
+      "size": 896
+    },
+    {
+      "path": "src/screens/Diary.tsx",
+      "mode": "100644",
+      "sha": "426a590aad273791fdd1529a6eaa20646c8e5b56",
+      "size": 25425
+    },
+    {
+      "path": "src/screens/Driving.tsx",
+      "mode": "100644",
+      "sha": "442a4577bc4210649b5acb549645fa56e852bbd2",
+      "size": 8516
+    },
+    {
+      "path": "src/screens/Forms.tsx",
+      "mode": "100644",
+      "sha": "9fcd7f2b2335b899362453f4a37a14a1b6943774",
+      "size": 12390
+    },
+    {
+      "path": "src/screens/Invoices.tsx",
+      "mode": "100644",
+      "sha": "a8915e8f9aa6e13d18f4d7cd26bb675a0807a8b2",
+      "size": 23316
+    },
+    {
+      "path": "src/screens/Notes.tsx",
+      "mode": "100644",
+      "sha": "088dec70e7caa8bb641bfba3578a0ef5c04787a5",
+      "size": 11219
+    },
+    {
+      "path": "src/screens/Records.tsx",
+      "mode": "100644",
+      "sha": "b46188c908215d4ce184a0606bc0821186c11f70",
+      "size": 16173
+    },
+    {
+      "path": "src/screens/Settings.tsx",
+      "mode": "100644",
+      "sha": "f6f28ce860278ec71272ab40ad07b7cbc4df70ae",
+      "size": 15008
+    },
+    {
+      "path": "src/screens/Stats.tsx",
+      "mode": "100644",
+      "sha": "5680d858c1fcd609e230d82eef790097b958fef4",
+      "size": 4724
+    },
+    {
+      "path": "src/storage.ts",
+      "mode": "100644",
+      "sha": "4cd750f238850c5d47ead1017576777fbab64a67",
+      "size": 3118
+    },
+    {
+      "path": "src/styles.css",
+      "mode": "100644",
+      "sha": "bfa38e3714828764a059d40fd1ca65b556b2e9a2",
+      "size": 15855
+    },
+    {
+      "path": "tests/domain.test.ts",
+      "mode": "100644",
+      "sha": "a8a5fb0931bc4f578ba31506804f733b0f731cdc",
+      "size": 18512
+    },
+    {
+      "path": "tests/e2e/app.spec.ts",
+      "mode": "100644",
+      "sha": "81ae273aa7caf78e621a524d7c40b864d97075af",
+      "size": 17907
+    },
+    {
+      "path": "tests/storage.test.ts",
+      "mode": "100644",
+      "sha": "3455f5cd898077bf1a8ee8cbff8acf2e0eeb6ba4",
+      "size": 1687
+    },
+    {
+      "path": "tsconfig.json",
+      "mode": "100644",
+      "sha": "02fbf80cd41a3a5a31572039ad45aebc4ba3889f",
+      "size": 422
+    },
+    {
+      "path": "vite.config.ts",
+      "mode": "100644",
+      "sha": "4dd183ae55d2659845cddead76b6e8161f4016f8",
+      "size": 197
+    },
+    {
+      "path": "vitest.config.ts",
+      "mode": "100644",
+      "sha": "5f763a09052048f57b64e8abc609501b82040303",
+      "size": 181
+    }
+  ],
+  "uploadedBlobs": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2ed526fb2a22887af58af6d7fb39f394f7a8afb2"
+    },
+    {
+      "path": ".github/workflows/check.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1995ae042557c4ea8853973ef1db5e25bf9916f9"
+    },
+    {
+      "path": ".github/workflows/deploy.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5c6346d5bff985bafa219a544b365e3dc5b2546"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c53818be63d4923f67872ccba3b42dea99a62762"
+    },
+    {
+      "path": "CNAME",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cdf623ac08b5cc45556fd245dcea49abb5c28b20"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3ebef657bb087856c3e5379eea3c1773872bbf88"
+    },
+    {
+      "path": "VERIFICATION.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5f431849a2301f0ac60bf0b06e75fe0a74eabf1c"
+    },
+    {
+      "path": "index.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c9a5a1758191b01b71fda0f7d53fbe5d10d267d2"
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3bb6e904b53328a54ba46a96bcbe313565c1e80b"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "697c187cdb5ce8f2a72c6065d86b52ab98715ab2"
+    },
+    {
+      "path": "playwright.config.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "13372ade2b1e7d12e7c4d9a5bb0d27c91aa56322"
+    },
+    {
+      "path": "public/CNAME",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cdf623ac08b5cc45556fd245dcea49abb5c28b20"
+    },
+    {
+      "path": "public/icon-192.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "799d03a28cda3b8e39ebeca972d4173ae199ca72"
+    },
+    {
+      "path": "public/icon-512.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "30170b6d1afbba15696f93c531e3c05ac94f657d"
+    },
+    {
+      "path": "public/manifest.webmanifest",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d7f15d6e31a68b7ca804cd842926553a07a803fe"
+    },
+    {
+      "path": "scripts/build-sw.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "83fd33b7753602cd83f7a07aa05cf129b22996c1"
+    },
+    {
+      "path": "scripts/test-server.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a74e5657b7f6e7f1eb38b038b1fa491f3f703ebf"
+    },
+    {
+      "path": "src/App.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8d0ca8fd9bf41871079ce96534ca94b4ca681f1d"
+    },
+    {
+      "path": "src/components/Document.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e26fbfe184a2a934a65611622ea35c4d1b42cacb"
+    },
+    {
+      "path": "src/components/Location.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d3e68dd8042d82d8b5c53f4ced3c77db95fdaca"
+    },
+    {
+      "path": "src/components/Signature.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4b6cf3bceda703bd85e499ca6e61dd365a2c0c6a"
+    },
+    {
+      "path": "src/components/UI.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e2f0196f828ab38f2f5cc14d9a400f59357e7e78"
+    },
+    {
+      "path": "src/context.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c94757fdee09bab04ee4e42c0e39cc76a42e725"
+    },
+    {
+      "path": "src/documents/common.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0a8f5ffcc80cd3455b029c734fd22551b51c0d43"
+    },
+    {
+      "path": "src/documents/diary-pages.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e751466d86738b2c595fca2bc048f6cede527aa"
+    },
+    {
+      "path": "src/documents/excel.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65db0c203a120539299f694d1d2e8ff17b73035c"
+    },
+    {
+      "path": "src/documents/form-backgrounds.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "768eed84c90461a1681e3113c61e40d5d65873f8"
+    },
+    {
+      "path": "src/documents/form-pages.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c376dc00c6fdc201a15356a2d79a6bc8a811294"
+    },
+    {
+      "path": "src/documents/invoice-pages.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5826dac497a721f9f6f39dbc902215417705d322"
+    },
+    {
+      "path": "src/documents/pdf.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b2cc309a0b9c9fbb4ed9acb9b99cf432e23258bd"
+    },
+    {
+      "path": "src/documents/templates.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "48cc5172a79b71d75e35538b34600f90fcfb6bdd"
+    },
+    {
+      "path": "src/domain/backup.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "73d4c6692428f05099d1dd72b09060ff6969c7eb"
+    },
+    {
+      "path": "src/domain/diary.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1cd365247253ddef69daa5feed25730915f129ff"
+    },
+    {
+      "path": "src/domain/encryption.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c55cb225e3e9a6ccfcd3c18e4d7b4501b1163057"
+    },
+    {
+      "path": "src/domain/forms.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a5475ed9eb3d07c4c18c702ffdb79fd2664ca9ea"
+    },
+    {
+      "path": "src/domain/invoices.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f5da09fcac604c094c248ac0d4f4c6a9068c9c4c"
+    },
+    {
+      "path": "src/domain/model.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "95c13a4521bffb6d382067987ffffcfb6fe919a0"
+    },
+    {
+      "path": "src/domain/rules.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9f429373c8947d521c380d898d6fdbb3ad4322b"
+    },
+    {
+      "path": "src/domain/rules.worker.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "250607d67e431bd7c235485d77d09c431052b947"
+    },
+    {
+      "path": "src/domain/time.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3bf03b7b9041a82e10c1eef2d7616ccc51a6d05c"
+    },
+    {
+      "path": "src/main.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c51130ab9f969ec0134254ecec4e5e9b1a433845"
+    }
+  ]
+}
