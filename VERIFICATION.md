@@ -1,4 +1,14 @@
-# Verification — 2.0.0-beta.1
+# Verification — 2.0.0-beta.2
+
+## Beta 2 update — 8 October 2026
+
+- Strict TypeScript and production build pass. 40 domain/storage tests and 24 Chromium phone/desktop journeys pass.
+- Additive IndexedDB v1 → v2 migration preserves the existing workspace. Document contents live in a separate store; full backups restore their exact bytes. Missing/checksum-mismatched files reject the whole save. Recovery checkpoints retain their referenced files. Duplicate imports are rejected without duplicating documents.
+- UI checks cover offline document display and backup restore, fresh form signing without a saved signature, optional signature reuse, original invoice table columns/calculations, remembered and collapsed invoice details, base-state clocks, historical diary base retention, red work-cap blocks, and 320-pixel layouts.
+- Visual review found an unanchored hidden table label causing horizontal overflow; it is corrected. The date navigator now displays Australian date order outside the native editing picker. A compact work-window card and non-wrapping table actions complete the layout fixes; affected phone/desktop checks were rerun.
+- Red blocks reflect recorded work-cap exceedances from the existing helper. Rest-pattern checks remain in Stats/Driving. No unsupported rules or absent data are treated as clearance.
+- Files: PDF/JPG/PNG/WebP, up to 8 MB each and 24 MB total. Offline preview/download was checked in Chromium; native file sharing and iPhone PDF handling still need device acceptance below.
+- The deferred no-paid-maps truck planner is recorded in `ROADMAP.md`; no routing service or paid dependency has been added.
 
 ## Recovery verification — 7 October 2026
 

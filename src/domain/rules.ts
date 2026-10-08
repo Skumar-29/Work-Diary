@@ -48,7 +48,15 @@ export interface Check {
   date: string;
   reason: string;
 }
+export interface WorkWindow {
+  start: string;
+  end: string;
+  limit: number | null;
+  established: boolean;
+}
 export interface RuleReport {
+  breachSlots: Record<string, string[]>;
+  workWindows: WorkWindow[];
   checks: Check[];
   issues: string[];
   days: Array<{ date: string; work: number; rest: number; unknown: number }>;
@@ -222,7 +230,20 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
       ? [...new Set(anchors)].sort((a, b) => a - b)
       : workStarts;
   };
-  const checks: Check[] = [];
+  const checks: Check[] = [],
+    workWindows: WorkWindow[] = [];
+  const breachSlots: Record<string, string[]> = {};
+  const supported =
+    !["AFM", "ACH"].includes(profile.scheme) &&
+    !["WA", "NT"].includes(profile.base) &&
+    !clock &&
+    !changed;
+  const mark = (i: number, reason: string) => {
+    if (!supported || cells[i]?.kind !== "work") return;
+    const key = cells[i].date + ":" + cells[i].slot;
+    breachSlots[key] ||= [];
+    if (!breachSlots[key].includes(reason)) breachSlots[key].push(reason);
+  };
   const short = bfm
     ? two
       ? []
@@ -298,10 +319,27 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
         )
           extraRest += " Two 24-hour stationary rest breaks are required.";
       }
+      if (period === 1440)
+        workWindows.push({
+          start: label(cells[a]),
+          end: new Date(
+            Date.parse(startDate + "T00:00:00Z") + intended * 900000,
+          )
+            .toISOString()
+            .slice(0, 16)
+            .replace("T", " "),
+          limit,
+          established: major.some((r) => r.end === a) || (bfm && two),
+        });
       if (limit !== null && w > limit) {
         status = "Exceeded";
         let first = a;
         while (first < b && work(a, first + 1) <= limit) first++;
+        for (let i = first; i < b; i++)
+          mark(
+            i,
+            `${minutesLabel(period)} window: recorded work exceeds ${minutesLabel(limit)} (counted from ${label(cells[a])}).`,
+          );
         reason =
           "Recorded work first exceeds this cap at " +
           label(cells[first]) +
@@ -383,6 +421,13 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
       const a = selected.a,
         w = selected.used,
         uncertain = unknown(a, end) > 0 || clock || changed;
+      if (w > 2160)
+        for (let i = a; i < end; i++)
+          if (nightWork.has(i) && nightPrefix[i + 1] - nightPrefix[a] > 2160)
+            mark(
+              i,
+              "Recorded long/night work exceeds 36 hours in this counted seven-day period.",
+            );
       checks.push({
         label: "7 days long/night",
         start: label(cells[a]),
@@ -405,6 +450,13 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
   }
   const last24 = at24.filter((x) => x <= end).at(-1),
     workSince24 = work(last24 ?? Math.max(0, end - 1344), end);
+  if (bfm && !two && last24 !== undefined && workSince24 > 5040)
+    for (let i = last24; i < end; i++)
+      if (work(last24, i + 1) > 5040)
+        mark(
+          i,
+          "Recorded work exceeds 84 hours since the identified 24-hour stationary rest.",
+        );
   if (!last24)
     issues.push(
       "A preceding 24-hour stationary rest has not been established.",
@@ -512,6 +564,8 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
       ? Math.min(...activeChecks.map((c) => c.remaining))
       : null;
   return {
+    breachSlots,
+    workWindows: supported ? workWindows : [],
     checks: ["AFM", "ACH"].includes(profile.scheme) ? [] : checks,
     issues: [...new Set(issues)],
     days,
@@ -528,4 +582,39 @@ export function analyse(s: Workspace, asOf: string, range = 14): RuleReport {
     source: RULE_SOURCE,
     version: RULE_VERSION,
   };
+}
+
+/** Civil diary totals; never assume that blank time is rest. */
+export function windowTotals(s: Workspace, window: WorkWindow) {
+  const start = Date.parse(window.start.replace(" ", "T") + ":00Z");
+  const end = Date.parse(window.end.replace(" ", "T") + ":00Z");
+  let work = 0,
+    rest = 0,
+    unknown = 0,
+    review = !window.established;
+  for (let at = start; at < end; at += 900000) {
+    const value = new Date(at).toISOString(),
+      date = value.slice(0, 10),
+      slot = Number(value.slice(11, 13)) * 4 + Number(value.slice(14, 16)) / 15;
+    const day = s.days[date],
+      kind = day?.slots[slot];
+    if (kind === "work") work += 15;
+    else if (kind === "rest") rest += 15;
+    else unknown += 15;
+    review ||=
+      !!day?.review ||
+      !!day?.clockReview ||
+      (!!day && clockChange(date, day.profile.zone));
+  }
+  return { work, rest, unknown, review };
+}
+export function selectWorkWindow(windows: WorkWindow[], date: string) {
+  return windows
+    .filter((w) => w.start.slice(0, 10) <= date && w.end > date + " 00:00")
+    .sort(
+      (a, b) =>
+        Number(b.start.startsWith(date)) - Number(a.start.startsWith(date)) ||
+        Number(b.established) - Number(a.established) ||
+        b.start.localeCompare(a.start),
+    )[0];
 }

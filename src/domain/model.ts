@@ -159,6 +159,20 @@ export interface FormRecord {
   createdAt: string;
   updatedAt: string;
 }
+export interface SavedDocument {
+  id: string;
+  title: string;
+  category: string;
+  filename: string;
+  mime: string;
+  size: number;
+  hash: string;
+  addedAt: string;
+  expiry: string;
+  pinned: boolean;
+  /** Present only during upload/backup import; device storage separates file bytes. */
+  data?: string;
+}
 export interface Note {
   sealed?: string;
   id: string;
@@ -195,6 +209,7 @@ export interface Workspace {
   invoiceSettings: InvoiceSettings;
   forms: FormRecord[];
   notes: Note[];
+  documents: SavedDocument[];
   places: string[];
   routeMap: Record<string, string>;
   audit: Audit[];
@@ -202,6 +217,7 @@ export interface Workspace {
   settings: {
     theme: "system" | "light" | "dark";
     fullDay: boolean;
+    diaryLayoutVersion?: number;
     locationPicker: boolean;
     autoPages: boolean;
     backupDays: number;
@@ -273,13 +289,15 @@ export function emptyState(): Workspace {
     },
     forms: [],
     notes: [],
+    documents: [],
     places: [],
     routeMap: {},
     audit: [],
     imports: [],
     settings: {
       theme: "system",
-      fullDay: false,
+      fullDay: true,
+      diaryLayoutVersion: 1,
       locationPicker: true,
       autoPages: true,
       backupDays: 0,
@@ -318,7 +336,7 @@ export function ensureDay(s: Workspace, date: string) {
   return s.days[date] ?? (s.days[date] = emptyDay(s, date));
 }
 function compact(value: unknown): unknown {
-  if (typeof value === "string" && value.startsWith("data:image/"))
+  if (typeof value === "string" && value.startsWith("data:"))
     return `[image asset: ${value.length} characters]`;
   if (Array.isArray(value)) return value.map(compact);
   if (value && typeof value === "object")
@@ -359,4 +377,14 @@ export function audit(
     before: a,
     after: b,
   });
+}
+
+/** Additive migration: keep all v2 records and their IDs intact. */
+export function upgradeWorkspace(s: Workspace): Workspace {
+  s.documents ||= [];
+  if (!s.settings.diaryLayoutVersion) {
+    s.settings.fullDay = true;
+    s.settings.diaryLayoutVersion = 1;
+  }
+  return s;
 }

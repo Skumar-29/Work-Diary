@@ -1,12 +1,19 @@
-import { emptyState, type Workspace } from "./domain/model";
+import { emptyState, upgradeWorkspace, type Workspace } from "./domain/model";
+import {
+  decodeDocument,
+  fileHash,
+  validateDocument,
+  MAX_DOCUMENT_TOTAL,
+} from "./domain/documents";
 const DB = "aps-truck-workspace-v2";
 let connection: Promise<IDBDatabase> | null = null;
 export function openDatabase() {
   return (connection ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const r = indexedDB.open(DB, 1);
+    const r = indexedDB.open(DB, 2);
     r.onupgradeneeded = () => {
-      r.result.createObjectStore("workspace");
-      r.result.createObjectStore("recovery");
+      for (const name of ["workspace", "recovery", "documents"])
+        if (!r.result.objectStoreNames.contains(name))
+          r.result.createObjectStore(name);
     };
     r.onsuccess = () => {
       r.result.onversionchange = () => {
@@ -33,8 +40,23 @@ export async function loadWorkspace(): Promise<Workspace> {
     r.onsuccess = () => {
       if (r.result && r.result.schema !== 2)
         reject(Error("This backup needs a newer app version."));
-      else resolve(r.result || emptyState());
+      else resolve(upgradeWorkspace(r.result || emptyState()));
     };
+    r.onerror = () => reject(r.error);
+  });
+}
+export async function readDocumentData(hash: string): Promise<string> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const r = db.transaction("documents").objectStore("documents").get(hash);
+    r.onsuccess = () =>
+      typeof r.result === "string"
+        ? resolve(r.result)
+        : reject(
+            Error(
+              "Document file is unavailable. Restore it from your full backup.",
+            ),
+          );
     r.onerror = () => reject(r.error);
   });
 }
@@ -43,54 +65,104 @@ export async function saveWorkspace(
   expected: number,
   checkpoint = false,
 ) {
+  upgradeWorkspace(next);
+  if (next.documents.reduce((n, d) => n + d.size, 0) > MAX_DOCUMENT_TOTAL)
+    throw Error(
+      "Document storage limit is 24 MB. Remove an unused document before adding another.",
+    );
+  for (const d of next.documents) {
+    validateDocument(d);
+    if (d.data && (await fileHash(decodeDocument(d.data))) !== d.hash)
+      throw Error("Document checksum failed. No records changed.");
+  }
+  const saved: Workspace = {
+    ...next,
+    revision: expected + 1,
+    documents: next.documents.map(({ data, ...metadata }) => metadata),
+  };
   const db = await openDatabase();
   return new Promise<Workspace>((resolve, reject) => {
-    const tx = db.transaction(["workspace", "recovery"], "readwrite");
-    let conflict = false;
-    const store = tx.objectStore("workspace");
+    const tx = db.transaction(
+      ["workspace", "recovery", "documents"],
+      "readwrite",
+    );
+    let failure = "";
+    const store = tx.objectStore("workspace"),
+      assets = tx.objectStore("documents"),
+      recovery = tx.objectStore("recovery");
     const get = store.get("current");
     get.onsuccess = () => {
-      const old = get.result as Workspace | undefined;
-      if ((old?.revision || 0) !== expected) {
-        conflict = true;
+      try {
+        const old = get.result as Workspace | undefined;
+        if ((old?.revision || 0) !== expected) {
+          failure =
+            "Another tab saved changes. Reload before editing to avoid overwriting records.";
+          tx.abort();
+          return;
+        }
+        if (checkpoint && old) recovery.put(old, "previous");
+        for (const d of next.documents) {
+          if (d.data) assets.put(d.data, d.hash);
+          else {
+            const check = assets.getKey(d.hash);
+            check.onsuccess = () => {
+              if (check.result === undefined) {
+                failure =
+                  "A document file is missing. Restore it from your backup.";
+                tx.abort();
+              }
+            };
+          }
+        }
+        store.put(saved, "current");
+        // Keep files referenced by either current records or the recovery checkpoint.
+        const prior = recovery.get("previous");
+        prior.onsuccess = () => {
+          const keep = new Set(
+            [...saved.documents, ...(prior.result?.documents || [])].map(
+              (d) => d.hash,
+            ),
+          );
+          const keys = assets.getAllKeys();
+          keys.onsuccess = () => {
+            for (const key of keys.result)
+              if (!keep.has(String(key))) assets.delete(key);
+          };
+        };
+      } catch (error) {
+        failure = error instanceof Error ? error.message : "Save failed.";
         tx.abort();
-        return;
       }
-      if (checkpoint && old) tx.objectStore("recovery").put(old, "previous");
-      const saved = { ...next, revision: expected + 1 };
-      store.put(saved, "current");
     };
     tx.oncomplete = () => {
       if (typeof BroadcastChannel !== "undefined") {
-        const channel = new BroadcastChannel("truck-workspace");
-        channel.postMessage(expected + 1);
-        channel.close();
+        const c = new BroadcastChannel("truck-workspace");
+        c.postMessage(saved.revision);
+        c.close();
       }
-      resolve({ ...next, revision: expected + 1 });
+      resolve(saved);
     };
     tx.onerror = () =>
       reject(
-        tx.error ||
-          Error("Storage failed. Your previous saved records are unchanged."),
+        Error(
+          failure ||
+            tx.error?.message ||
+            "Storage failed. Your previous saved records are unchanged.",
+        ),
       );
     tx.onabort = () =>
-      reject(
-        conflict
-          ? Error(
-              "Another tab saved changes. Reload before editing to avoid overwriting records.",
-            )
-          : tx.error || Error("Save did not complete."),
-      );
+      reject(Error(failure || tx.error?.message || "Save did not complete."));
   });
 }
-export async function recoveryWorkspace() {
+export async function recoveryWorkspace(): Promise<Workspace | undefined> {
   const db = await openDatabase();
-  return new Promise<Workspace | undefined>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const r = db
       .transaction("recovery")
       .objectStore("recovery")
       .get("previous");
-    r.onsuccess = () => resolve(r.result);
+    r.onsuccess = () =>
+      resolve(r.result ? upgradeWorkspace(r.result) : undefined);
     r.onerror = () => reject(r.error);
   });
 }

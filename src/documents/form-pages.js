@@ -126,6 +126,7 @@ export function formPages(record) {
         weekday = (v) =>
           v
             ? new Date(v + "T12:00:00Z").toLocaleDateString("en-AU", {
+                timeZone: "UTC",
                 weekday: "long",
                 timeZone: "UTC",
               })

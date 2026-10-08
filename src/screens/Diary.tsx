@@ -1,3 +1,6 @@
+import { useReport } from "../components/useReport";
+import { selectWorkWindow, windowTotals } from "../domain/rules";
+import { displayCivil } from "../domain/time";
 import { useRef, useState } from "react";
 import { useStore } from "../context";
 import {
@@ -58,9 +61,11 @@ export function Diary({
       before: Record<string, Day>;
       revisions: Record<string, number>;
     } | null>(null),
-    [dragRange, setDragRange] = useState<number[] | null>(null);
+    [dragRange, setDragRange] = useState<number[] | null>(null),
+    [breach, setBreach] = useState<string[] | null>(null);
   const drag = useRef<{
       slot: number;
+      kind: Activity;
       end: number;
       x: number;
       y: number;
@@ -69,16 +74,15 @@ export function Diary({
   const full = s.settings.fullDay,
     t = totals(d.slots),
     visible = full ? [0, 1, 2, 3] : [period],
-    allChanges = changes(d),
-    prior = allChanges.filter((c) => c.slot <= period * 24).at(-1),
-    shown = full
-      ? allChanges
-      : allChanges.filter(
-          (c) =>
-            c === prior ||
-            (c.slot >= period * 24 && c.slot < (period + 1) * 24) ||
-            (period === 3 && c.slot === 96),
-        );
+    allChanges = changes(d);
+  const { report } = useReport(date + "T24:00", 2);
+  const countedWindow =
+    !readOnly && report && selectWorkWindow(report.workWindows, date);
+  const windowSummary = countedWindow ? windowTotals(s, countedWindow) : null;
+  const redSlots = readOnly ? {} : report?.breachSlots || {};
+  const dayBreaches = Object.entries(redSlots).filter(([key]) =>
+    key.startsWith(date + ":"),
+  );
   async function updateDay(fn: (d: Day) => void, label = "Edit diary") {
     setUndo(null);
     if (readOnly)
@@ -153,7 +157,8 @@ export function Diary({
   }
   return (
     <>
-      <div className="row totals">
+      <div className="row totals" aria-label="Page totals">
+        <strong>Page</strong>
         <span>
           <i className="dot work" />
           Work <b>{minutesLabel(t.work)}</b>
@@ -164,6 +169,83 @@ export function Diary({
         </span>
         <span className="muted">Blank {minutesLabel(t.unknown)}</span>
       </div>
+      <section className="card window-summary" aria-label="Work window totals">
+        <div className="row wrap">
+          <strong>24-hour work window</strong>
+          <span className="small">{d.profile.base} time</span>
+        </div>
+        {countedWindow && windowSummary ? (
+          <>
+            <p className="small">
+              {displayCivil(countedWindow.start)} →{" "}
+              {displayCivil(countedWindow.end)}
+            </p>
+            <div className="row wrap">
+              <span>
+                Work <b>{minutesLabel(windowSummary.work)}</b>
+              </span>
+              <span>
+                Rest <b>{minutesLabel(windowSummary.rest)}</b>
+              </span>
+              <span className="muted">
+                Blank {minutesLabel(windowSummary.unknown)}
+              </span>
+            </div>
+            {countedWindow.limit !== null && (
+              <p
+                className={
+                  windowSummary.work > countedWindow.limit
+                    ? "small bad"
+                    : "small"
+                }
+              >
+                {windowSummary.work > countedWindow.limit
+                  ? "Over work cap: "
+                  : "Work cap remaining: "}
+                {minutesLabel(
+                  Math.abs(countedWindow.limit - windowSummary.work),
+                )}
+                {windowSummary.review ? " · start / records need review" : ""}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="small">
+            {readOnly
+              ? "Historical page copy · work-window totals use the current diary records."
+              : report
+                ? "Window needs qualifying rest history / rule review."
+                : "Calculating…"}
+          </p>
+        )}
+        {dayBreaches.length > 0 && (
+          <Action
+            danger
+            onClick={() =>
+              setBreach([
+                ...new Set(dayBreaches.flatMap(([, reasons]) => reasons)),
+              ])
+            }
+          >
+            {dayBreaches.length} red work{" "}
+            {dayBreaches.length === 1 ? "block" : "blocks"} · Review
+          </Action>
+        )}
+      </section>
+      {breach && (
+        <Modal
+          title="Recorded work limit exceeded"
+          onClose={() => setBreach(null)}
+        >
+          {breach.map((reason, i) => (
+            <p key={i}>{displayCivil(reason)}</p>
+          ))}
+          <p className="small">
+            Check the recorded blocks and applicable rules. These highlights are
+            a helper, not a compliance clearance.
+          </p>
+        </Modal>
+      )}
       {readOnly && (
         <p className="banner">
           {page!.status} page {page!.number} · {page!.reason}
@@ -231,18 +313,15 @@ export function Diary({
         <>
           <section className="card block-card">
             <div className="row wrap">
-              <div className="segmented" aria-label="Record activity">
-                {(["work", "rest", null] as Activity[]).map((k) => (
-                  <button
-                    key={k || "clear"}
-                    className={mode === k ? "selected " + (k || "") : ""}
-                    aria-pressed={mode === k}
-                    onClick={() => setMode(k)}
-                    disabled={readOnly}
-                  >
-                    {k === "work" ? "Work" : k === "rest" ? "Rest" : "Clear"}
-                  </button>
-                ))}
+              <div className="row">
+                <strong>Work / Rest</strong>
+                <button
+                  aria-pressed={mode === null}
+                  disabled={readOnly}
+                  onClick={() => setMode(mode === null ? "work" : null)}
+                >
+                  Clear
+                </button>
               </div>
               <div className="row">
                 <Action disabled={!undo || readOnly} onClick={undoBlocks}>
@@ -280,91 +359,118 @@ export function Diary({
               </Action>
             </div>
             {visible.map((p) => (
-              <div key={p} className="six-hours">
+              <div key={p} className="six-hours diary-grid-section">
                 <div className="hour-labels">
-                  {Array.from({ length: 7 }, (_, i) => (
+                  <span />
+                  {Array.from({ length: 6 }, (_, i) => (
                     <span key={i}>{String(p * 6 + i).padStart(2, "0")}</span>
                   ))}
                 </div>
-                <div
-                  className="blocks"
-                  role="group"
-                  aria-label={`Diary blocks ${p * 6} to ${(p + 1) * 6}`}
-                >
-                  {d.slots.slice(p * 24, p * 24 + 24).map((k, i) => {
-                    const slot = p * 24 + i;
-                    return (
-                      <button
-                        key={slot}
-                        data-slot={slot}
-                        className={
-                          "block " +
-                          (k || "blank") +
-                          (dragRange &&
-                          slot >= Math.min(...dragRange) &&
-                          slot <= Math.max(...dragRange)
-                            ? " picking"
-                            : "")
-                        }
-                        disabled={readOnly}
-                        title={`${hhmm(slot)}–${hhmm(slot + 1)} ${k || "unrecorded"}`}
-                        aria-label={`${hhmm(slot)} ${k || "unrecorded"}`}
-                        onPointerDown={(e) => {
-                          if (readOnly) return;
-                          drag.current = {
-                            slot,
-                            end: slot,
-                            x: e.clientX,
-                            y: e.clientY,
-                          };
-                          e.currentTarget.setPointerCapture(e.pointerId);
-                        }}
-                        onPointerMove={(e) => {
-                          const a = drag.current;
-                          if (
-                            !a ||
-                            Math.abs(e.clientX - a.x) < 6 ||
-                            Math.abs(e.clientY - a.y) >
-                              Math.abs(e.clientX - a.x)
-                          )
-                            return;
-                          const hit = document
-                            .elementFromPoint(e.clientX, e.clientY)
-                            ?.closest("[data-slot]");
-                          if (hit) {
-                            a.end = Number(hit.getAttribute("data-slot"));
-                            setDragRange([a.slot, a.end]);
-                          }
-                        }}
-                        onPointerCancel={() => {
-                          drag.current = null;
-                          setDragRange(null);
-                        }}
-                        onPointerUp={() => {
-                          const a = drag.current;
-                          if (a && a.slot !== a.end) {
-                            suppressClick.current = true;
-                            void blocks(
-                              Math.min(a.slot, a.end),
-                              Math.max(a.slot, a.end) + 1,
-                            ).catch(() => {});
-                          }
-                          drag.current = null;
-                          setDragRange(null);
-                        }}
-                        onClick={() => {
-                          if (suppressClick.current) {
-                            suppressClick.current = false;
-                            return;
-                          }
-                          void blocks(slot, slot + 1).catch(() => {});
-                        }}
-                      >
-                        <span>{i % 4 === 0 ? hhmm(slot) : ""}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {(["work", "rest"] as const).map((row) => (
+                  <div className="diary-grid-row" key={row}>
+                    <strong className="row-label">
+                      {row === "work" ? "Work" : "Rest"}
+                    </strong>
+                    <div
+                      className="blocks"
+                      role="group"
+                      aria-label={`${row === "work" ? "Work" : "Rest"} blocks ${p * 6} to ${(p + 1) * 6}`}
+                    >
+                      {d.slots.slice(p * 24, p * 24 + 24).map((activity, i) => {
+                        const slot = p * 24 + i,
+                          reasons =
+                            row === "work" && activity === "work"
+                              ? redSlots[date + ":" + slot]
+                              : undefined;
+                        const selected = activity === row;
+                        return (
+                          <button
+                            key={slot}
+                            data-slot={slot}
+                            data-row={row}
+                            className={
+                              "block " +
+                              (selected ? row : "blank") +
+                              (reasons?.length ? " breach" : "") +
+                              ((i + 1) % 4 === 0 ? " hour-end" : "") +
+                              (dragRange &&
+                              drag.current?.kind === row &&
+                              slot >= Math.min(...dragRange) &&
+                              slot <= Math.max(...dragRange)
+                                ? " picking"
+                                : "")
+                            }
+                            disabled={readOnly}
+                            aria-pressed={selected}
+                            title={`${hhmm(slot)}–${hhmm(slot + 1)} ${row}${reasons?.length ? " · recorded work limit exceeded" : ""}`}
+                            aria-label={`${hhmm(slot)} ${row}${reasons?.length ? " · work limit exceeded" : ""}`}
+                            onPointerDown={(e) => {
+                              if (readOnly) return;
+                              drag.current = {
+                                slot,
+                                end: slot,
+                                kind: mode === null ? null : row,
+                                x: e.clientX,
+                                y: e.clientY,
+                              };
+                              e.currentTarget.setPointerCapture(e.pointerId);
+                            }}
+                            onPointerMove={(e) => {
+                              const a = drag.current;
+                              if (
+                                !a ||
+                                Math.abs(e.clientX - a.x) < 6 ||
+                                Math.abs(e.clientY - a.y) >
+                                  Math.abs(e.clientX - a.x)
+                              )
+                                return;
+                              const hit = document
+                                .elementFromPoint(e.clientX, e.clientY)
+                                ?.closest("[data-slot]");
+                              if (hit) {
+                                a.end = Number(hit.getAttribute("data-slot"));
+                                setDragRange([a.slot, a.end]);
+                              }
+                            }}
+                            onPointerCancel={() => {
+                              drag.current = null;
+                              setDragRange(null);
+                              suppressClick.current = false;
+                            }}
+                            onPointerUp={() => {
+                              const a = drag.current;
+                              if (a && a.slot !== a.end) {
+                                suppressClick.current = true;
+                                void blocks(
+                                  Math.min(a.slot, a.end),
+                                  Math.max(a.slot, a.end) + 1,
+                                  a.kind,
+                                ).catch(() => {});
+                              }
+                              drag.current = null;
+                              setDragRange(null);
+                            }}
+                            onClick={() => {
+                              if (suppressClick.current) {
+                                suppressClick.current = false;
+                                return;
+                              }
+                              if (reasons?.length && mode !== null) {
+                                setBreach(reasons);
+                                return;
+                              }
+                              void blocks(
+                                slot,
+                                slot + 1,
+                                mode === null ? null : row,
+                              ).catch(() => {});
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </section>
@@ -389,74 +495,72 @@ export function Diary({
                 + Finish
               </Action>
             </div>
-            {shown.length ? (
-              shown.map((c) => (
-                <div className="change-row" key={date + ":" + c.slot}>
-                  <div className="row">
-                    <strong>
-                      {hhmm(c.slot)} · {d.slots[c.slot] || "Finish"}
-                    </strong>
-                    {c.slot < period * 24 && !full && (
-                      <span className="small">Continues into this section</span>
-                    )}
-                  </div>
-                  <div className="fields">
-                    <Location
-                      value={c.location}
-                      onChange={(v) => {
-                        void change(c, "location", v).catch(() => {});
-                      }}
-                      disabled={readOnly}
-                    />
-                    <Field
-                      label="Odometer"
-                      value={c.odometer}
-                      onChange={(v) => {
-                        void change(c, "odometer", v).catch(() => {});
-                      }}
-                      disabled={readOnly}
-                      type="number"
-                      min="0"
-                    />
-                  </div>
-                  {d.slots[c.slot] === "rest" && (
-                    <Field
-                      label="Rest"
-                      value={c.restType}
-                      disabled={readOnly}
-                      options={[
-                        ["unknown", "Choose rest type"],
-                        ["stationary", "Stationary"],
-                        ["sleeper-moving", "Approved sleeper berth · moving"],
-                      ]}
-                      onChange={(v) => {
-                        void change(c, "restType", v).catch(() => {});
-                      }}
-                    />
-                  )}
-                  <details>
-                    <summary className="small">Change details</summary>
-                    <div className="fields">
-                      <Field
-                        label="Vehicle"
-                        value={c.vehicle}
-                        onChange={(v) => {
-                          void change(c, "vehicle", v).catch(() => {});
-                        }}
-                        disabled={readOnly}
-                      />
-                      <Field
-                        label="Note"
-                        value={c.note}
-                        onChange={(v) => {
-                          void change(c, "note", v).catch(() => {});
-                        }}
-                        disabled={readOnly}
-                      />
-                    </div>
-                  </details>
-                </div>
-              ))
+            {allChanges.length ? (
+              <div className="table-scroll">
+                <table className="edit-table change-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Odometer</th>
+                      <th>Location</th>
+                      <th>Work / rest type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allChanges.map((c) => (
+                      <tr key={date + ":" + c.slot}>
+                        <th scope="row">{hhmm(c.slot)}</th>
+                        <td>
+                          <Field
+                            label="Odometer"
+                            value={c.odometer}
+                            disabled={readOnly}
+                            type="number"
+                            min="0"
+                            onChange={(v) => {
+                              void change(c, "odometer", v).catch(() => {});
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <Location
+                            value={c.location}
+                            disabled={readOnly}
+                            onChange={(v) => {
+                              void change(c, "location", v).catch(() => {});
+                            }}
+                          />
+                        </td>
+                        <td>
+                          {d.slots[c.slot] === "rest" ? (
+                            <Field
+                              label="Rest"
+                              value={c.restType}
+                              disabled={readOnly}
+                              options={[
+                                ["unknown", "Rest · type not set"],
+                                ["stationary", "Stationary rest"],
+                                ["sleeper-moving", "Sleeper berth · moving"],
+                              ]}
+                              onChange={(v) => {
+                                void change(c, "restType", v).catch(() => {});
+                              }}
+                            />
+                          ) : (
+                            <span className="activity-label">
+                              {c.slot === 96
+                                ? "Finish"
+                                : d.slots[c.slot] === "work"
+                                  ? "Work"
+                                  : "Unrecorded"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <Empty>Select blocks or enter a time range.</Empty>
             )}

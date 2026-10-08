@@ -72,6 +72,8 @@ export function newForm(s: Workspace, previous?: FormRecord): FormRecord {
       scheme: p.scheme,
       accreditation: p.certificate,
       date: today(p.zone),
+      base: p.base,
+      zone: p.zone,
       depart: "",
       arrive: "",
       hours: "",
@@ -158,19 +160,22 @@ export function validateForm(f: FormRecord) {
       "The recorded faults conflict with declarations 7 or 11. Review them.",
     );
 }
-export function signForm(f: FormRecord, s: Workspace) {
+export function signForm(
+  f: FormRecord,
+  s: Workspace,
+  signature = s.profile.signature,
+) {
+  if (f.status === "Signed") throw Error("This form is already signed.");
   validateForm(f);
   if (
     f.driverId !== s.profile.id ||
     f.values.driver !== s.profile.name ||
     f.values.licence !== s.profile.licence
   )
-    throw Error(
-      "Save this driver in Settings before using the reusable signature.",
-    );
-  if (!s.profile.signature)
-    throw Error("Save your signature in Settings first.");
-  f.signature = s.profile.signature;
+    throw Error("Save this driver in Settings before signing.");
+  if (!signature || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signature))
+    throw Error("Draw a signature or save one in Settings first.");
+  f.signature = signature;
   f.signedName = s.profile.name;
   f.reviewed = true;
   f.status = "Signed";

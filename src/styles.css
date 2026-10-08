@@ -977,3 +977,237 @@ dialog > .row {
   box-shadow: inset 0 0 0 2px #f3be43;
   filter: brightness(1.2);
 }
+
+/* Compact diary rows and editable record tables. */
+.base-clock {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 20px;
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.diary-grid-section .hour-labels {
+  display: grid;
+  grid-template-columns: 34px repeat(6, minmax(0, 1fr));
+  margin-bottom: 4px;
+}
+.diary-grid-section .hour-labels span {
+  padding-left: 2px;
+}
+.diary-grid-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  margin-top: 3px;
+}
+.diary-grid-row .row-label {
+  font-size: 10px;
+  color: var(--muted);
+}
+.diary-grid-row .block {
+  min-height: 42px;
+}
+.diary-grid-row .block.breach {
+  background: #c63139;
+  box-shadow: inset 0 0 0 1px #8e1720;
+}
+.diary-grid-row .block.breach::after {
+  content: "!";
+  color: white;
+  font-weight: 800;
+  font-size: 10px;
+}
+.block-card button[aria-pressed="true"]:not(.block) {
+  outline: 1px solid var(--primary);
+}
+.window-summary {
+  border-left: 3px solid var(--primary);
+}
+.window-summary p {
+  margin: 7px 0;
+}
+.window-summary > .row {
+  gap: 8px 16px;
+}
+.edit-table th {
+  font-size: 11px;
+  white-space: normal;
+}
+.edit-table td {
+  padding: 5px;
+  vertical-align: top;
+}
+.edit-table .field {
+  margin: 0;
+  min-width: 85px;
+}
+.edit-table .field > span:first-child:not(.civil-input) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.edit-table input,
+.edit-table select {
+  padding: 8px;
+  min-height: 42px;
+  border-radius: 5px;
+}
+.edit-table .location-button {
+  top: 3px;
+}
+.change-table {
+  min-width: 570px;
+}
+.change-table th:first-child {
+  width: 56px;
+  white-space: nowrap;
+}
+.change-table td:nth-child(2) {
+  width: 100px;
+}
+.change-table td:nth-child(3) {
+  min-width: 190px;
+}
+.change-table td:last-child {
+  width: 175px;
+}
+.activity-label {
+  display: block;
+  padding: 12px 6px;
+}
+.load-table {
+  min-width: 1070px;
+}
+.load-table td:nth-child(2),
+.load-table td:nth-child(3) {
+  width: 90px;
+}
+.load-table td:nth-child(4) {
+  width: 112px;
+}
+.edit-table .civil-input {
+  min-width: 135px;
+}
+.misc-table {
+  min-width: 690px;
+}
+.misc-table td:nth-child(2) {
+  min-width: 180px;
+}
+.edit-table .amount-cell {
+  min-width: 120px;
+}
+.amount-cell strong {
+  display: block;
+  padding: 9px 4px;
+  white-space: nowrap;
+}
+.amount-cell .check {
+  gap: 4px;
+  margin: 4px 0;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.amount-cell .check input {
+  min-height: 18px;
+  height: 18px;
+  width: 18px;
+}
+.fixed-rate,
+.source-note {
+  display: block;
+  font-size: 9px;
+  margin: 4px;
+  color: var(--muted);
+}
+.table-hint {
+  margin: 3px 0;
+}
+.document-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.document-card > .row {
+  flex-wrap: wrap;
+}
+.document-card h2 {
+  overflow-wrap: anywhere;
+}
+.document-viewer iframe {
+  width: 100%;
+  height: 65vh;
+  border: 1px solid var(--line);
+  margin-top: 12px;
+  border-radius: 8px;
+  background: white;
+}
+.document-viewer img {
+  display: block;
+  max-width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
+  margin: 12px auto;
+}
+.civil-input {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.civil-input > input {
+  color: transparent;
+  width: 100%;
+}
+.civil-input > span {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.civil-input:focus-within > input {
+  color: var(--text);
+}
+.civil-input:focus-within > span {
+  visibility: hidden;
+}
+.civil-input > input:disabled + span {
+  opacity: 0.65;
+}
+@media (min-width: 700px) {
+  .table-hint {
+    display: none;
+  }
+  .diary-grid-row .block {
+    min-height: 44px;
+  }
+}
+.edit-table .field {
+  position: relative;
+}
+.table-scroll {
+  overscroll-behavior-inline: contain;
+}
+
+.date-nav .civil-input {
+  flex: 1;
+}
+.date-nav .civil-input > span {
+  left: 6px;
+  font-size: 16px;
+  font-weight: 650;
+}
+.edit-table button {
+  white-space: nowrap;
+}

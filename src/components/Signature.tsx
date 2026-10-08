@@ -3,7 +3,11 @@ import { Action } from "./UI";
 export function Signature({
   value,
   onSave,
+  drawLabel = "Draw my signature",
+  saveLabel = "Save signature",
 }: {
+  drawLabel?: string;
+  saveLabel?: string;
   value: string;
   onSave: (data: string) => Promise<unknown>;
 }) {
@@ -77,7 +81,7 @@ export function Signature({
                 setEditing(false);
               }}
             >
-              Save signature
+              {saveLabel}
             </Action>
             <Action onClick={() => setEditing(false)}>Cancel</Action>
           </div>
@@ -89,7 +93,7 @@ export function Signature({
             setEditing(true);
           }}
         >
-          {value ? "Replace signature" : "Draw my signature"}
+          {value ? "Replace signature" : drawLabel}
         </Action>
       )}
     </div>

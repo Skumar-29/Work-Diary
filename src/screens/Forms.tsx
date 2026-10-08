@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { Signature } from "../components/Signature";
+import { displayDate } from "../domain/time";
+import { useEffect, useState } from "react";
 import { useStore } from "../context";
 import { audit, clone, type FormRecord } from "../domain/model";
 import {
@@ -26,10 +28,14 @@ export function Forms() {
     [id, setId] = useState(""),
     [vehicle, setVehicle] = useState("pm"),
     [reviewed, setReviewed] = useState(false),
+    [saveSignature, setSaveSignature] = useState(false),
     [undo, setUndo] = useState<FormRecord | null>(null),
     [doc, setDoc] = useState<FormRecord | null>(null);
   const f = s.forms.find((f) => f.id === id),
     locked = f?.status === "Signed";
+  useEffect(() => {
+    setReviewed(false);
+  }, [f?.id, f?.revision]);
   async function add(previous?: FormRecord) {
     let next = "";
     await mutate((w) => {
@@ -75,7 +81,7 @@ export function Forms() {
           >
             <span>
               <b>
-                {f.values.date} · {f.values.pm || "Truck not set"}
+                {displayDate(f.values.date)} · {f.values.pm || "Truck not set"}
               </b>
               <small>
                 {f.values.from || "Origin"} → {f.values.to || "Destination"}
@@ -106,7 +112,9 @@ export function Forms() {
       <div className="row wrap">
         <Action onClick={() => setId("")}>‹ Forms</Action>
         <h1>Safe driving plan</h1>
-        <span className="status">{f.status}</span>
+        <span className="status">
+          {f.status} · {f.values.base || s.profile.base} time
+        </span>
       </div>
       <section className="card">
         <div className="fields">
@@ -370,10 +378,14 @@ export function Forms() {
               onChange={setReviewed}
             />
             <Action
-              disabled={!reviewed}
+              disabled={!reviewed || !s.profile.signature}
               onClick={() =>
                 mutate((w) => {
                   const record = w.forms.find((x) => x.id === id)!;
+                  if (record.revision !== f.revision)
+                    throw Error(
+                      "This form changed. Review it again before signing.",
+                    );
                   signForm(record, w);
                   audit(w, "Sign driving form", id, undefined, record);
                 })
@@ -381,8 +393,36 @@ export function Forms() {
             >
               Apply my saved signature
             </Action>
-            {!s.profile.signature && (
-              <p className="small">Save your signature once in Settings.</p>
+            {reviewed && (
+              <div className="form-signature">
+                <Signature
+                  value=""
+                  drawLabel="Sign now"
+                  saveLabel="Sign this form"
+                  onSave={async (signature) => {
+                    await mutate((w) => {
+                      const record = w.forms.find((x) => x.id === id)!;
+                      if (record.revision !== f.revision)
+                        throw Error(
+                          "This form changed. Review it again before signing.",
+                        );
+                      signForm(record, w, signature);
+                      if (saveSignature) w.profile.signature = signature;
+                      audit(w, "Sign driving form", id, undefined, record);
+                    });
+                  }}
+                />
+                <Check
+                  label="Save this signature for future forms"
+                  value={saveSignature}
+                  onChange={setSaveSignature}
+                />
+              </div>
+            )}
+            {!reviewed && (
+              <p className="small">
+                Review this trip to sign now or use your saved signature.
+              </p>
             )}
           </>
         )}

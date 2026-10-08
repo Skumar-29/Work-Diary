@@ -1,6 +1,12 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { useStore } from "./context";
-import { dateAdd, today, validDate } from "./domain/time";
+import {
+  dateAdd,
+  today,
+  validDate,
+  displayInstant,
+  displayDate,
+} from "./domain/time";
 import { findPage } from "./domain/diary";
 import { Action, Field, Modal } from "./components/UI";
 import { Diary } from "./screens/Diary";
@@ -15,6 +21,9 @@ const Invoices = lazy(() =>
 );
 const Forms = lazy(() =>
   import("./screens/Forms").then((m) => ({ default: m.Forms })),
+);
+const Documents = lazy(() =>
+  import("./screens/Documents").then((m) => ({ default: m.Documents })),
 );
 const Notes = lazy(() =>
   import("./screens/Notes").then((m) => ({ default: m.Notes })),
@@ -33,6 +42,7 @@ type Screen =
   | "More"
   | "Invoices"
   | "Forms"
+  | "Documents"
   | "Notes"
   | "Records"
   | "Settings";
@@ -134,6 +144,7 @@ export default function App() {
           {busy ? "Saving…" : notice ? "Saved" : "On this device"}
         </div>
       </header>
+      <BaseClock base={s.profile.base} zone={s.profile.zone} />
       {error && (
         <div className="alert" role="alert">
           <span>{error}</span>
@@ -194,12 +205,16 @@ export default function App() {
                 >
                   ‹
                 </button>
-                <input
-                  aria-label="Diary date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => run(() => goDate(e.target.value))}
-                />
+                <span className="civil-input">
+                  <input
+                    lang="en-AU"
+                    aria-label="Diary date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => run(() => goDate(e.target.value))}
+                  />
+                  <span aria-hidden="true">{displayDate(date)}</span>
+                </span>
                 <button
                   aria-label="Next recorded page or day"
                   onClick={() => run(() => previous(1))}
@@ -265,6 +280,7 @@ export default function App() {
           {screen === "Invoices" && <Invoices />}
           {screen === "Forms" && <Forms />}
           {screen === "Notes" && <Notes />}
+          {screen === "Documents" && <Documents />}
           {screen === "Settings" && (
             <>
               <Settings onDone={() => setScreen("Diary")} />
@@ -287,6 +303,7 @@ export default function App() {
                     ["Invoices", "Trips, rates & PDFs", "↗"],
                     ["Forms", "Safe driving & daily check", "✓"],
                     ["Notes", "Codes, tables & reminders", "≡"],
+                    ["Documents", "Certificates, licences & files", "▣"],
                     ["Records", "Books, backup & history", "▤"],
                     ["Settings", "Driver, vehicles & signature", "⚙"],
                   ] as [Screen, string, string][]
@@ -374,6 +391,20 @@ export default function App() {
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+function BaseClock({ base, zone }: { base: string; zone: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="base-clock">
+      <span>{base} base time</span>
+      <time>{displayInstant(now, zone)}</time>
     </div>
   );
 }

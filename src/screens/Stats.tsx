@@ -1,6 +1,7 @@
+import { displayCivil, displayDate } from "../domain/time";
 import { useState } from "react";
 import { useStore } from "../context";
-import { useReport } from "./Driving";
+import { useReport } from "../components/useReport";
 import { dateAdd, minutesLabel } from "../domain/time";
 import { diaryCsv } from "../domain/diary";
 import { Action, Empty, Field, Fold, download } from "../components/UI";
@@ -68,7 +69,7 @@ export function Stats({
               className="stat-day"
               onClick={() => onDate(d.date)}
             >
-              <span>{d.date.slice(5)}</span>
+              <span>{displayDate(d.date).slice(0, 5)}</span>
               <span className="stack">
                 <i className="work" style={{ width: d.work / 14.4 + "%" }} />
                 <i className="rest" style={{ width: d.rest / 14.4 + "%" }} />
@@ -103,7 +104,7 @@ export function Stats({
           <span>Work since identified 24h rest</span>
           <b>{minutesLabel(report.workSince24)}</b>
         </div>
-        <p className="small">{report.majorRest}</p>
+        <p className="small">{displayCivil(report.majorRest)}</p>
       </section>
       <Fold title="Rule review & history">
         <Field
@@ -125,7 +126,7 @@ export function Stats({
               </span>
             </div>
             <p>
-              {c.start} → {c.end}
+              {displayCivil(c.start)} → {displayCivil(c.end)}
             </p>
             <Action onClick={() => onDate(c.date)}>
               Open diary for this period

@@ -606,3 +606,63 @@ describe("long-period rest qualifications", () => {
     expect(r.nextBreak).toBeNull();
   });
 });
+
+import { selectWorkWindow, windowTotals } from "../src/domain/rules";
+import { displayInstant } from "../src/domain/time";
+describe("diary highlights and counted-window totals", () => {
+  it("starts red work blocks only after the short-period cap and never colours rest", () => {
+    const s = driver();
+    editRange(s, "2026-09-01", 0, 22, "work");
+    let r = analyse(s, "2026-09-01T05:30");
+    expect(Object.keys(r.breachSlots)).toEqual(["2026-09-01:21"]);
+    editRange(s, "2026-09-01", 21, 22, "rest");
+    r = analyse(s, "2026-09-01T05:30");
+    expect(r.breachSlots).toEqual({});
+  });
+  it("carries a counted work window across midnight without treating blanks as rest", () => {
+    const s = driver();
+    editRange(s, "2026-09-01", 0, 68, "rest");
+    s.days["2026-09-01"].changes[0] = {
+      slot: 0,
+      location: "",
+      odometer: "",
+      restType: "stationary",
+      note: "",
+      vehicle: "",
+    };
+    editRange(s, "2026-09-01", 68, 92, "work");
+    editRange(s, "2026-09-01", 92, 96, "rest");
+    s.days["2026-09-01"].changes[92] = {
+      slot: 92,
+      location: "",
+      odometer: "",
+      restType: "stationary",
+      note: "",
+      vehicle: "",
+    };
+    editRange(s, "2026-09-02", 0, 8, "work");
+    const r = analyse(s, "2026-09-02T02:00"),
+      w = selectWorkWindow(r.workWindows, "2026-09-02");
+    expect(w?.start).toBe("2026-09-01 17:00");
+    expect(w?.end).toBe("2026-09-02 17:00");
+    expect(windowTotals(s, w!)).toMatchObject({
+      work: 480,
+      rest: 60,
+      unknown: 900,
+    });
+  });
+  it("does not present highlights or calculated windows for unsupported rules", () => {
+    const s = driver();
+    s.profile.scheme = "AFM";
+    editRange(s, "2026-09-01", 0, 96, "work");
+    const r = analyse(s, "2026-09-01T24:00");
+    expect(r.breachSlots).toEqual({});
+    expect(r.workWindows).toEqual([]);
+  });
+  it("displays the selected state time independently of the device time zone", () => {
+    const at = "2026-10-07T14:30:00Z";
+    expect(displayInstant(at, "Australia/Brisbane")).toBe("08/10/2026 · 00:30");
+    expect(displayInstant(at, "Australia/Perth")).toBe("07/10/2026 · 22:30");
+    expect(displayInstant(at, "Australia/Sydney")).toBe("08/10/2026 · 01:30");
+  });
+});

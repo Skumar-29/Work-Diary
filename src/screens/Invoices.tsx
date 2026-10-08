@@ -23,7 +23,7 @@ import {
   tripLoad,
   validateInvoice,
 } from "../domain/invoices";
-import { hhmm } from "../domain/time";
+import { hhmm, displayDate } from "../domain/time";
 import {
   Action,
   Check,
@@ -43,7 +43,8 @@ export function Invoices() {
     [trip, setTrip] = useState(false),
     [start, setStart] = useState(""),
     [finish, setFinish] = useState(""),
-    [deleteId, setDeleteId] = useState("");
+    [deleteId, setDeleteId] = useState(""),
+    [detailsOpen, setDetailsOpen] = useState(false);
   const inv = s.invoices.find((i) => i.id === selected),
     locked = inv?.status === "Issued";
   async function edit(fn: (i: Invoice) => void) {
@@ -65,6 +66,7 @@ export function Invoices() {
       w.invoiceSettings.nextInvoiceNo++;
     });
     setSelected(id);
+    setDetailsOpen(!s.invoiceSettings.profile.billTo);
   }
   function rowEdit(id: string, k: keyof InvoiceRow, v: string | boolean) {
     return edit((i) => {
@@ -126,7 +128,8 @@ export function Invoices() {
               <span>
                 <b>Invoice {i.invoiceNo}</b>
                 <small>
-                  {i.billTo || "Bill to not set"} · {i.dateFrom || "No period"}
+                  {i.billTo || "Bill to not set"} ·{" "}
+                  {displayDate(i.dateFrom) || "No period"}
                 </small>
               </span>
               <span>
@@ -228,7 +231,7 @@ export function Invoices() {
         (c) =>
           [
             c.key,
-            `${c.date} ${hhmm(c.slot)} · ${c.location} · ${c.odometer} · ${c.vehicle}`,
+            `${displayDate(c.date)} ${hhmm(c.slot)} · ${c.location} · ${c.odometer} · ${c.vehicle}`,
           ] as [string, string],
       ),
     ];
@@ -277,7 +280,6 @@ export function Invoices() {
         <div className="fields">
           {[
             ["invoiceNo", "Invoice number", "text"],
-            ["billTo", "Bill to", "text"],
             ["dateFrom", "Date from", "date"],
             ["dateTo", "Date to", "date"],
           ].map(([k, label, type]) => (
@@ -296,155 +298,205 @@ export function Invoices() {
           ))}
         </div>
       </section>
-      <Fold title="Payee, bank & yellow-page details">
-        <div className="fields">
-          {[
-            ["nameSg", "Name / SG No."],
-            ["mobile", "Mobile"],
-            ["email", "Email"],
-            ["bsb", "BSB"],
-            ["accountNo", "Account number"],
-            ["abnAcn", "ABN / ACN"],
-            ["yellowDate", "Yellow pages submitted to"],
-          ].map(([k, label]) => (
-            <Field
-              key={k}
-              label={label}
-              type={k === "yellowDate" ? "date" : "text"}
-              value={inv[k]}
-              disabled={locked}
-              onChange={(v) => {
-                void edit((i) => {
-                  i[k] = v;
-                }).catch(() => {});
-              }}
-            />
-          ))}
+      <details
+        className="card fold"
+        open={detailsOpen}
+        onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
+      >
+        <summary>Business, customer & bank details</summary>
+        <div className="fold-content">
+          <div className="fields">
+            {[
+              ["nameSg", "Name / SG No."],
+              ["billTo", "Bill to"],
+              ["mobile", "Mobile"],
+              ["email", "Email"],
+              ["bsb", "BSB"],
+              ["accountNo", "Account number"],
+              ["abnAcn", "ABN / ACN"],
+              ["yellowDate", "Yellow pages submitted to"],
+            ].map(([k, label]) => (
+              <Field
+                key={k}
+                label={label}
+                type={k === "yellowDate" ? "date" : "text"}
+                value={inv[k]}
+                disabled={locked}
+                onChange={(v) => {
+                  void edit((i) => {
+                    i[k] = v;
+                  }).catch(() => {});
+                }}
+              />
+            ))}
+          </div>
+          <Action
+            disabled={locked}
+            onClick={async () => {
+              await mutate((w) => {
+                for (const k of [
+                  "nameSg",
+                  "mobile",
+                  "email",
+                  "bsb",
+                  "accountNo",
+                  "abnAcn",
+                  "billTo",
+                ])
+                  w.invoiceSettings.profile[k] = String(
+                    w.invoices.find((i) => i.id === selected)![k] || "",
+                  );
+              });
+              setDetailsOpen(false);
+            }}
+          >
+            Save as defaults
+          </Action>
+          <p className="small">
+            Saved details are filled automatically for new invoices.
+          </p>
         </div>
-        <Action
-          disabled={locked}
-          onClick={() =>
-            mutate((w) => {
-              for (const k of [
-                "nameSg",
-                "mobile",
-                "email",
-                "bsb",
-                "accountNo",
-                "abnAcn",
-                "billTo",
-              ])
-                w.invoiceSettings.profile[k] = String(
-                  w.invoices.find((i) => i.id === selected)![k] || "",
-                );
-            })
-          }
-        >
-          Save as defaults
-        </Action>
-      </Fold>
-      <section className="card">
+      </details>
+      <section className="card invoice-section">
         <div className="row">
-          <h2>Loads</h2>
+          <h2>Load Details</h2>
           <Action disabled={locked} onClick={() => setTrip(true)}>
             + From diary
           </Action>
         </div>
-        {inv.loads.map((r, n) => (
-          <div className="invoice-row" key={r.id}>
-            <div className="row">
-              <b>Load {n + 1}</b>
-              <Action
-                disabled={locked}
-                danger
-                onClick={() =>
-                  edit((i) => {
-                    i.loads = i.loads.filter((x) => x.id !== r.id);
-                  })
-                }
-              >
-                Remove
-              </Action>
-            </div>
-            <div className="fields">
-              {[
-                ["loadDate", "Load date", "date"],
-                ["from", "From", "text"],
-                ["to", "To", "text"],
-                ["type", "BD / RT / BT / AB / C/O", "text"],
-                ["odoStart", "Start odometer", "number"],
-                ["odoFinish", "Finish odometer", "number"],
-                ["km", "Quantity / km", "number"],
-                ["rate", isCO(r.type) ? "Fixed amount" : "Rate per km", "text"],
-              ].map(([k, label, type]) => (
-                <Field
-                  key={k}
-                  label={label}
-                  type={type}
-                  list={
-                    k === "type"
-                      ? "load-types"
-                      : ["from", "to"].includes(k)
-                        ? "city-codes"
-                        : undefined
-                  }
-                  value={r[k]}
-                  disabled={
-                    locked || (k === "km" && !!r.odoStart && !!r.odoFinish)
-                  }
-                  onChange={(v) => {
-                    void rowEdit(r.id, k, v).catch(() => {});
-                  }}
-                />
+        <p className="small table-hint">Swipe across to see all columns.</p>
+        <div
+          className="table-scroll"
+          role="region"
+          aria-label="Load details table"
+          tabIndex={0}
+        >
+          <table className="edit-table load-table">
+            <thead>
+              <tr>
+                {[
+                  "Load date",
+                  "From",
+                  "To",
+                  "BD / RT / BT / AB / C/O",
+                  "Start odometer",
+                  "Finish odometer",
+                  "Quantity / km",
+                  "Rate",
+                  "Amount",
+                  "Action",
+                ].map((x) => (
+                  <th key={x} scope="col">
+                    {x}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {inv.loads.map((r, n) => (
+                <tr key={r.id} aria-label={`Load ${n + 1}`}>
+                  {[
+                    ["loadDate", "Load date", "date"],
+                    ["from", "From", "text"],
+                    ["to", "To", "text"],
+                    ["type", "BD / RT / BT / AB / C/O", "text"],
+                    ["odoStart", "Start odometer", "number"],
+                    ["odoFinish", "Finish odometer", "number"],
+                    ["km", "Quantity / km", "number"],
+                    [
+                      "rate",
+                      isCO(r.type) ? "Fixed amount" : "Rate per km",
+                      "text",
+                    ],
+                  ].map(([k, label, type]) => (
+                    <td key={k}>
+                      <Field
+                        label={label}
+                        type={type}
+                        list={
+                          k === "type"
+                            ? "load-types"
+                            : ["from", "to"].includes(k)
+                              ? "city-codes"
+                              : undefined
+                        }
+                        value={r[k]}
+                        disabled={
+                          locked ||
+                          (k === "km" && !!r.odoStart && !!r.odoFinish)
+                        }
+                        onChange={(v) => {
+                          void rowEdit(r.id, k, v).catch(() => {});
+                        }}
+                      />
+                      {k === "rate" && isCO(r.type) && (
+                        <small className="fixed-rate">FIXED RATE</small>
+                      )}
+                      {k === "loadDate" && r.sourceId && (
+                        <small className="source-note">
+                          {(() => {
+                            try {
+                              const [a, b] = r.sourceId!.split("|");
+                              return tripLoad(s, a, b).sourceRevision !==
+                                r.sourceRevision
+                                ? "Diary changed · review"
+                                : "From diary";
+                            } catch {
+                              return "Source needs review";
+                            }
+                          })()}
+                        </small>
+                      )}
+                    </td>
+                  ))}
+                  <td className="amount-cell">
+                    {r.manualAmount ? (
+                      <Field
+                        label="Amount"
+                        value={r.amount}
+                        disabled={locked}
+                        onChange={(v) => {
+                          void rowEdit(r.id, "amount", v).catch(() => {});
+                        }}
+                      />
+                    ) : (
+                      <strong>
+                        {(() => {
+                          try {
+                            return money(Number(calculateLoad(r).amount));
+                          } catch {
+                            return "—";
+                          }
+                        })()}
+                      </strong>
+                    )}
+                    <Check
+                      label="Manual amount"
+                      value={r.manualAmount}
+                      disabled={locked}
+                      onChange={(v) => {
+                        void rowEdit(r.id, "manualAmount", v).catch(() => {});
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <Action
+                      disabled={locked}
+                      danger
+                      onClick={() =>
+                        edit((i) => {
+                          i.loads = i.loads.filter((x) => x.id !== r.id);
+                        })
+                      }
+                    >
+                      Remove
+                    </Action>
+                  </td>
+                </tr>
               ))}
-            </div>
-            <div className="row wrap">
-              <Check
-                label="Manual amount"
-                value={r.manualAmount}
-                disabled={locked}
-                onChange={(v) => {
-                  void rowEdit(r.id, "manualAmount", v).catch(() => {});
-                }}
-              />
-              {r.manualAmount ? (
-                <Field
-                  label="Amount"
-                  value={r.amount}
-                  disabled={locked}
-                  onChange={(v) => {
-                    void rowEdit(r.id, "amount", v).catch(() => {});
-                  }}
-                />
-              ) : (
-                <b>
-                  {(() => {
-                    try {
-                      return money(Number(calculateLoad(r).amount));
-                    } catch {
-                      return "—";
-                    }
-                  })()}
-                </b>
-              )}
-            </div>
-            {r.sourceId && (
-              <p className="small">
-                Diary-linked snapshot
-                {(() => {
-                  try {
-                    const [a, b] = r.sourceId!.split("|");
-                    return tripLoad(s, a, b).sourceRevision !== r.sourceRevision
-                      ? " · diary has changed; review this load"
-                      : "";
-                  } catch {
-                    return " · source needs review";
-                  }
-                })()}
-              </p>
-            )}
-          </div>
-        ))}
+            </tbody>
+          </table>
+        </div>
         <Action
           disabled={locked}
           onClick={() =>
@@ -460,72 +512,94 @@ export function Invoices() {
         title={`Miscellaneous · ${inv.misc.length} rows`}
         open={inv.misc.length > 0}
       >
-        {inv.misc.map((r, n) => (
-          <div key={r.id} className="invoice-row">
-            <div className="row">
-              <b>Miscellaneous {n + 1}</b>
-              <Action
-                disabled={locked}
-                danger
-                onClick={() =>
-                  edit((i) => {
-                    i.misc = i.misc.filter((x) => x.id !== r.id);
-                  })
-                }
-              >
-                Remove
-              </Action>
-            </div>
-            <div className="fields">
-              {[
-                ["date", "Date"],
-                ["item", "Item"],
-                ["quantity", "Quantity"],
-                ["rate", "Rate"],
-              ].map(([k, label]) => (
-                <Field
-                  key={k}
-                  label={label}
-                  type={k === "date" ? "date" : "text"}
-                  value={r[k]}
-                  list={k === "item" ? "misc-items" : undefined}
-                  disabled={locked}
-                  onChange={(v) => {
-                    void miscEdit(r.id, k, v).catch(() => {});
-                  }}
-                />
+        <div
+          className="table-scroll"
+          role="region"
+          aria-label="Miscellaneous table"
+          tabIndex={0}
+        >
+          <table className="edit-table misc-table">
+            <thead>
+              <tr>
+                {["Date", "Item", "Quantity", "Rate", "Amount", "Action"].map(
+                  (x) => (
+                    <th key={x} scope="col">
+                      {x}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {inv.misc.map((r, n) => (
+                <tr key={r.id} aria-label={`Miscellaneous ${n + 1}`}>
+                  {[
+                    ["date", "Date"],
+                    ["item", "Item"],
+                    ["quantity", "Quantity"],
+                    ["rate", "Rate"],
+                  ].map(([k, label]) => (
+                    <td key={k}>
+                      <Field
+                        label={label}
+                        type={k === "date" ? "date" : "text"}
+                        value={r[k]}
+                        list={k === "item" ? "misc-items" : undefined}
+                        disabled={locked}
+                        onChange={(v) => {
+                          void miscEdit(r.id, k, v).catch(() => {});
+                        }}
+                      />
+                    </td>
+                  ))}
+                  <td className="amount-cell">
+                    {r.manualAmount ? (
+                      <Field
+                        label="Miscellaneous amount"
+                        value={r.amount}
+                        disabled={locked}
+                        onChange={(v) => {
+                          void miscEdit(r.id, "amount", v).catch(() => {});
+                        }}
+                      />
+                    ) : (
+                      <strong>
+                        {(() => {
+                          try {
+                            return money(Number(calculateMisc(r).amount));
+                          } catch {
+                            return "—";
+                          }
+                        })()}
+                      </strong>
+                    )}
+                    <Check
+                      label="Manual amount"
+                      value={r.manualAmount}
+                      disabled={locked}
+                      onChange={(v) => {
+                        void miscEdit(r.id, "manualAmount", v).catch(() => {});
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <Action
+                      disabled={locked}
+                      danger
+                      onClick={() =>
+                        edit((i) => {
+                          i.misc = i.misc.filter((x) => x.id !== r.id);
+                        })
+                      }
+                    >
+                      Remove
+                    </Action>
+                  </td>
+                </tr>
               ))}
-            </div>
-            <Check
-              label="Manual amount"
-              value={r.manualAmount}
-              disabled={locked}
-              onChange={(v) => {
-                void miscEdit(r.id, "manualAmount", v).catch(() => {});
-              }}
-            />
-            {r.manualAmount ? (
-              <Field
-                label="Miscellaneous amount"
-                value={r.amount}
-                disabled={locked}
-                onChange={(v) => {
-                  void miscEdit(r.id, "amount", v).catch(() => {});
-                }}
-              />
-            ) : (
-              <b>
-                {(() => {
-                  try {
-                    return money(Number(calculateMisc(r).amount));
-                  } catch {
-                    return "—";
-                  }
-                })()}
-              </b>
-            )}
-          </div>
-        ))}
+            </tbody>
+          </table>
+        </div>
         <Action
           disabled={locked}
           onClick={() =>

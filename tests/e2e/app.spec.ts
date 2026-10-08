@@ -79,8 +79,20 @@ test("first use, work/rest blocks, persisted location and offline reload", async
   await expect(page.locator(".totals")).toContainText("6h 00m");
   await page.getByRole("button", { name: "06–12", exact: true }).click();
   await expect(page.locator(".block.work")).toHaveCount(24);
-  await fill(page, "Location", "Laverton North");
-  await fill(page, "Odometer", "1000");
+  await page
+    .locator(".change-table tr")
+    .filter({
+      has: page.getByRole("rowheader", { name: "06:00", exact: true }),
+    })
+    .getByLabel("Location", { exact: true })
+    .fill("Laverton North");
+  await page
+    .locator(".change-table tr")
+    .filter({
+      has: page.getByRole("rowheader", { name: "06:00", exact: true }),
+    })
+    .getByLabel("Odometer", { exact: true })
+    .fill("1000");
   await page.getByRole("button", { name: "Time range", exact: true }).click();
   await fill(page, "From", "12:00");
   await fill(page, "To (24:00 for midnight)", "13:00");
@@ -91,9 +103,9 @@ test("first use, work/rest blocks, persisted location and offline reload", async
   await page.reload();
   await expect(page.locator(".totals")).toContainText("6h 00m");
   await page.getByRole("button", { name: "06–12", exact: true }).click();
-  await expect(page.getByLabel("Location", { exact: true })).toHaveValue(
-    "Laverton North",
-  );
+  await expect(
+    page.getByLabel("Location", { exact: true }).first(),
+  ).toHaveValue("Laverton North");
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
@@ -349,15 +361,15 @@ test("drag selection, Undo, full-rest action and narrow screen layout", async ({
   await start(page);
   await page.setViewportSize({ width: 320, height: 800 });
   await noOverflow(page);
-  const first = page.locator('[data-slot="0"]'),
-    last = page.locator('[data-slot="3"]');
+  const first = page.locator('[data-slot="0"][data-row="work"]'),
+    last = page.locator('[data-slot="3"][data-row="work"]');
   await first.scrollIntoViewIfNeeded();
   const a = await first.boundingBox(),
     b = await last.boundingBox();
   if (!a || !b) throw Error("Blocks unavailable");
-  await page.mouse.move(a.x + a.width / 2, a.y + 30);
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  await page.mouse.move(b.x + b.width / 2, b.y + 30, { steps: 8 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
   await page.mouse.up();
   await expect(page.locator(".totals")).toContainText("Work 1h 00m");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
@@ -423,23 +435,19 @@ test("save failure is visible and cannot replace the previous saved record", asy
   page,
 }) => {
   await start(page);
-  await page
-    .getByRole("button", { name: "00:00 unrecorded", exact: true })
-    .click();
+  await page.getByRole("button", { name: "00:00 work", exact: true }).click();
   await expect(page.locator(".totals")).toContainText("Work 0h 15m");
   await page.evaluate(() => {
     IDBObjectStore.prototype.put = function () {
       throw new DOMException("Simulated storage full", "QuotaExceededError");
     };
   });
-  await page
-    .getByRole("button", { name: "00:15 unrecorded", exact: true })
-    .click();
+  await page.getByRole("button", { name: "00:15 work", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await page.reload();
   await expect(page.locator(".totals")).toContainText("Work 0h 15m");
   await expect(
-    page.getByRole("button", { name: "00:15 unrecorded", exact: true }),
+    page.getByRole("button", { name: "00:15 work", exact: true }),
   ).toBeVisible();
 });
 
@@ -462,4 +470,227 @@ test("GitHub repository subpath has its own working offline scope", async ({
       exact: true,
     }),
   ).toBeVisible();
+});
+
+test("documents open offline and a full backup restores the actual file", async ({
+  page,
+  context,
+}, info) => {
+  await start(page);
+  await more(page, "Documents");
+  // A valid tiny PNG exercises the browser preview, storage and byte-for-byte backup.
+  const bytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await page
+    .getByLabel("Add document", { exact: true })
+    .setInputFiles({
+      name: "Certificate.png",
+      mimeType: "image/png",
+      buffer: bytes,
+    });
+  await fill(page, "Document name", "My BFM certificate");
+  await page
+    .getByLabel("Document type", { exact: true })
+    .selectOption("BFM certificate");
+  await fill(page, "Expiry date (optional)", "2027-12-31");
+  await page.getByLabel("Pin for quick access").check();
+  await page
+    .getByRole("button", { name: "Save document", exact: true })
+    .click();
+  await expect(page.getByText("Expires 31/12/2027")).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await context.setOffline(true);
+  await page.reload();
+  await more(page, "Documents");
+  await page
+    .getByRole("button", { name: "Show document", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog").getByAltText("My BFM certificate"),
+  ).toBeVisible();
+  expect(
+    await page
+      .getByRole("dialog")
+      .getByAltText("My BFM certificate")
+      .evaluate((el: HTMLImageElement) => el.naturalWidth),
+  ).toBe(1);
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await more(page, "Records");
+  const event = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download full backup", exact: true })
+    .click();
+  const download = await event;
+  await download.saveAs(info.outputPath("documents-backup.json"));
+  const backup = await readFile(
+      info.outputPath("documents-backup.json"),
+      "utf8",
+    ),
+    payload = JSON.parse(JSON.parse(backup).payload);
+  expect(
+    Buffer.from(payload.documents[0].data.split(",")[1], "base64"),
+  ).toEqual(bytes);
+  await more(page, "Documents");
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Delete document", exact: true })
+    .click();
+  await more(page, "Records");
+  await page
+    .getByLabel("Restore backup", { exact: true })
+    .setInputFiles({
+      name: "documents.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(backup),
+    });
+  await page.getByRole("button", { name: "Merge backup", exact: true }).click();
+  await expect(page.getByText("Backup imported successfully.")).toBeVisible();
+  await more(page, "Documents");
+  await page
+    .getByRole("button", { name: "Show document", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog").getByAltText("My BFM certificate"),
+  ).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({ path: info.outputPath("documents.png") });
+});
+
+test("sign now works without a saved signature and can save it for future trips", async ({
+  page,
+}) => {
+  await start(page);
+  await more(page, "Forms");
+  await page.getByRole("button", { name: "+ New form", exact: true }).click();
+  await fill(page, "Location", "MEL");
+  await fill(page, "Destination", "BNE");
+  await fill(page, "Departure date", "2026-10-08");
+  await fill(page, "Departure time", "17:00");
+  await fill(page, "Estimated arrival", "2026-10-09T18:00");
+  await fill(page, "Truck registration", "TEST01");
+  await page
+    .getByRole("button", { name: "All checked · OK", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Reviewed all · all clear", exact: true })
+    .click();
+  await page
+    .getByLabel("I have reviewed this form and these answers for this trip", {
+      exact: true,
+    })
+    .check();
+  await expect(
+    page.getByRole("button", { name: "Apply my saved signature", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Sign now", exact: true }).click();
+  await page
+    .getByLabel("Draw signature", { exact: true })
+    .scrollIntoViewIfNeeded();
+  const box = await page
+    .getByLabel("Draw signature", { exact: true })
+    .boundingBox();
+  if (!box) throw Error("No signature canvas");
+  await page.mouse.move(box.x + 20, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + 65, { steps: 12 });
+  await page.mouse.up();
+  await page
+    .getByLabel("Save this signature for future forms", { exact: true })
+    .check();
+  await page
+    .getByRole("button", { name: "Sign this form", exact: true })
+    .click();
+  await expect(
+    page.getByText("Signed by Test Driver. This saved form is read only."),
+  ).toBeVisible();
+  await more(page, "Settings");
+  await page.getByText("My reusable signature", { exact: true }).click();
+  await expect(page.getByAltText("Saved driver signature")).toBeVisible();
+});
+
+test("invoice tables retain defaults and fixed changeover calculations", async ({
+  page,
+}, info) => {
+  await start(page);
+  await more(page, "Invoices");
+  await page
+    .getByRole("button", { name: "+ New invoice", exact: true })
+    .click();
+  await fill(page, "Bill to", "Repeat Customer");
+  await fill(page, "BSB", "123456");
+  await fill(page, "Account number", "12345678");
+  await page
+    .getByRole("button", { name: "Save as defaults", exact: true })
+    .click();
+  await expect(page.getByLabel("Bill to", { exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "‹ Invoices", exact: true }).click();
+  await page
+    .getByRole("button", { name: "+ New invoice", exact: true })
+    .click();
+  await expect(page.getByLabel("Bill to", { exact: true })).not.toBeVisible();
+  await page
+    .getByText("Business, customer & bank details", { exact: true })
+    .click();
+  await expect(page.getByLabel("Bill to", { exact: true })).toHaveValue(
+    "Repeat Customer",
+  );
+  await expect(page.getByLabel("BSB", { exact: true })).toHaveValue("123456");
+  await page
+    .getByText("Business, customer & bank details", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "+ Add load", exact: true }).click();
+  const load = page.getByRole("row", { name: "Load 1", exact: true });
+  await load.getByLabel("Load date", { exact: true }).fill("2026-10-08");
+  await load.getByLabel("From", { exact: true }).fill("MEL");
+  await load.getByLabel("To", { exact: true }).fill("BNE");
+  await load.getByLabel("BD / RT / BT / AB / C/O", { exact: true }).fill("C/O");
+  await load.getByLabel("Fixed amount", { exact: true }).fill("450");
+  await expect(page.locator(".invoice-total")).toContainText("450.00");
+  await page.getByText("Miscellaneous · 0 rows", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "+ Add miscellaneous", exact: true })
+    .click();
+  const misc = page.getByRole("row", { name: "Miscellaneous 1", exact: true });
+  await misc.getByLabel("Date", { exact: true }).fill("2026-10-08");
+  await misc.getByLabel("Item", { exact: true }).fill("Wait time");
+  await misc.getByLabel("Quantity", { exact: true }).fill("2");
+  await misc.getByLabel("Rate", { exact: true }).fill("30");
+  await expect(page.locator(".invoice-total")).toContainText("510.00");
+  await noOverflow(page);
+  await page.screenshot({
+    path: info.outputPath("invoice-tables.png"),
+    fullPage: true,
+  });
+});
+
+test("state clock and red diary blocks stay clear on a narrow screen", async ({
+  page,
+}, info) => {
+  await page.clock.setFixedTime(new Date("2026-10-07T14:30:00Z"));
+  await start(page);
+  await expect(page.locator(".base-clock")).toContainText("08/10/2026 · 00:30");
+  await page.getByRole("button", { name: "Time range", exact: true }).click();
+  await fill(page, "From", "00:00");
+  await fill(page, "To (24:00 for midnight)", "05:30");
+  await page.getByRole("button", { name: "Save work", exact: true }).click();
+  await expect(page.locator(".block.breach")).toHaveCount(1);
+  await expect(page.locator(".window-summary")).toContainText("Work 5h 30m");
+  await page.locator(".block.breach").click();
+  await expect(page.getByRole("dialog")).toContainText("5h 15m");
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page);
+  await page.screenshot({
+    path: info.outputPath("red-blocks.png"),
+    fullPage: true,
+  });
+  await more(page, "Settings");
+  await page.getByLabel("Driver base", { exact: true }).selectOption("WA");
+  await page
+    .getByRole("button", { name: "Save driver settings", exact: true })
+    .click();
+  await expect(page.locator(".base-clock")).toContainText("07/10/2026 · 22:30");
+  await expect(page.locator(".window-summary")).toContainText("QLD time");
 });

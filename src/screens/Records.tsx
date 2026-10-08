@@ -1,3 +1,4 @@
+import { displayDate, displayInstant } from "../domain/time";
 import { useState } from "react";
 import { useStore } from "../context";
 import { audit, clone, uid } from "../domain/model";
@@ -224,7 +225,7 @@ export function Records({ onPage }: { onPage: (id: string) => void }) {
                 <b>Page {p.number}</b>
               </span>
               <span>
-                {p.date} · {p.status}
+                {displayDate(p.date)} · {p.status}
               </span>
             </button>
           ))}
@@ -272,7 +273,7 @@ export function Records({ onPage }: { onPage: (id: string) => void }) {
           .slice(0, 100)
           .map((a) => (
             <div key={a.id} className="record-line">
-              <time>{a.at.slice(0, 16).replace("T", " ")}</time>
+              <time>{displayInstant(a.at, s.profile.zone)}</time>
               <span>{a.action}</span>
               <small>{a.recordId.length < 30 ? a.recordId : ""}</small>
             </div>
@@ -305,7 +306,8 @@ export function Records({ onPage }: { onPage: (id: string) => void }) {
             <b>{plan.kind}</b> · {Object.keys(plan.state.days).length} diary
             dates · {plan.state.pages.length} pages ·{" "}
             {plan.state.invoices.length} invoices · {plan.state.forms.length}{" "}
-            forms · {plan.state.notes.length} notes
+            forms · {plan.state.notes.length} notes ·{" "}
+            {plan.state.documents.length} documents
           </p>
           {plan.warnings.map((w, i) => (
             <p className="banner" key={i}>

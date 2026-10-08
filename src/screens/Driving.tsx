@@ -1,44 +1,12 @@
+import { displayCivil, displayDate } from "../domain/time";
 import { useEffect, useState } from "react";
 import { useStore } from "../context";
 import { correctTimerStart, switchTimer } from "../domain/diary";
 import { civil, minutesLabel, today } from "../domain/time";
-import { type RuleReport } from "../domain/rules";
+import { useReport } from "../components/useReport";
+export { useReport } from "../components/useReport";
 import { type RestType } from "../domain/model";
 import { Action, Empty, Field, Fold, Modal } from "../components/UI";
-export function useReport(asOf: string, range = 14, live = false) {
-  const { s } = useStore(),
-    [report, setReport] = useState<RuleReport | null>(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    let done = false;
-    const worker = new Worker(
-      new URL("../domain/rules.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    worker.onmessage = (e) => {
-      if (!done) {
-        setReport(e.data.report || null);
-        setError(e.data.error || "");
-      }
-    };
-    worker.onerror = () =>
-      setError(
-        "Hours summary could not be calculated. Your records are saved.",
-      );
-    worker.postMessage({
-      id: 1,
-      s,
-      asOf,
-      range,
-      now: live ? Date.now() : undefined,
-    });
-    return () => {
-      done = true;
-      worker.terminate();
-    };
-  }, [s, asOf, range, live]);
-  return { report, error };
-}
 export function Driving({ onDiary }: { onDiary: () => void }) {
   const { s, mutate } = useStore(),
     [now, setNow] = useState(Date.now()),
@@ -129,7 +97,7 @@ export function Driving({ onDiary }: { onDiary: () => void }) {
         {timer && (
           <div className="row">
             <span className="small">
-              Started {civil(timer.start, timer.zone).date} ·{" "}
+              Started {displayDate(civil(timer.start, timer.zone).date)} ·{" "}
               {civil(timer.start, timer.zone).time}
             </span>
             <Action
@@ -208,11 +176,12 @@ export function Driving({ onDiary }: { onDiary: () => void }) {
                 ))}
             </div>
             <Fold title="Last work, major rest & counting periods">
-              <p>{report.lastWork}</p>
-              <p>{report.majorRest}</p>
+              <p>{displayCivil(report.lastWork)}</p>
+              <p>{displayCivil(report.majorRest)}</p>
               {report.checks.map((c, i) => (
                 <p key={i} className="small">
-                  {c.label}: {c.start} → {c.end}. {c.reason}
+                  {c.label}: {displayCivil(c.start)} → {displayCivil(c.end)}.{" "}
+                  {displayCivil(c.reason)}
                 </p>
               ))}
               <a href={report.source} target="_blank" rel="noreferrer">

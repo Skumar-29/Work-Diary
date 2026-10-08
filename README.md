@@ -1,6 +1,6 @@
 # Truck Workspace
 
-A local-first PWA combining Truck Work Diary and the truck Invoice Generator. Version **2.0.0-beta.1**. The APS Carpenter invoice app is not included.
+A local-first PWA combining Truck Work Diary and the truck Invoice Generator. Version **2.0.0-beta.2**. The APS Carpenter invoice app is not included.
 
 ## Run and build
 
@@ -20,7 +20,7 @@ npm run test:e2e
 ## Features
 
 - Driving timer with saved sessions, base-time-zone handling, quarter-hour rounding and start correction.
-- Compact 24-column diary blocks, tap/drag selection, precise/overnight ranges, Undo and full stationary-rest entry.
+- Separate Work and Rest rows with 24-column diary blocks, recorded work-cap highlights, page/window totals, tap/drag selection, precise/overnight ranges, Undo and full stationary-rest entry.
 - Change locations, odometers, rest classifications, daily checks, driver snapshots and paper-page photos.
 - Book-aware page jumps, automatic page allocation, cancelled snapshots and skipped-page records.
 - Original paper-style graph with a complete detail appendix; 7/14/28-day statistics and as-of review.
@@ -37,6 +37,14 @@ npm run test:e2e
 `src/screens` contains the compact React screens. `src/documents` renders the original layouts, PDF pages and XLSX files. Hours calculations run in a worker. Screens and PDF generation load on demand; all production chunks are included in the offline cache.
 
 Driver identity is captured on diary days and timer events. Paper pages have separate IDs and book/number mappings, so cancellation retains a snapshot while a replacement can refer to the same date. Issued invoices and signed forms retain their contents; new revisions/trips have separate IDs.
+
+## Beta 2 changes
+
+Documents holds PDF/JPG/PNG/WebP files offline (8 MB per file, 24 MB total), with expiry dates and pinning. Full backups include the files. Existing installations upgrade their IndexedDB store in place; document bytes are kept separately from frequently saved diary records.
+
+Forms support signing directly and optionally saving that signature. Invoice Load Details and Miscellaneous use the original table columns; saved business/customer/bank defaults can be collapsed. Dates display as dd/mm/yyyy and times as 24-hour driver-base time, with the system picker used while editing. Historical diary and new-form base settings are retained.
+
+Red work blocks identify recorded work-cap exceedances supported by the existing helper. They are not a complete fatigue-breach or truck-safety determination; rest-pattern checks remain in Stats/Driving. The offline truck-route idea is preserved in `ROADMAP.md` and is not included in this release.
 
 ## Restoring old records
 

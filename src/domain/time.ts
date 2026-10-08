@@ -99,3 +99,20 @@ export function segments(slots: Activity[]) {
   });
   return out;
 }
+
+export function displayDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value.slice(8, 10) + "/" + value.slice(5, 7) + "/" + value.slice(0, 4)
+    : value;
+}
+export function displayCivil(value: string) {
+  return value
+    .replace(/\d{4}-\d{2}-\d{2}/g, (date) => displayDate(date))
+    .replace("T", " · ");
+}
+export function displayInstant(value: string | number, zone: string) {
+  const at = typeof value === "number" ? value : Date.parse(value);
+  if (!Number.isFinite(at)) return "";
+  const c = civil(at, zone);
+  return displayDate(c.date) + " · " + c.time;
+}

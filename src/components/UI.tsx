@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { displayCivil, displayDate } from "../domain/time";
 import { useStore } from "../context";
 export function Field({
   label,
@@ -71,6 +72,21 @@ export function Field({
         </select>
       ) : type === "textarea" ? (
         <textarea {...props} rows={3} />
+      ) : ["date", "time", "datetime-local"].includes(type) ? (
+        <span className="civil-input">
+          <input {...props} lang="en-AU" type={type} min={min} step={step} />
+          <span aria-hidden="true">
+            {draft
+              ? type === "date"
+                ? displayDate(draft)
+                : displayCivil(draft)
+              : type === "date"
+                ? "dd/mm/yyyy"
+                : type === "time"
+                  ? "hh:mm"
+                  : "dd/mm/yyyy · hh:mm"}
+          </span>
+        </span>
       ) : (
         <input
           {...props}

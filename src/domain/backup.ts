@@ -1,3 +1,10 @@
+import { readDocumentData } from "../storage";
+import {
+  validateDocument,
+  fileHash,
+  decodeDocument,
+  MAX_DOCUMENT_TOTAL,
+} from "./documents";
 import {
   audit,
   clone,
@@ -5,6 +12,7 @@ import {
   ensureDay,
   uid,
   zones,
+  upgradeWorkspace,
   type Workspace,
   type Profile,
   type Invoice,
@@ -41,7 +49,13 @@ export async function digest(text: string) {
     .join("");
 }
 export async function exportBackup(state: Workspace) {
-  const payload = JSON.stringify(state);
+  const documents = await Promise.all(
+    (state.documents || []).map(async (d) => ({
+      ...d,
+      data: d.data || (await readDocumentData(d.hash)),
+    })),
+  );
+  const payload = JSON.stringify({ ...state, documents });
   return JSON.stringify({
     format: "truck-workspace-backup",
     version: 2,
@@ -63,6 +77,15 @@ export function validateState(s: Workspace) {
     s.revision < 0
   )
     throw Error("Unsupported combined backup.");
+  upgradeWorkspace(s);
+  if (
+    !Array.isArray(s.documents) ||
+    s.documents.reduce((n, d) => n + d.size, 0) > MAX_DOCUMENT_TOTAL
+  )
+    throw Error("Invalid document storage size.");
+  s.documents.forEach(validateDocument);
+  if (new Set(s.documents.map((d) => d.id)).size !== s.documents.length)
+    throw Error("Duplicate document IDs.");
   const text = (v: unknown) => typeof v === "string";
   const asset = (v: unknown) =>
     v === "" ||
@@ -490,6 +513,10 @@ export async function inspectBackup(text: string): Promise<ImportPlan> {
     )
       throw Error("Backup checksum failed. No records changed.");
     state = validateState(safe(JSON.parse(input.payload)));
+    for (const d of state.documents) {
+      if (!d.data || (await fileHash(decodeDocument(d.data))) !== d.hash)
+        throw Error("Document backup checksum failed. No records changed.");
+    }
     kind = "combined";
   } else if (
     input.app === "Invoice Generator" ||
@@ -587,6 +614,13 @@ export function applyImport(
       for (const item of plan.state[k])
         if (!list.some((x) => x.id === item.id)) list.push(clone(item));
     }
+    for (const document of plan.state.documents || [])
+      if (
+        !s.documents.some(
+          (d) => d.id === document.id || d.hash === document.hash,
+        )
+      )
+        s.documents.push(clone(document));
     s.places = [...new Set([...s.places, ...plan.state.places])];
     s.routeMap = { ...plan.state.routeMap, ...s.routeMap };
     if (!s.profile.name && plan.state.profile.name) {
