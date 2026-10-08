@@ -1,4 +1,12 @@
-# Verification — 2.0.0-beta.2
+# Verification — 2.0.0-beta.3
+
+## Beta 3 update — 8 October 2026
+
+- PDF export now draws native selectable text and vector lines. Safe-driving/checklist labels are rebuilt at 9-point body size with complete table borders; normal forms remain two A4 pages. Long fields/comments continue onto extra pages.
+- Embedded, licensed fonts and PDF dependencies are included in the offline shell. Existing signature ink is cropped only to remove empty margins; logos and signatures remain images. Original records/answers are preserved.
+- All pages of generated safe-driving, diary and invoice PDFs were rendered and visually reviewed. Text extraction confirms labels and values; no whole-page raster image remains. A font subsetting defect found during visual review was fixed by embedding the pre-reduced font files whole.
+- Diary grid width is capped at the original 430 pixels with 44-pixel row labels and 24 contiguous slots. Existing breach colours, selection and Undo remain active.
+- Browser checks verify compact slot widths and offline two-page PDF downloads with real embedded fonts, in addition to the existing phone/desktop journeys. Physical-device acceptance below remains open.
 
 ## Beta 2 update — 8 October 2026
 

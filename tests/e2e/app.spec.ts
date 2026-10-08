@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { PDFDocument, PDFName, PDFDict, PDFRawStream } from "pdf-lib";
 async function fill(p: Page, label: string, value: string) {
   await p.getByLabel(label, { exact: true }).fill(value);
   await p.getByLabel(label, { exact: true }).press("Tab");
@@ -72,6 +73,10 @@ test("first use, work/rest blocks, persisted location and offline reload", async
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await start(page);
+  const grid = await page.locator(".diary-grid-section").first().boundingBox();
+  expect(grid?.width).toBeLessThanOrEqual(430);
+  const slot = await page.locator('[data-slot="0"][data-row="work"]').boundingBox();
+  expect(slot?.width).toBeLessThanOrEqual(16.1);
   await page.getByRole("button", { name: "Time range", exact: true }).click();
   await fill(page, "From", "06:00");
   await fill(page, "To (24:00 for midnight)", "12:00");
@@ -212,7 +217,7 @@ test("restores legacy diary, jumps to exact page, imports a trip and downloads P
   await noOverflow(page);
 });
 test("reusable signature, all-clear answers, exact two-page PDF and fresh next-trip review", async ({
-  page,
+  page, context,
 }, info) => {
   await start(page);
   await more(page, "Settings");
@@ -276,10 +281,26 @@ test("reusable signature, all-clear answers, exact two-page PDF and fresh next-t
   expect(await page.locator("dialog .paper svg image").count()).toBeGreaterThan(
     2,
   );
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await context.setOffline(true);
   const event = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF", exact: true }).click();
   const file = await event;
   await file.saveAs(info.outputPath("safe-driving.pdf"));
+  const pdf = await PDFDocument.load(await readFile(info.outputPath("safe-driving.pdf")));
+  expect(pdf.getPageCount()).toBe(2);
+  for (const pdfPage of pdf.getPages()) {
+    const resources = pdfPage.node.Resources()!;
+    const fonts = resources.lookup(PDFName.of("Font"), PDFDict);
+    expect(fonts.keys().length).toBeGreaterThan(0);
+    const objects = resources.lookup(PDFName.of("XObject"), PDFDict);
+    for (const key of objects.keys()) {
+      const object = objects.lookup(key, PDFRawStream);
+      if (object.dict.get(PDFName.of("Subtype"))?.toString() === "/Image") {
+        expect(Number(object.dict.get(PDFName.of("Height"))?.toString())).toBeLessThan(500);
+      }
+    }
+  }
   expect(
     (await readFile(info.outputPath("safe-driving.pdf")))
       .subarray(0, 4)

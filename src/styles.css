@@ -1211,3 +1211,15 @@ dialog > .row {
 .edit-table button {
   white-space: nowrap;
 }
+
+/* Match the original diary's narrow 24-slot grid, including desktop. */
+.diary-grid-section { width:100%; max-width:430px; margin-left:auto; margin-right:auto; }
+.diary-grid-section .hour-labels, .diary-grid-row { grid-template-columns:44px minmax(0,1fr); }
+.diary-grid-section .hour-labels { grid-template-columns:44px repeat(6,minmax(0,1fr)); }
+.diary-grid-row .blocks { gap:0; border-radius:0; }
+.diary-grid-row .block { min-height:42px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); box-shadow:none; }
+.diary-grid-row .block.hour-end { border-right:2px solid #8997a1; }
+@media (max-width:360px) { .diary-grid-section .hour-labels { grid-template-columns:40px repeat(6,minmax(0,1fr)); } .diary-grid-row { grid-template-columns:40px minmax(0,1fr); } }
+@font-face { font-family:'Workspace Sans'; src:url('/fonts/WorkspaceSans-Regular.ttf') format('truetype'); font-weight:400; font-display:swap; }
+@font-face { font-family:'Workspace Sans'; src:url('/fonts/WorkspaceSans-Bold.ttf') format('truetype'); font-weight:700; font-display:swap; }
+.paper svg text { font-family:'Workspace Sans',sans-serif; }
