@@ -289,7 +289,21 @@ test("reusable signature, all-clear answers, exact two-page PDF and fresh next-t
   await file.saveAs(info.outputPath("safe-driving.pdf"));
   const pdf = await PDFDocument.load(await readFile(info.outputPath("safe-driving.pdf")));
   expect(pdf.getPageCount()).toBe(2);
-  for (const pdfPage of pdf.getPages()) {
+  const original = await PDFDocument.load(await readFile("public/templates/safe-driving-original-v1.pdf"));
+  // Preserve the actual original PDF artwork/content streams, not a redrawn approximation.
+  function formStreams(resources: PDFDict): string[] {
+    const objects = resources.lookup(PDFName.of("XObject"), PDFDict);
+    return objects.keys().flatMap(key => {
+      const object = objects.lookup(key, PDFRawStream);
+      if (object.dict.get(PDFName.of("Subtype"))?.toString() !== "/Form") return [];
+      const children = object.dict.lookup(PDFName.of("Resources"), PDFDict);
+      return [Buffer.from(object.getContents()).toString("base64"),
+        ...(children.has(PDFName.of("XObject")) ? formStreams(children) : [])];
+    });
+  }
+  for (const [index, pdfPage] of pdf.getPages().entries()) {
+    expect(pdfPage.getSize()).toEqual(original.getPage(index).getSize());
+    expect(formStreams(pdfPage.node.Resources()!)).toEqual(formStreams(original.getPage(index).node.Resources()!));
     const resources = pdfPage.node.Resources()!;
     const fonts = resources.lookup(PDFName.of("Font"), PDFDict);
     expect(fonts.keys().length).toBeGreaterThan(0);

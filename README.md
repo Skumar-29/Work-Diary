@@ -1,6 +1,6 @@
 # Truck Workspace
 
-A local-first PWA combining Truck Work Diary and the truck Invoice Generator. Version **2.0.0-beta.3**. The APS Carpenter invoice app is not included.
+A local-first PWA combining Truck Work Diary and the truck Invoice Generator. Version **2.0.0-beta.4**. The APS Carpenter invoice app is not included.
 
 ## Run and build
 

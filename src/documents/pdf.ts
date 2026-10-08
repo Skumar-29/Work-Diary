@@ -59,13 +59,28 @@ export async function createPdf(svgs:string[],title:string) {
   // Embed these already reduced font files whole: fontkit subsetting can lose composite glyphs.
   const characterSets=fonts.map(font=>new Set(font.getCharacterSet()));
   const images=new Map<string,PDFImage>();
+  let templatePages: Awaited<ReturnType<PDFDocument['copyPages']>> | undefined;
+  async function originalPage(index: number) {
+    if (index !== 0 && index !== 1) throw Error('Invalid original form page.');
+    if (!templatePages) {
+      const response=await fetch(`${import.meta.env.BASE_URL}templates/safe-driving-original-v1.pdf`);
+      if (!response.ok) throw Error('The original form template is unavailable. Open the app online once to complete its offline download.');
+      const source=await PDFDocument.load(await response.arrayBuffer());
+      templatePages=await pdf.copyPages(source,[0,1]);
+    }
+    return pdf.addPage(templatePages[index]);
+  }
   for(const svg of await preparePdfPages(svgs)){
     const root=new DOMParser().parseFromString(svg,'image/svg+xml').documentElement;
     const box=(root.getAttribute('viewBox')||'').split(/\s+/).map(Number);
     if(box.length!==4 || box[0]!==0 || box[1]!==0 || !box[2] || !box[3])throw Error('Invalid document dimensions.');
-    const [, ,w,h]=box,page=pdf.addPage(w>h?[841.89,595.28]:[595.28,841.89]),fit=Math.min(page.getWidth()/w,page.getHeight()/h);
+    const [, ,w,h]=box,originalIndex=root.getAttribute('data-original-form-page');
+    const page=originalIndex===null?pdf.addPage(w>h?[841.89,595.28]:[595.28,841.89]):await originalPage(Number(originalIndex));
+    const fit=Math.min(page.getWidth()/w,page.getHeight()/h);
     page.pushOperators(pushGraphicsState(),concatTransformationMatrix(fit,0,0,-fit,(page.getWidth()-w*fit)/2,(page.getHeight()+h*fit)/2));
     async function draw(el:Element,inherited:Record<string,string>){
+      // The preview uses the SVG rendition. The download already contains the native PDF page.
+      if (el.hasAttribute('data-original-form-background')) return;
       const a={...inherited};for(const p of ['fill','stroke','stroke-width','font-size','font-weight','text-anchor','opacity'])if(el.hasAttribute(p))a[p]=el.getAttribute(p)!;
       const num=(key:string,fallback=0,reference=1)=>{const v=el.getAttribute(key);return v===null?fallback:v.endsWith('%')?parseFloat(v)*reference/100:Number(v);};
       page.pushOperators(pushGraphicsState());

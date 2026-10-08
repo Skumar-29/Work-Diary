@@ -1,4 +1,12 @@
-# Verification — 2.0.0-beta.3
+# Verification — 2.0.0-beta.4
+
+## Beta 4 correction — 8 October 2026
+
+- Restored the supplied Safe Driving Plan and Vehicle Daily-Checklist PDF pages as the export template. Original wording (including spelling), typography, table geometry, page dimensions and signature/comment areas are retained. Beta 3's reconstructed form and edited wording are superseded.
+- Filled values and the existing signature are drawn into the original spaces. Company/logo preferences affect only the existing header branding areas; the printed ETA note, declarations and return instructions are never rewritten.
+- The original template is copied as native PDF content with its embedded fonts. Preview pages are scalable SVG renditions of the same artwork. Both assets are cached for offline exports. Empty interactive signing placeholders are removed from these completed static copies; the original source file remains untouched.
+- Download checks compare native Form XObject stream bytes and exact page dimensions against the preserved template, guarding against accidental future redesign. Both filled pages are visually compared against the source.
+- Compact diary block sizing from beta 3 is unchanged.
 
 ## Beta 3 update — 8 October 2026
 
