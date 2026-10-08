@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from "react";
 import { useStore } from "./context";
 import {
   dateAdd,
@@ -8,6 +8,7 @@ import {
   displayDate,
 } from "./domain/time";
 import { findPage } from "./domain/diary";
+import { profileOn } from "./domain/model";
 import { Action, Field, Modal } from "./components/UI";
 import { Diary } from "./screens/Diary";
 const Driving = lazy(() =>
@@ -47,7 +48,7 @@ type Screen =
   | "Records"
   | "Settings";
 export default function App() {
-  const { s, busy, error, notice, clear, latest, run } = useStore(),
+  const { s, busy, error, notice, clear, latest, refresh, run } = useStore(),
     [screen, setScreen] = useState<Screen>(s.onboarded ? "Diary" : "Settings"),
     [date, setDate] = useState(today(s.profile.zone)),
     [pageId, setPageId] = useState(""),
@@ -56,9 +57,15 @@ export default function App() {
     [jumpNumber, setJumpNumber] = useState(""),
     [offline, setOffline] = useState(!navigator.onLine),
     [update, setUpdate] = useState<ServiceWorkerRegistration | null>(null);
+  const scrollPositions = useRef<Partial<Record<Screen, number>>>({});
+  const scrollTarget = useRef(0);
+  useLayoutEffect(() => { window.scrollTo({top: scrollTarget.current, behavior: "instant"}); }, [screen]);
   const page =
     s.pages.find((p) => p.id === pageId) ||
     s.pages.find((p) => p.date === date && p.status === "Active");
+  const diaryScreen = ["Diary", "Graph", "Stats"].includes(screen);
+  const pageProfile = (page?.status !== "Active" ? page?.snapshot?.profile : undefined)
+    || s.days[date]?.profile || profileOn(s, date);
   useEffect(() => {
     document.documentElement.dataset.theme = s.settings.theme;
   }, [s.settings.theme]);
@@ -102,12 +109,14 @@ export default function App() {
     setPageId(id);
     setDate(p.date);
     setBookId(p.bookId);
-    if (route) setScreen("Diary");
+    if (route) { scrollTarget.current = 0; setScreen("Diary"); }
   }
   async function navigate(to: Screen) {
     await latest();
+    scrollPositions.current[screen] = window.scrollY;
+    scrollTarget.current = to === screen ? 0 : scrollPositions.current[to] || 0;
+    if (to === screen) window.scrollTo({top: 0, behavior: "instant"});
     setScreen(to);
-    window.scrollTo({ top: 0 });
   }
   function previous(delta: number) {
     const b = bookId || page?.bookId,
@@ -124,27 +133,68 @@ export default function App() {
       Date.now() - Date.parse(s.settings.lastBackup) >
         s.settings.backupDays * 86400000);
   return (
-    <div className="app">
-      <header className="app-header">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            run(() => navigate("Diary"));
-          }}
-          className="brand"
-        >
-          <span className="brand-mark">W</span>
-          <span>
-            Truck <b>Workspace</b>
-          </span>
-        </a>
-        <div className="save-state" role="status">
-          {offline ? "Offline · " : ""}
-          {busy ? "Saving…" : notice ? "Saved" : "On this device"}
-        </div>
-      </header>
-      <BaseClock base={s.profile.base} zone={s.profile.zone} />
+    <div className={"app" + (diaryScreen ? " diary-screen" : "")}>
+      <div className="workspace-header">
+        <header className="app-header">
+          {diaryScreen || screen === "Driving" ?
+            <h1>{screen === "Diary" ? "Work diary" : screen === "Graph" ? "Diary graph" : screen === "Stats" ? "Records overview" : "Driving"}</h1> :
+            <a href="#" className="brand" onClick={e => {e.preventDefault();run(() => navigate("Diary"));}}>Truck <b>Workspace</b></a>}
+          <div className="header-actions">
+            <span className="save-state" role="status">{offline ? "Offline" : busy ? "Saving…" : notice ? "Saved" : "On device"}</span>
+            {diaryScreen && <button className="header-icon" aria-label="Refresh saved records" disabled={busy} onClick={() => run(refresh)}>↻</button>}
+            <Appearance />
+          </div>
+        </header>
+        <BaseClock base={s.profile.base} zone={s.profile.zone} />
+          {["Diary", "Graph", "Stats"].includes(screen) && (
+            <section className="date-nav">
+              <div className="row">
+                <button
+                  aria-label="Previous recorded page or day"
+                  onClick={() => run(() => previous(-1))}
+                >
+                  ‹
+                </button>
+                <span className="civil-input">
+                  <input
+                    lang="en-AU"
+                    aria-label="Diary date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => run(() => goDate(e.target.value))}
+                  />
+                  <span aria-hidden="true">{new Date(date + "T12:00:00Z").toLocaleDateString("en-AU", {weekday:"short",timeZone:"UTC"})} {displayDate(date)}</span>
+                </span>
+                <button
+                  aria-label="Next recorded page or day"
+                  onClick={() => run(() => previous(1))}
+                >
+                  ›
+                </button>
+                <Action onClick={() => goDate(today(s.profile.zone))}>
+                  Today
+                </Action>
+              </div>
+              <div className="row">
+                <span className="small">
+                  {page
+                    ? `${s.books.find((b) => b.id === page.bookId)?.number} · Page ${page.number}`
+                    : `${pageProfile.base} · ${pageProfile.scheme}`}
+                </span>
+                {page && <span className="page-basis">{pageProfile.base} · {pageProfile.scheme}</span>}
+                <Action
+                  onClick={() => {
+                    setBookId(page?.bookId || s.books.at(-1)?.id || "");
+                    setJumpNumber("");
+                    setJump(true);
+                  }}
+                >
+                  Jump to page
+                </Action>
+              </div>
+            </section>
+          )}
+      </div>
       {error && (
         <div className="alert" role="alert">
           <span>{error}</span>
@@ -180,73 +230,11 @@ export default function App() {
       )}
       <main>
         <Suspense fallback={<p role="status">Opening…</p>}>
-          <div className="page-heading">
-            <span className="eyebrow">
-              {s.profile.name || "YOUR DRIVER WORKSPACE"}
-            </span>
-            {["Diary", "Graph", "Stats", "Driving"].includes(screen) && (
-              <h1>
-                {screen === "Diary"
-                  ? "Work diary"
-                  : screen === "Graph"
-                    ? "Diary graph"
-                    : screen === "Stats"
-                      ? "Records overview"
-                      : "Driving"}
-              </h1>
-            )}
-          </div>
-          {["Diary", "Graph", "Stats"].includes(screen) && (
-            <section className="date-nav card">
-              <div className="row">
-                <button
-                  aria-label="Previous recorded page or day"
-                  onClick={() => run(() => previous(-1))}
-                >
-                  ‹
-                </button>
-                <span className="civil-input">
-                  <input
-                    lang="en-AU"
-                    aria-label="Diary date"
-                    type="date"
-                    value={date}
-                    onChange={(e) => run(() => goDate(e.target.value))}
-                  />
-                  <span aria-hidden="true">{displayDate(date)}</span>
-                </span>
-                <button
-                  aria-label="Next recorded page or day"
-                  onClick={() => run(() => previous(1))}
-                >
-                  ›
-                </button>
-                <Action onClick={() => goDate(today(s.profile.zone))}>
-                  Today
-                </Action>
-              </div>
-              <div className="row">
-                <span className="small">
-                  {page
-                    ? `${s.books.find((b) => b.id === page.bookId)?.number} · Page ${page.number}`
-                    : "No paper page"}
-                </span>
-                <Action
-                  onClick={() => {
-                    setBookId(page?.bookId || s.books.at(-1)?.id || "");
-                    setJumpNumber("");
-                    setJump(true);
-                  }}
-                >
-                  Jump to page
-                </Action>
-              </div>
-            </section>
-          )}
           {screen === "Driving" && (
             <Driving
               onDiary={() => {
                 goDate(today(s.profile.zone));
+                scrollTarget.current = 0;
                 setScreen("Diary");
               }}
             />
@@ -283,7 +271,7 @@ export default function App() {
           {screen === "Documents" && <Documents />}
           {screen === "Settings" && (
             <>
-              <Settings onDone={() => setScreen("Diary")} />
+              <Settings onDone={() => { run(() => navigate("Diary")); }} />
               {!s.onboarded && (
                 <Action onClick={() => navigate("Records")}>
                   Restore an existing backup
@@ -404,7 +392,28 @@ function BaseClock({ base, zone }: { base: string; zone: string }) {
   return (
     <div className="base-clock">
       <span>{base} base time</span>
-      <time>{displayInstant(now, zone)}</time>
+      <time dateTime={new Date(now).toISOString()}><span className="clock-weekday">{new Intl.DateTimeFormat("en-AU", {weekday:"short",timeZone:zone}).format(now)} · </span>{displayInstant(now, zone)}</time>
     </div>
   );
+}
+
+function Appearance() {
+  const {s, mutate, run} = useStore();
+  const [open, setOpen] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {if (!panel.current?.contains(e.target as Node)) setOpen(false);};
+    const escape = (e: KeyboardEvent) => {if(e.key === "Escape") setOpen(false);};
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {document.removeEventListener("pointerdown", close);document.removeEventListener("keydown", escape);};
+  }, [open]);
+  return <div className="appearance" ref={panel}>
+    <button className="header-icon" aria-label="Appearance" aria-expanded={open} onClick={() => setOpen(v=>!v)}>{s.settings.theme === "dark" ? "☾" : s.settings.theme === "light" ? "☀" : "◐"}</button>
+    {open && <div className="appearance-options" role="group" aria-label="Colour mode">
+      {([["light","Day mode"],["dark","Night mode"],["system","Use device theme"]] as const).map(([theme,label]) =>
+        <button key={theme} aria-pressed={s.settings.theme===theme} onClick={() => run(async()=>{await mutate(w=>{w.settings.theme=theme;});setOpen(false);})}>{label}</button>)}
+    </div>}
+  </div>;
 }

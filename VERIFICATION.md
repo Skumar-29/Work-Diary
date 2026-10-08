@@ -1,4 +1,11 @@
-# Verification — 2.0.0-beta.4
+# Verification — 2.0.0-beta.5
+
+## Beta 5 update — 8 October 2026
+
+- Compared the supplied older-app screen recording and current phone screenshot. A compact sticky header now contains the diary title, weekday/date/time, date navigation and recorded state/scheme. Blocks come before page and work-window totals; detailed window information expands when needed.
+- Day, Night and device-controlled appearance apply immediately and persist. Settings return to the diary with refreshed state and remembered scroll position. The refresh control reloads committed local records after queued writes without reloading the page.
+- Vertical touch gestures on blocks scroll without editing records. Horizontal selection remains confined to the same work/rest row and six-hour group. Undo remains available.
+- Production build, 40 domain/storage tests and 26 phone/desktop Chromium journeys pass. New checks exercise native touch scrolling/selection, sticky-header position, immediate appearance, settings persistence and 320-pixel layout. Light/dark phone screenshots were visually reviewed. Physical iPhone acceptance remains open.
 
 ## Beta 4 correction — 8 October 2026
 

@@ -1223,3 +1223,61 @@ dialog > .row {
 @font-face { font-family:'Workspace Sans'; src:url('/fonts/WorkspaceSans-Regular.ttf') format('truetype'); font-weight:400; font-display:swap; }
 @font-face { font-family:'Workspace Sans'; src:url('/fonts/WorkspaceSans-Bold.ttf') format('truetype'); font-weight:700; font-display:swap; }
 .paper svg text { font-family:'Workspace Sans',sans-serif; }
+
+/* Keep the diary itself in view; one document scrolls beneath a compact header. */
+html { scroll-padding-top: 160px; }
+.workspace-header { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top); }
+.workspace-header .app-header { min-height:44px; padding:3px 12px; border:0; gap:8px; }
+.app-header h1 { margin:0; font-size:17px; letter-spacing:-.3px; white-space:nowrap; }
+.header-actions { display:flex; align-items:center; gap:5px; }
+.header-icon { width:36px; min-height:36px; padding:0; font-size:21px; border-color:transparent; }
+.workspace-header .base-clock { padding:0 12px 5px; border:0; font-size:10px; line-height:16px; gap:5px; }
+.base-clock time { white-space:nowrap; }
+.workspace-header .date-nav { padding:3px 10px 4px; border-top:1px solid var(--line); }
+.workspace-header .date-nav .row { gap:4px; }
+.workspace-header .date-nav .row + .row { margin-top:1px; min-height:27px; }
+.workspace-header .date-nav button { min-height:34px; padding:4px 9px; font-size:12px; }
+.workspace-header .date-nav .row + .row button { min-height:27px; padding:2px 6px; font-size:11px; }
+.workspace-header .date-nav input { min-height:36px; padding:4px; min-width:0; max-width:none; }
+.workspace-header .date-nav .civil-input > span { left:3px; font-size:14px; }
+.page-basis { font-size:10px; color:var(--muted); white-space:nowrap; }
+.workspace-header .date-nav .small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.diary-screen main { padding:6px 10px 12px; }
+.diary-screen .block-card { margin:0 0 5px; padding:6px 5px 7px; border:0; border-radius:0; box-shadow:none; }
+.block-toolbar { gap:4px; }
+.block-toolbar > .row { gap:4px; }
+.block-toolbar strong { font-size:12px; }
+.block-toolbar button { min-height:34px; padding:4px 8px; font-size:11px; }
+.block-card .periods { margin:4px 0 5px; }
+.block-card .hour-labels { margin-bottom:1px; }
+.block-card .diary-grid-row { margin-top:1px; }
+.block-card .six-hours + .six-hours { margin-top:5px; }
+.diary-totals { border:1px solid var(--line); border-radius:8px; background:var(--card); padding:5px 8px; margin-bottom:8px; }
+.diary-totals .totals { font-size:11px; gap:4px 8px; }
+.diary-totals .window-summary { margin:4px 0 0; border:0; border-top:1px solid var(--line); }
+.window-summary > summary { display:flex; align-items:center; justify-content:space-between; gap:5px; cursor:pointer; font-size:11px; padding:8px 0 3px; list-style:none; }
+.window-summary > summary::-webkit-details-marker { display:none; }
+.window-summary > summary::after { content:'⌄'; font-size:15px; }
+.window-summary[open] > summary::after { content:'⌃'; }
+.window-summary > summary > span { flex:1; text-align:right; }
+.window-details { padding:6px 0; font-size:12px; }
+.window-details .row { gap:5px; }
+.appearance { position:relative; }
+.appearance-options { position:absolute; right:0; top:40px; width:170px; padding:5px; display:grid; gap:4px; border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:var(--shadow); }
+.appearance-options button { min-height:40px; text-align:left; }
+.appearance-options button[aria-pressed='true'] { background:var(--wash); border-color:var(--primary); }
+.bottom-nav { padding:3px 8px calc(3px + env(safe-area-inset-bottom)); }
+.bottom-nav button { min-height:46px; padding:3px; gap:1px; }
+.bottom-nav button > span { font-size:18px; }
+.app { padding-bottom:calc(65px + env(safe-area-inset-bottom)); }
+@media(max-width:360px) {
+ .app-header h1 { font-size:16px; }
+ .save-state { font-size:9px; }
+ .header-actions { gap:2px; }
+ .workspace-header .date-nav .civil-input > span { font-size:12px; }
+ .workspace-header .date-nav button { padding-left:7px; padding-right:7px; }
+ .block-toolbar button { padding:4px 6px; }
+ .block-toolbar strong { font-size:11px; }
+ .diary-screen main { padding-left:6px; padding-right:6px; }
+}
+@media print { .workspace-header { display:none; } }

@@ -18,6 +18,7 @@ interface Store {
   error: string;
   clear: () => void;
   latest: () => Promise<Workspace>;
+  refresh: () => Promise<Workspace>;
 }
 const Context = createContext<Store | null>(null);
 export const useStore = () => {
@@ -118,6 +119,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         clear: () => {
           setError("");
           setNotice("");
+        },
+        refresh: () => {
+          const next = queue.current.catch(() => {}).then(async () => {
+            const value = await loadWorkspace();
+            if (value.revision >= (ref.current?.revision || 0)) {
+              ref.current = value; setS(value); setNotice("Records refreshed");
+            }
+            return ref.current!;
+          });
+          queue.current = next;
+          return next;
         },
         latest: async () => {
           await queue.current;

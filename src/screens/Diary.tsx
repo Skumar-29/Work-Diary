@@ -69,6 +69,8 @@ export function Diary({
       end: number;
       x: number;
       y: number;
+      row: "work" | "rest";
+      axis: "pending" | "horizontal" | "vertical";
     } | null>(null),
     suppressClick = useRef(false);
   const full = s.settings.fullDay,
@@ -155,9 +157,7 @@ export function Diary({
       day.changes[c.slot] = { ...(day.changes[c.slot] || c), [key]: v };
     }, "Edit work/rest change");
   }
-  return (
-    <>
-      <div className="row totals" aria-label="Page totals">
+  const summary = <div className="diary-totals">      <div className="row totals" aria-label="Page totals">
         <strong>Page</strong>
         <span>
           <i className="dot work" />
@@ -169,7 +169,9 @@ export function Diary({
         </span>
         <span className="muted">Blank {minutesLabel(t.unknown)}</span>
       </div>
-      <section className="card window-summary" aria-label="Work window totals">
+      <details className="window-summary" aria-label="Work window totals">
+        <summary><strong>24h window{windowSummary?.review || dayBreaches.length ? " · Review" : ""}</strong><span>{windowSummary ? `Work ${minutesLabel(windowSummary.work)} · Rest ${minutesLabel(windowSummary.rest)}` : "Needs history / review"}</span></summary>
+        <div className="window-details">
         <div className="row wrap">
           <strong>24-hour work window</strong>
           <span className="small">{d.profile.base} time</span>
@@ -231,7 +233,12 @@ export function Diary({
             {dayBreaches.length === 1 ? "block" : "blocks"} · Review
           </Action>
         )}
-      </section>
+        </div>
+      </details>
+</div>;
+  return (
+    <>
+      {graph && summary}
       {breach && (
         <Modal
           title="Recorded work limit exceeded"
@@ -312,7 +319,7 @@ export function Diary({
       ) : (
         <>
           <section className="card block-card">
-            <div className="row wrap">
+            <div className="row wrap block-toolbar">
               <div className="row">
                 <strong>Work / Rest</strong>
                 <button
@@ -406,8 +413,9 @@ export function Diary({
                             aria-label={`${hhmm(slot)} ${row}${reasons?.length ? " · work limit exceeded" : ""}`}
                             onPointerDown={(e) => {
                               if (readOnly) return;
+                              suppressClick.current = false;
                               drag.current = {
-                                slot,
+                                slot, row, axis: "pending",
                                 end: slot,
                                 kind: mode === null ? null : row,
                                 x: e.clientX,
@@ -417,29 +425,27 @@ export function Diary({
                             }}
                             onPointerMove={(e) => {
                               const a = drag.current;
-                              if (
-                                !a ||
-                                Math.abs(e.clientX - a.x) < 6 ||
-                                Math.abs(e.clientY - a.y) >
-                                  Math.abs(e.clientX - a.x)
-                              )
-                                return;
-                              const hit = document
-                                .elementFromPoint(e.clientX, e.clientY)
-                                ?.closest("[data-slot]");
-                              if (hit) {
-                                a.end = Number(hit.getAttribute("data-slot"));
-                                setDragRange([a.slot, a.end]);
+                              if (!a) return;
+                              const dx = Math.abs(e.clientX-a.x), dy = Math.abs(e.clientY-a.y);
+                              if (a.axis === "pending" && Math.max(dx,dy) >= 8) a.axis = dy > dx ? "vertical" : "horizontal";
+                              if (a.axis !== "horizontal") return;
+                              const hit = document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-slot]");
+                              if (hit?.getAttribute("data-row") === a.row) {
+                                const end = Number(hit.getAttribute("data-slot"));
+                                if (Math.floor(end/24) === Math.floor(a.slot/24)) {
+                                  a.end = end; setDragRange([a.slot,a.end]);
+                                }
                               }
                             }}
                             onPointerCancel={() => {
                               drag.current = null;
                               setDragRange(null);
-                              suppressClick.current = false;
+                              suppressClick.current = true;
                             }}
                             onPointerUp={() => {
                               const a = drag.current;
-                              if (a && a.slot !== a.end) {
+                              if (a?.axis === "vertical") suppressClick.current = true;
+                              if (a?.axis === "horizontal" && a.slot !== a.end) {
                                 suppressClick.current = true;
                                 void blocks(
                                   Math.min(a.slot, a.end),
@@ -474,6 +480,7 @@ export function Diary({
               </div>
             ))}
           </section>
+          {summary}
           <section className="card">
             <div className="row">
               <h2>Work / rest changes</h2>

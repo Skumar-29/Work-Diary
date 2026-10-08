@@ -729,3 +729,57 @@ test("state clock and red diary blocks stay clear on a narrow screen", async ({
   await expect(page.locator(".base-clock")).toContainText("07/10/2026 · 22:30");
   await expect(page.locator(".window-summary")).toContainText("QLD time");
 });
+
+test("compact sticky header, immediate colour modes, settings return and safe touch scrolling", async ({ page, context }, info) => {
+  await start(page);
+  await page.setViewportSize({width:390,height:740});
+  const first=page.locator('[data-slot="0"][data-row="work"]');
+  const box=await first.boundingBox();
+  expect(box!.y).toBeLessThan(240);
+  await expect(page.locator('.base-clock')).toContainText(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/);
+  await page.getByRole('button',{name:'Appearance',exact:true}).click();
+  await page.getByRole('button',{name:'Night mode',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.screenshot({path:info.outputPath('compact-night.png'),fullPage:false});
+  await page.getByRole('button',{name:'Appearance',exact:true}).click();
+  await page.getByRole('button',{name:'Day mode',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  await page.screenshot({path:info.outputPath('compact-day.png'),fullPage:false});
+  const before=await page.locator('.totals').textContent();
+  const cdp=await context.newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true});
+  // A real browser touch scroll beginning on a block must never write diary slots.
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box!.x+box!.width/2,y:box!.y+22}]});
+  for(let i=1;i<=6;i++) await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:box!.x+box!.width/2+2,y:box!.y+22-i*23}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBeGreaterThan(40);
+  expect(await page.locator('.totals').textContent()).toBe(before);
+  expect((await page.locator('.workspace-header').boundingBox())!.y).toBe(0);
+  // Horizontal touch movement still records a range, and Undo restores it.
+  await page.evaluate(()=>window.scrollTo(0,0));
+  const a=(await first.boundingBox())!, b=(await page.locator('[data-slot="3"][data-row="work"]').boundingBox())!;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:a.x+a.width/2,y:a.y+20}]});
+  for(let i=1;i<=6;i++) await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:a.x+a.width/2+(b.x-a.x)*i/6,y:a.y+20}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect(page.locator('.totals')).toContainText('Work 1h 00m');
+  await page.getByRole('button',{name:'Undo',exact:true}).click();
+  await expect(page.locator('.totals')).toContainText('Work 0h 00m');
+  await page.getByRole('button',{name:'Refresh saved records',exact:true}).click();
+  await expect(page.locator('.totals')).toContainText('Work 0h 00m');
+  await page.evaluate(()=>window.scrollTo(0,280));
+  const diaryScroll=await page.evaluate(()=>window.scrollY);
+  await more(page,'Settings');
+  await fill(page,'Driver name','Updated Driver');
+  await page.getByRole('button',{name:'Save driver settings',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Work diary',exact:true})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(diaryScroll);
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  await more(page,'Settings');
+  await expect(page.getByLabel('Driver name',{exact:true})).toHaveValue('Updated Driver');
+  await page.setViewportSize({width:320,height:700});
+  await page.getByRole('button',{name:'Diary',exact:true}).click();
+  await noOverflow(page);
+  await page.screenshot({path:info.outputPath('compact-320.png'),fullPage:false});
+});

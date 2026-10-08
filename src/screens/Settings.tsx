@@ -244,7 +244,7 @@ export function Settings({ onDone }: { onDone?: () => void }) {
             <Field
               label="Theme"
               value={s.settings.theme}
-              options={["system", "light", "dark"]}
+              options={[["system", "Auto · follow device"], ["light", "Day · light"], ["dark", "Night · dark"]]}
               onChange={(v) => {
                 void mutate((w) => {
                   w.settings.theme = v as typeof w.settings.theme;
